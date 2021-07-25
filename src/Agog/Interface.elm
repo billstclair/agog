@@ -11,7 +11,7 @@
 ----------------------------------------------------------------------
 
 
-module Zephyrnot.Interface exposing
+module Agog.Interface exposing
     ( emptyGameState
     , forNameMatches
     , messageProcessor
@@ -30,9 +30,9 @@ import WebSocketFramework.Types
         , ReqRsp(..)
         , ServerState
         )
-import Zephyrnot.Board as Board
-import Zephyrnot.EncodeDecode as ED
-import Zephyrnot.Types as Types
+import Agog.Board as Board
+import Agog.EncodeDecode as ED
+import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)

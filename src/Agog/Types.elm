@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Zephyrnot.Types exposing
+module Agog.Types exposing
     ( Board
     , Choice(..)
     , Decoration(..)

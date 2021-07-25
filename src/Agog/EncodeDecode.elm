@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Zephyrnot.EncodeDecode exposing
+module Agog.EncodeDecode exposing
     ( boardToString
     , decodeSavedModel
     , encodeGameState
@@ -41,7 +41,7 @@ import WebSocketFramework.Types
         , ReqRsp(..)
         , ServerState
         )
-import Zephyrnot.Types as Types
+import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)

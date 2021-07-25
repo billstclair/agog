@@ -25,9 +25,9 @@ import Task
 import Url
 import WebSocketFramework.EncodeDecode as WSFED
 import WebSocketFramework.Types exposing (GameId, PlayerId)
-import Zephyrnot.EncodeDecode as ED
-import Zephyrnot.Interface as Interface
-import Zephyrnot.Types as Types
+import Agog.EncodeDecode as ED
+import Agog.Interface as Interface
+import Agog.Types as Types
     exposing
         ( Choice(..)
         , GameState

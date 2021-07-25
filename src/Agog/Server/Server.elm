@@ -1,4 +1,4 @@
-port module Zephyrnot.Server.Server exposing (main)
+port module Agog.Server.Server exposing (main)
 
 import Set exposing (Set)
 import WebSocketFramework.Server
@@ -20,9 +20,9 @@ import WebSocketFramework.Types
         , InputPort
         , OutputPort
         )
-import Zephyrnot.EncodeDecode as ED
-import Zephyrnot.Interface as Interface
-import Zephyrnot.Types as Types
+import Agog.EncodeDecode as ED
+import Agog.Interface as Interface
+import Agog.Types as Types
     exposing
         ( Decoration(..)
         , GameState

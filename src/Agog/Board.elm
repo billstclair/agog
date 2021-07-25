@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Zephyrnot.Board exposing
+module Agog.Board exposing
     ( SizerKind(..)
     , colToString
     , count
@@ -82,7 +82,7 @@ import Svg.Attributes as Attributes
         , y2
         )
 import Svg.Events as Events
-import Zephyrnot.Types
+import Agog.Types
     exposing
         ( Board
         , Decoration(..)

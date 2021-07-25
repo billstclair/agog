@@ -123,10 +123,10 @@ import WebSocketFramework.Types
         , ServerInterface(..)
         , ServerMessageProcessor
         )
-import Zephyrnot.Board as Board exposing (SizerKind(..))
-import Zephyrnot.EncodeDecode as ED
-import Zephyrnot.Interface as Interface
-import Zephyrnot.Types as Types
+import Agog.Board as Board exposing (SizerKind(..))
+import Agog.EncodeDecode as ED
+import Agog.Interface as Interface
+import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)
@@ -145,7 +145,7 @@ import Zephyrnot.Types as Types
         , StyleType(..)
         , Winner(..)
         )
-import Zephyrnot.WhichServer as WhichServer
+import Agog.WhichServer as WhichServer
 
 
 type alias SimulatorState =

@@ -1,4 +1,4 @@
-module Zephyrnot.WhichServer exposing (serverUrl)
+module Agog.WhichServer exposing (serverUrl)
 
 
 serverUrl : String
