@@ -1,8 +1,8 @@
-# Zephyrnot
+# AGOG: A Game of Golems
 
-Zephyrnot is a two-player board game invented by Chris St. Clair.
+AGOG is a two-player board game invented by Chris St. Clair.
 
-Instructions are in [Zephyrnot.pdf](site/Zephyrnot.pdf).
+Instructions are in [agog-rules.txt](site/agog-rules.txt).
 
 ## Elm Reactor
 
