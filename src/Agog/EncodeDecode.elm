@@ -26,6 +26,31 @@ module Agog.EncodeDecode exposing
     , stringToBoard
     )
 
+import Agog.Types as Types
+    exposing
+        ( Board
+        , Choice(..)
+        , Color(..)
+        , Decoration(..)
+        , GameState
+        , Message(..)
+        , NewBoard
+        , OneScore
+        , Page(..)
+        , Piece
+        , PieceType(..)
+        , Player(..)
+        , PlayerNames
+        , PrivateGameState
+        , PublicGame
+        , PublicType(..)
+        , SavedModel
+        , Score
+        , Settings
+        , Socket
+        , StyleType(..)
+        , Winner(..)
+        )
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Json.Decode as JD exposing (Decoder)
@@ -40,27 +65,6 @@ import WebSocketFramework.Types
         , Plist
         , ReqRsp(..)
         , ServerState
-        )
-import Agog.Types as Types
-    exposing
-        ( Board
-        , Choice(..)
-        , Decoration(..)
-        , GameState
-        , Message(..)
-        , OneScore
-        , Page(..)
-        , Player(..)
-        , PlayerNames
-        , PrivateGameState
-        , PublicGame
-        , PublicType(..)
-        , SavedModel
-        , Score
-        , Settings
-        , Socket
-        , StyleType(..)
-        , Winner(..)
         )
 
 
@@ -397,8 +401,8 @@ encodeBoard board =
     JE.string <| boardToString board
 
 
-newBoardDecoder : Decoder Board
-newBoardDecoder =
+newishBoardDecoder : Decoder Board
+newishBoardDecoder =
     JD.string
         |> JD.andThen
             (\string ->
@@ -414,7 +418,7 @@ newBoardDecoder =
 boardDecoder : Decoder Board
 boardDecoder =
     JD.oneOf
-        [ newBoardDecoder
+        [ newishBoardDecoder
         , oldBoardDecoder
         ]
 
@@ -426,6 +430,59 @@ oldBoardDecoder =
             (\l ->
                 List.map (\l2 -> Array.fromList l2) l
                     |> Array.fromList
+                    |> JD.succeed
+            )
+
+
+newBoardDecoder : Decoder NewBoard
+newBoardDecoder =
+    JD.list (JD.list pieceDecoder)
+        |> JD.andThen
+            (\l ->
+                List.map (\l2 -> Array.fromList l2) l
+                    |> Array.fromList
+                    |> JD.succeed
+            )
+
+
+pieceDecoder : Decoder Piece
+pieceDecoder =
+    JD.succeed Piece
+        |> required "color" colorDecoder
+        |> required "pieceType" pieceTypeDecoder
+        |> required "corrupted" JD.bool
+
+
+colorDecoder : Decoder Color
+colorDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                if s == "black" then
+                    JD.succeed BlackColor
+
+                else
+                    JD.succeed WhiteColor
+            )
+
+
+pieceTypeDecoder : Decoder PieceType
+pieceTypeDecoder =
+    JD.string
+        |> JD.andThen
+            (\pt ->
+                (if pt == "Golem" then
+                    Golem
+
+                 else if pt == "Hulk" then
+                    Hulk
+
+                 else if pt == "Journeyman" then
+                    Journeyman
+
+                 else
+                    NoPiece
+                )
                     |> JD.succeed
             )
 
@@ -583,6 +640,7 @@ gameStateDecoder : Decoder GameState
 gameStateDecoder =
     JD.succeed GameState
         |> required "board" boardDecoder
+        |> required "newBoard" newBoardDecoder
         |> required "moves" movesDecoder
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder

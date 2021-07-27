@@ -17,21 +17,9 @@ module Agog.Interface exposing
     , messageProcessor
     )
 
-import Debug
-import Dict exposing (Dict)
-import WebSocketFramework exposing (decodePlist, unknownMessage)
-import WebSocketFramework.EncodeDecode as WFED
-import WebSocketFramework.ServerInterface as ServerInterface
-import WebSocketFramework.Types
-    exposing
-        ( GameId
-        , PlayerId
-        , Plist
-        , ReqRsp(..)
-        , ServerState
-        )
 import Agog.Board as Board
 import Agog.EncodeDecode as ED
+import Agog.NewBoard as NewBoard
 import Agog.Types as Types
     exposing
         ( Board
@@ -46,11 +34,25 @@ import Agog.Types as Types
         , ServerState
         , Winner(..)
         )
+import Debug
+import Dict exposing (Dict)
+import WebSocketFramework exposing (decodePlist, unknownMessage)
+import WebSocketFramework.EncodeDecode as WFED
+import WebSocketFramework.ServerInterface as ServerInterface
+import WebSocketFramework.Types
+    exposing
+        ( GameId
+        , PlayerId
+        , Plist
+        , ReqRsp(..)
+        , ServerState
+        )
 
 
 emptyGameState : PlayerNames -> GameState
 emptyGameState players =
     { board = Board.empty
+    , newBoard = NewBoard.empty
     , moves = []
     , players = players
     , whoseTurn = Zephyrus
@@ -61,7 +63,7 @@ emptyGameState players =
     }
 
 
-errorRes : Message -> ServerState -> String -> ( ServerState, Maybe Message )
+errorRes : Message -> Types.ServerState -> String -> ( Types.ServerState, Maybe Message )
 errorRes message state text =
     ( state
     , Just <|
@@ -78,7 +80,7 @@ forNameMatches name1 name2 =
         == (Maybe.withDefault "" name2 |> String.toLower)
 
 
-lookupGame : Message -> PlayerId -> ServerState -> Result ( ServerState, Maybe Message ) ( GameId, GameState, Player )
+lookupGame : Message -> PlayerId -> Types.ServerState -> Result ( Types.ServerState, Maybe Message ) ( GameId, GameState, Player )
 lookupGame message playerid state =
     let
         err text =
@@ -97,7 +99,7 @@ lookupGame message playerid state =
                     Ok ( gameid, gameState, player )
 
 
-messageProcessor : ServerState -> Message -> ( ServerState, Maybe Message )
+messageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 messageProcessor state message =
     let
         foo =
@@ -327,7 +329,7 @@ messageProcessor state message =
                                                             gameid
                                                             state
 
-                                                    loop : PlayerId -> ServerState -> ServerState
+                                                    loop : PlayerId -> Types.ServerState -> Types.ServerState
                                                     loop id st =
                                                         let
                                                             pl =
@@ -510,7 +512,7 @@ messageProcessor state message =
             errorRes message state "Received a non-request."
 
 
-doPlay : Decoration -> GameId -> GameState -> ServerState -> ( ServerState, Maybe Message )
+doPlay : Decoration -> GameId -> GameState -> Types.ServerState -> ( Types.ServerState, Maybe Message )
 doPlay decoration gameid gameState state =
     let
         whoseTurn =
