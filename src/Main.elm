@@ -12,6 +12,30 @@
 
 module Main exposing (main)
 
+import Agog.Board as Board exposing (SizerKind(..))
+import Agog.EncodeDecode as ED
+import Agog.Interface as Interface
+import Agog.Types as Types
+    exposing
+        ( Board
+        , Choice(..)
+        , Decoration(..)
+        , GameState
+        , Message(..)
+        , NewBoard
+        , Page(..)
+        , Player(..)
+        , PlayerNames
+        , PublicGame
+        , PublicType(..)
+        , SavedModel
+        , Score
+        , Settings
+        , Style
+        , StyleType(..)
+        , Winner(..)
+        )
+import Agog.WhichServer as WhichServer
 import Browser exposing (Document, UrlRequest(..))
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Events as Events
@@ -123,29 +147,6 @@ import WebSocketFramework.Types
         , ServerInterface(..)
         , ServerMessageProcessor
         )
-import Agog.Board as Board exposing (SizerKind(..))
-import Agog.EncodeDecode as ED
-import Agog.Interface as Interface
-import Agog.Types as Types
-    exposing
-        ( Board
-        , Choice(..)
-        , Decoration(..)
-        , GameState
-        , Message(..)
-        , Page(..)
-        , Player(..)
-        , PlayerNames
-        , PublicGame
-        , PublicType(..)
-        , SavedModel
-        , Score
-        , Settings
-        , Style
-        , StyleType(..)
-        , Winner(..)
-        )
-import Agog.WhichServer as WhichServer
 
 
 type alias SimulatorState =

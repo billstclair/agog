@@ -13,11 +13,15 @@
 module Agog.Types exposing
     ( Board
     , Choice(..)
+    , Color(..)
     , Decoration(..)
     , GameState
     , Message(..)
+    , NewBoard
     , OneScore
     , Page(..)
+    , Piece
+    , PieceType(..)
     , Player(..)
     , PlayerNames
     , PrivateGameState
@@ -33,6 +37,7 @@ module Agog.Types exposing
     , SubscriptionSet
     , Winner(..)
     , darkStyle
+    , emptyPiece
     , emptyPrivateGameState
     , emptySettings
     , lightStyle
@@ -58,6 +63,37 @@ import WebSocketFramework.Types
 
 type alias Board =
     Array (Array Bool)
+
+
+type Color
+    = BlackColor
+    | WhiteColor
+
+
+type PieceType
+    = Golem
+    | Hulk
+    | Journeyman
+    | NoPiece
+
+
+type alias Piece =
+    { color : Color
+    , pieceType : PieceType
+    , corrupted : Bool
+    }
+
+
+emptyPiece : Piece
+emptyPiece =
+    { color = BlackColor
+    , pieceType = NoPiece
+    , corrupted = False
+    }
+
+
+type alias NewBoard =
+    Array (Array Piece)
 
 
 type Player
@@ -236,6 +272,7 @@ emptyPrivateGameState =
 
 type alias GameState =
     { board : Board
+    , newBoard : NewBoard
     , moves : List String
     , players : PlayerNames
     , whoseTurn : Player
