@@ -2,7 +2,7 @@
 
 AGOG is a two-player board game invented by Chris St. Clair.
 
-Instructions are in [agog-rules.txt](site/agog-rules.txt).
+Instructions are in [agog-rules.txt](https://raw.githubusercontent.com/billstclair/agog/main/site/agog-rules.txt).
 
 ## Elm Reactor
 
