@@ -2,7 +2,7 @@
 --
 -- Main.elm
 -- Zephyrnot top-level
--- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE.txt
@@ -15,6 +15,7 @@ module Main exposing (main)
 import Agog.Board as Board exposing (SizerKind(..))
 import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
+import Agog.NewBoard as NewBoard
 import Agog.Types as Types
     exposing
         ( Board
@@ -1732,7 +1733,7 @@ view model =
         renderStyle =
             Types.typeToStyle model.styleType
     in
-    { title = "ZEPHYRNOT"
+    { title = "A•G•O•G"
     , body =
         [ if bsize == 0 then
             text ""
@@ -1754,12 +1755,12 @@ view model =
                             [ style "margin" "0 0 0.2em 0"
                             , herculanumStyle
                             ]
-                            [ text "Zephyrnot" ]
+                            [ text "A•G•O•G" ]
                         , h2
                             [ style "margin" "0 0 0.2em 0"
                             , herculanumStyle
                             ]
-                            [ text "Feud of the Winds" ]
+                            [ text "A Game of Golems" ]
                         , p [ style "margin" "0" ]
                             [ text "Invented by Chris St. Clair" ]
                         ]
@@ -1986,7 +1987,7 @@ mainPage bsize model =
                 )
     in
     div [ align "center" ]
-        [ Board.render (Types.typeToStyle model.styleType)
+        [ NewBoard.render (Types.typeToStyle model.styleType)
             bsize
             Click
             (Just <| Board.getSizer DefaultSizer)
@@ -1994,7 +1995,7 @@ mainPage bsize model =
             currentPlayer
             rotated
             gameState.path
-            gameState.board
+            gameState.newBoard
         , span
             []
             [ br

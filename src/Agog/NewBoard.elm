@@ -406,13 +406,16 @@ getPathSizer sizer =
 
 
 render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Decoration -> Maybe Player -> Bool -> List ( Int, Int ) -> NewBoard -> Html msg
-render style size tagger sizer decoration player rotated path board =
+render style size tagger sizer decoration player notRotated path board =
     let
+        rotated =
+            False
+
         sizeS =
             tos size
 
         delta =
-            (size - lineWidth) // 6
+            (size - lineWidth) // 9
 
         translate =
             tos <| delta * 3
@@ -437,15 +440,8 @@ render style size tagger sizer decoration player rotated path board =
             )
           <|
             List.concat
-                [ [ defs []
-                        [ arrowMarker style ]
-                  , drawCompass style delta rotated
-                  ]
-                , drawDirectionArrow style delta rotated player
-                , drawRows style delta rotated
+                [ drawRows style delta rotated
                 , drawCols style delta rotated sizer board
-                , drawPath style delta rotated sizer path
-                , drawDecoration style delta rotated decoration
                 , drawClickRects style delta rotated tagger
                 ]
         ]
@@ -469,43 +465,9 @@ arrowMarker style =
         ]
 
 
-drawDirectionArrow : Style -> Int -> Bool -> Maybe Player -> List (Svg msg)
-drawDirectionArrow style delta rotated mplayer =
-    case mplayer of
-        Nothing ->
-            []
-
-        Just player ->
-            let
-                ( ( xx1, yy1 ), ( xx2, yy2 ) ) =
-                    case player of
-                        Zephyrus ->
-                            ( ( delta, delta )
-                            , ( delta * 5, delta )
-                            )
-
-                        Notus ->
-                            ( ( delta, delta )
-                            , ( delta, delta * 5 )
-                            )
-            in
-            [ Svg.line
-                [ x1 <| tos xx1
-                , y1 <| tosy delta rotated yy1
-                , x2 <| tos xx2
-                , y2 <| tosy delta rotated yy2
-                , strokeWidth <| tos lineWidth
-                , stroke style.arrowColor
-                , markerStart "url(#arrow)"
-                , markerEnd "url(#arrow)"
-                ]
-                []
-            ]
-
-
 drawRows : Style -> Int -> Bool -> List (Svg msg)
 drawRows style delta rotated =
-    List.map (drawRow style delta rotated) [ 0, 1, 2, 3, 4, 5 ]
+    List.map (drawRow style delta rotated) [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
         |> List.concat
 
 
@@ -534,41 +496,46 @@ drawRow style delta rotated idx =
             fontSize delta
     in
     [ Svg.line
-        [ x1 <| tos (delta // 2)
+        [ x1 <| tos (delta // 2 - lineWidth // 2)
         , y1 ycs
-        , x2 <| tos (delta * 5 + delta // 2)
+        , x2 <| tos (delta * 8 + delta // 2 + lineWidth // 2)
         , y2 ycs
         , strokeWidth <| tos lineWidth
         , stroke style.lineColor
         ]
         []
-    , let
-        xs =
-            "0"
+    , if idx >= 8 then
+        g [] []
 
-        ys =
-            if not rotated then
-                tos (yc - 3 + fsize // 2)
+      else
+        let
+            xs =
+                "0"
 
-            else
-                tosy delta rotated (yc - fsize // 4)
-      in
-      Svg.text_
-        (List.concat
-            [ if rotated then
-                [ rotate "90" ]
+            ys =
+                if not rotated then
+                    tos (yc - 3 + (delta // 2) + (fsize // 2))
 
-              else
-                []
-            , [ x "0"
-              , y ys
-              , Attributes.style <| fontStyle fsize
-              , stroke style.lineColor
-              , fill style.lineColor
-              ]
-            ]
-        )
-        [ Svg.text <| rowToString idx ]
+                else
+                    -- Needs to be fixed
+                    tosy delta rotated (yc - fsize // 4)
+        in
+        Svg.text_
+            (List.concat
+                [ if rotated then
+                    [ rotate "90" ]
+
+                  else
+                    []
+                , [ x "0"
+                  , y ys
+                  , Attributes.style <| fontStyle fsize
+                  , stroke style.lineColor
+                  , fill style.lineColor
+                  ]
+                ]
+            )
+            [ Svg.text <| rowToString idx ]
     ]
 
 
@@ -576,7 +543,7 @@ drawClickRects : Style -> Int -> Bool -> (( Int, Int ) -> msg) -> List (Svg msg)
 drawClickRects style delta rotated tagger =
     let
         indices =
-            [ 0, 1, 2, 3, 4, 5 ]
+            [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
 
         docol rowidx colidx res =
             drawClickRect delta tagger rowidx colidx
@@ -611,7 +578,7 @@ drawClickRect delta tagger rowidx colidx =
 
 drawCols : Style -> Int -> Bool -> Maybe Sizer -> NewBoard -> List (Svg msg)
 drawCols style delta rotated sizer board =
-    List.map (drawCol style delta rotated sizer board) [ 0, 1, 2, 3, 4, 5 ]
+    List.map (drawCol style delta rotated sizer board) [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
         |> List.concat
 
 
@@ -643,45 +610,47 @@ drawCol style delta rotated sizer board idx =
                 ( xc, fsize * 1 // 8 )
 
             else
-                ( xc, delta * 6 )
+                ( xc + delta // 2, delta * 9 )
     in
     List.concat
         [ [ Svg.line
                 [ x1 xcs
                 , y1 <| tosy delta rotated (delta // 2)
                 , x2 xcs
-                , y2 <| tosy delta rotated (delta * 5 + delta // 2)
+                , y2 <| tosy delta rotated (delta * 8 + delta // 2)
                 , strokeWidth <| tos lineWidth
                 , stroke style.lineColor
                 ]
                 []
-          , let
-                xis =
-                    tos xi
+          , if idx >= 8 then
+                g [] []
 
-                yis =
-                    tosy delta rotated yi
-            in
-            Svg.text_
-                (List.concat
-                    [ if rotated then
-                        [ rotate "90" ]
+            else
+                let
+                    xis =
+                        tos xi
 
-                      else
-                        []
-                    , [ x xis
-                      , y yis
-                      , Attributes.style <| fontStyle fsize
-                      , textAnchor "middle"
-                      , stroke style.lineColor
-                      , fill style.lineColor
-                      ]
-                    ]
-                )
-                [ Svg.text <| colToString idx ]
+                    yis =
+                        tosy delta rotated yi
+                in
+                Svg.text_
+                    (List.concat
+                        [ if rotated then
+                            [ rotate "90" ]
+
+                          else
+                            []
+                        , [ x xis
+                          , y yis
+                          , Attributes.style <| fontStyle fsize
+                          , textAnchor "middle"
+                          , stroke style.lineColor
+                          , fill style.lineColor
+                          ]
+                        ]
+                    )
+                    [ Svg.text <| colToString idx ]
           ]
-        , List.map (drawVertex style delta rotated sizer idx board) [ 0, 1, 2, 3, 4, 5 ]
-            |> List.concat
         ]
 
 
@@ -719,207 +688,6 @@ centers delta rowidx colidx =
     ( delta * colidx + delta // 2, delta * rowidx + delta // 2 )
 
 
-drawVertex : Style -> Int -> Bool -> Maybe Sizer -> Int -> NewBoard -> Int -> List (Svg msg)
-drawVertex style delta rotated sizer colidx board rowidx =
-    let
-        ( xc, yc ) =
-            centers delta rowidx colidx
-
-        setp =
-            get rowidx colidx board
-    in
-    [ [ Svg.circle
-            [ cx <| tos xc
-            , cy <| tosy delta rotated yc
-            , r <| tos (delta // 6)
-            , strokeWidth <| tos lineWidthO2
-            , stroke style.lineColor
-            , fill
-                (if setp.pieceType /= NoPiece then
-                    style.lineColor
-
-                 else
-                    style.backgroundColor
-                )
-            ]
-            []
-      ]
-    , if setp.pieceType == NoPiece then
-        []
-
-      else
-        drawConnections style delta rotated rowidx colidx (getConnectSizer sizer) board
-    ]
-        |> List.concat
-
-
-drawConnections : Style -> Int -> Bool -> Int -> Int -> (Style -> Int -> ( Int, String )) -> NewBoard -> List (Svg msg)
-drawConnections style delta rotated rowidx colidx sizer board =
-    let
-        ( xc, yc ) =
-            centers delta rowidx colidx
-
-        ( lw, color ) =
-            sizer style delta
-
-        leftp =
-            get rowidx (colidx - 1) board
-
-        rightp =
-            get rowidx (colidx + 1) board
-
-        upp =
-            get (rowidx - 1) colidx board
-
-        downp =
-            get (rowidx + 1) colidx board
-
-        lrOverlap =
-            if upp.pieceType /= NoPiece || downp.pieceType /= NoPiece then
-                lw // 2
-
-            else
-                0
-
-        udOverlap =
-            if leftp.pieceType /= NoPiece || rightp.pieceType /= NoPiece then
-                lw // 2
-
-            else
-                0
-
-        xyr =
-            lw // 2
-    in
-    [ if leftp.pieceType == NoPiece && rightp.pieceType == NoPiece then
-        []
-
-      else
-        let
-            left =
-                if leftp.pieceType /= NoPiece then
-                    xc - delta // 2 - lw // 2
-
-                else
-                    xc - lrOverlap
-
-            right =
-                if rightp.pieceType /= NoPiece then
-                    xc + delta // 2 + lw // 2
-
-                else
-                    xc + lrOverlap
-        in
-        [ Svg.rect
-            [ x <| tos left
-            , y <| tosy delta rotated (yc - lw // 2)
-            , width <| tos (right - left)
-            , height <| tos lw
-            , strokeWidth "1"
-            , stroke color
-            , fill color
-            , rx <| tos xyr
-            ]
-            []
-        ]
-    , if upp.pieceType == NoPiece && downp.pieceType == NoPiece then
-        []
-
-      else
-        let
-            top =
-                if upp.pieceType /= NoPiece then
-                    yc - delta // 2 - lw // 2
-
-                else
-                    yc - udOverlap
-
-            bottom =
-                if downp.pieceType /= NoPiece then
-                    yc + delta // 2 + lw // 2
-
-                else
-                    yc + udOverlap
-        in
-        [ Svg.rect
-            [ x <| tos (xc - lw // 2)
-            , y <| tosy delta rotated top
-            , width <| tos lw
-            , height <| tos (bottom - top)
-            , strokeWidth "1"
-            , stroke color
-            , fill color
-            , ry <| tos xyr
-            ]
-            []
-        ]
-    ]
-        |> List.concat
-
-
-drawDecoration : Style -> Int -> Bool -> Decoration -> List (Svg msg)
-drawDecoration style delta rotated decoration =
-    case decoration of
-        NoDecoration ->
-            []
-
-        RowSelectedDecoration rowidx ->
-            [ Svg.rect
-                [ x <| tos (delta // 2 - delta // 6 - 1)
-                , y <| tosy delta rotated (rowidx * delta + delta // 2 - delta // 6 - 1)
-                , width <| tos (5 * delta + delta // 3 + 2)
-                , height <| tos (delta // 3 + 2)
-                , rx <| tos (delta // 6 + 1)
-                , strokeWidth "0"
-                , fill style.lineColor
-                , fillOpacity style.highlightOpacity
-                ]
-                []
-            ]
-
-        ColSelectedDecoration colidx ->
-            [ Svg.rect
-                [ y <| tos (delta // 2 - delta // 6 - 1)
-                , x <| tosy delta rotated (colidx * delta + delta // 2 - delta // 6 - 1)
-                , height <| tos (5 * delta + delta // 3 + 2)
-                , width <| tos (delta // 3 + 2)
-                , ry <| tos (delta // 6 + 1)
-                , strokeWidth "0"
-                , fill style.lineColor
-                , fillOpacity style.highlightOpacity
-                ]
-                []
-            ]
-
-        AlreadyFilledDecoration ( rowidx, colidx ) ->
-            let
-                ( xc, yc ) =
-                    ( delta * colidx + delta // 2, delta * rowidx + delta // 2 )
-            in
-            [ Svg.circle
-                [ cx <| tos xc
-                , cy <| tosy delta rotated yc
-                , r <| tos (delta // 4)
-                , strokeWidth "0"
-                , fill style.alreadyFilledColor
-                ]
-                []
-            ]
-
-
-drawPath : Style -> Int -> Bool -> Maybe Sizer -> List ( Int, Int ) -> List (Svg msg)
-drawPath style delta rotated sizer path =
-    let
-        board =
-            List.foldl (\( r, c ) b -> set r c Types.emptyPiece b) empty path
-
-        psizer =
-            getPathSizer sizer
-    in
-    List.map (\( r, c ) -> drawConnections style delta rotated r c psizer board) path
-        |> List.concat
-
-
 rowNameDict : Dict Int String
 rowNameDict =
     Dict.fromList
@@ -929,6 +697,8 @@ rowNameDict =
         , ( 3, "d" )
         , ( 4, "e" )
         , ( 5, "f" )
+        , ( 6, "g" )
+        , ( 7, "h" )
         ]
 
 
@@ -944,150 +714,4 @@ colToString y =
 
 rowToString : Int -> String
 rowToString x =
-    tos <| 6 - x
-
-
-drawCompass : Style -> Int -> Bool -> Svg msg
-drawCompass style delta rotated =
-    let
-        c =
-            3 * delta
-
-        csx =
-            tos c
-
-        csy =
-            tosy delta rotated c
-
-        thickness =
-            lineWidth + 4
-
-        outerR =
-            round (toFloat delta * sqrt (1 / 2))
-
-        innerR =
-            outerR - delta // 6 - lineWidthO2 // 2
-
-        innerX =
-            round (toFloat innerR / sqrt 2)
-
-        shortR =
-            innerR // 3
-
-        shortX =
-            round (toFloat shortR / sqrt 2)
-
-        shorterX =
-            2 * shortX // 3
-
-        r =
-            outerR
-
-        longR =
-            r + delta // 6
-
-        fsize =
-            fontSize delta
-
-        fr =
-            longR + fsize // 4
-
-        connection =
-            tos shortX ++ "," ++ tos shortX
-
-        arcStart =
-            "0," ++ tos r
-
-        arcAngle =
-            70
-
-        arcRotate =
-            (arcAngle - 90) // 2
-
-        arcRadians =
-            degrees arcAngle
-
-        arcEnd =
-            (tos <| round (toFloat r * sin arcRadians))
-                ++ ","
-                ++ (tos <| round (toFloat r * cos arcRadians))
-
-        ellipseRadii =
-            tos r ++ "," ++ tos r
-
-        quarterImage =
-            g
-                []
-                [ Svg.polygon
-                    [ points <|
-                        "0,0 "
-                            ++ ("0," ++ tos longR ++ " ")
-                            ++ (connection ++ " ")
-                            ++ "0,0"
-                    , fill style.lineColor
-                    , stroke style.lineColor
-                    ]
-                    []
-                , Svg.polygon
-                    [ points <|
-                        (connection ++ " ")
-                            ++ (tos innerX ++ "," ++ tos innerX ++ " ")
-                            -- Should really compute "1" here
-                            ++ (tos (shortX + shorterX) ++ "," ++ tos shortX ++ " ")
-                            ++ connection
-                    , fill style.compassColor
-                    , stroke style.compassColor
-                    ]
-                    []
-                , g
-                    [ transform <|
-                        "rotate("
-                            ++ tos arcRotate
-                            ++ ")"
-                    ]
-                    [ Svg.path
-                        [ d <|
-                            ("M " ++ arcStart ++ " ")
-                                ++ ("A"
-                                        ++ ellipseRadii
-                                        ++ " 0 0,0 "
-                                        ++ arcEnd
-                                   )
-                        , strokeWidth <| tos thickness
-                        , stroke style.compassColor
-                        , fill style.backgroundColor
-                        ]
-                        []
-                    ]
-                ]
-
-        compassText cx cy txt =
-            Svg.text_
-                [ x <| tos cx
-                , y <| tos cy
-                , Attributes.style <| fontStyle fsize
-                , textAnchor "middle"
-                , stroke style.compassColor
-                , fill style.compassColor
-                ]
-                [ Svg.text txt ]
-    in
-    g
-        [ transform <|
-            "translate("
-                ++ csx
-                ++ " "
-                ++ csy
-                ++ ")"
-        , fillOpacity style.compassOpacity
-        , strokeOpacity style.compassOpacity
-        ]
-        [ quarterImage
-        , g [ transform "rotate(90)" ] [ quarterImage ]
-        , g [ transform "rotate(180)" ] [ quarterImage ]
-        , g [ transform "rotate(270)" ] [ quarterImage ]
-        , compassText 0 (negate fr) "N"
-        , compassText 0 (fr + 3 * fsize // 4) "S"
-        , compassText (negate <| fr + fsize // 3) (fsize // 3) "W"
-        , compassText (fr + fsize // 3) (fsize // 3) "E"
-        ]
+    tos <| 8 - x
