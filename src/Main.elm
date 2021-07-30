@@ -1774,9 +1774,6 @@ view model =
                     InstructionsPage ->
                         instructionsPage bsize model
 
-                    AuxPage ->
-                        auxPage bsize model
-
                     PublicPage ->
                         publicPage bsize model
                 ]
@@ -2318,12 +2315,6 @@ mainPage bsize model =
             , text " "
             , a
                 [ href "#"
-                , onClick <| SetPage AuxPage
-                ]
-                [ text "Aux" ]
-            , text " "
-            , a
-                [ href "#"
                 , onClick <| SetPage InstructionsPage
                 ]
                 [ text "Instructions" ]
@@ -2335,7 +2326,7 @@ mainPage bsize model =
                 [ text "Rules" ]
             , br
             , a
-                [ href "https://github.com/billstclair/zephyrnot/"
+                [ href "https://github.com/billstclair/agog/"
                 , target "_blank"
                 ]
                 [ text "GitHub" ]
@@ -2573,168 +2564,69 @@ rulesPage bsize model =
     rulesDiv False
         [ br
         , playButton
-        , rulesDiv True
-            [ br, b "Rules" ]
         , rulesDiv False
-            [ Markdown.toHtml [] """ 
-One player is "placing the stone" on each round. Zephyrus starts, and
-play alternates between Zephyrus and Notus. Zephyrus controls the west
-wind, the left edge of the board. Notus controls the south wind, the
-bottom edge of the board.
+            [ h2 [ align "center" ]
+                [ text "Story" ]
+            , Markdown.toHtml [] """ 
+In a secret complex deep in the mountains, the Ancient Guild of Golemancy plies its trade, creating life where before was only base matter. Two journeyman golemancers feverishly prepare their master works, for there is but one position available among the Golemancery Elect. Both know that if they could but obtain their rival’s research, they would surely be able to create the greater work. The night before their creations are to be judged, each plots to infiltrate the other's sanctum of knowledge, using their legion of early prototypes to subtly outmaneuver the other.
 
-Each round, players simultaneously and secretly declare the rank or
-file (row or column) they want the next stone to be placed
-on. Zephyrus chooses the file ("a" being furthest west, and "f" being
-furthest east), and Notus chooses the rank (1 being furthest south,
-and 6 being furthest north).
-
-If players declare an occupied point, the player placing the stone
-must change their choice to declare an empty point instead (their
-opponent’s declared choice remains the same).
-
-Each player is trying to connect their edge of the board to its
-opposite edge with an unbroken path of orthogonally adjacent stones
-(west to east or south to north). The first player to do so wins. The
-path does not need to be a straight line. If a path is made between
-all 4 sides on the same turn, the player who placed the final stone
-wins.
+In A•G•O•G, players attempt to be first reach their opponent's sanctum, or failing that, to take their opponent captive and in so doing keep them from completing their masterpiece. If one of your golems manages to enter their sanctum, they may bring you back some sundry inventions to better equip your remaining creations with, but your eyes alone will know what to look for within their volumes of research. Will you have what it takes to outwit your rival and take your place among the Masters of Golemancy?
 """
             ]
         , playButton
         , rulesDiv False
-            [ h2 [ herculanumStyle, align "center" ]
-                [ text "The Anemoi: Zephyrus and Notus" ]
-            , Markdown.toHtml []
-                """
-In Greek mythology, the sibling gods the Anemoi personify the winds of the cardinal
-directions. They bring the changing of the weather and seasons and control many
-aspects of daily life.
+            [ h2 [ align "center" ]
+                [ text "SETUP" ]
+            , Markdown.toHtml [] """
+A•G•O•G is a game of subtle strategy for two players. Played on a standard 8x8 checkers board, players sit at opposite dark-colored corner squares. The square closest to each player is their “sanctum.” One player's units are white and the other's are black.
 
-Zephyrus, the beneficial god of the west wind, brings gentle rains and warm breezes,
-heralding spring and the blooming of the land.
+Each player starts with 20 golems, shaped like checkers pieces, and 1 journeyman golemancer (journeyman for short), comprised of a stack of 3 checkers: white-black-white for White; black-white-black for Black. The journeyman starts on the player's sanctum with the golems filling the 5 rows of squares in front of them, leaving the three middle rows unoccupied between the two players' ranks.
 
-Notus, the tempestuous god of the south wind, brings thick mists and summer storms,
-concealing thieves and destroying crops.
-
-Their brothers Boreas and Eurus are the north winter wind and the unlucky east wind,
-respectively.
-
-In Zephyrnot, players take the rolls of Zephyrus and Notus, vying for control of the
-prevailing winds of Greece. But while you may have power over the winds from your
-compass point, take care: your opponent’s hidden gusts will directly affect your every
-move. Will you be able to predict the wind?
+White goes first. On their turn, the acting player must move one unit or make a capture with one unit. Players alternate turns until one of them is victorious.
 """
             ]
-        , rulesDiv True
-            [ h2 [ herculanumStyle, align "center" ]
-                [ text "Pronunciation" ]
-            , p
-                []
-                [ text "Zephyrnot ["
-                , b "zef"
-                , text "-er-noht]"
-                , br
-                , text "Anemoi ["
-                , b "an"
-                , text "-em-oy]"
-                , br
-                , text "Zephyrus ["
-                , b "zef"
-                , text "-er-uh s]"
-                , br
-                , text "Notus ["
-                , b "noh"
-                , text "-tuh s]"
-                , br
-                , text "Boreas ["
-                , b "bawr"
-                , text "-ee-uh s]"
-                , br
-                , text "Eurus ["
-                , b "yoor"
-                , text "-uh s]"
-                ]
+        , playButton
+        , rulesDiv False
+            [ h2 [ align "center" ]
+                [ text "UNITS" ]
+            , Markdown.toHtml [] """
+All unit movement in A•G•O•G is orthogonal relative to the squares; diagonal relative to the players. Units can only move forward (towards the enemy sanctum), but can capture enemy units forward or backward.
+
+Units capture by jumping over an enemy unit and landing on an unoccupied square beyond them. Units cannot jump over more than one enemy at a time, and cannot move or jump off the edge of the board. If a unit making a capture lands on a square from which they can make another capture, they are compelled to do so and continue the capturing sequence until they land on a square from which no further captures are available. Captured units are immediately removed from play.
+
+If a capture is available on the acting player's turn, they are compelled to take it instead of moving a unit, and if multiple captures are available, they are compelled to take the capturing sequence that will capture the most enemy units. For example, if the acting player could either capture two enemy golems or capture the enemy journeyman alone, they are compelled to capture the two golems, even though capturing the journeyman would win them the game.
+
+The Golem: The basic unit of A•G•O•G. Golems can move forward one square at a time and can capture only adjacent enemy units, landing on the square immediately beyond them.
+
+The Hulk: If a golem ends the turn placed on the enemy sanctum, its player may choose to either to place it atop any of their other golems or remove it from play. If the player chooses the former, the two stacked golems become a new unit: the hulk. If a hulk ends the turn placed on the enemy sanctum, its player may either create a new hulk with the top golem of the stack and remove the bottom from play, or may remove both stacked golems from play. If they have no other golems in play when one of their units ends the turn on the enemy sanctum, that unit must be removed from play.
+
+Augmented with stolen inventions from the enemy sanctum, the hulk is the most powerful unit in the game. They can move forward any distance in a straight line, and can capture at any distance in a straight line, landing on any unoccupied square beyond the captured unit (provided they do do not jump over more than one unit at a time and that they land such that they can capture the most possible enemy units in the sequence).
+
+The Journeyman: The most important unit. If captured, their player loses the game, whereas if a journeyman ends the turn on the enemy sanctum, their player wins the game.
+
+The journeymen move and capture the same as golems. However, when jumping over an enemy unit, they may “corrupt” the jumped unit instead of capturing it. To create a corrupted unit, the acting player places one of their golems that has been removed from play atop the jumped unit. This unit is now under the control of the player that corrupted it. Golems and hulks can be corrupted; journeymen can only be captured. If the acting player does not have any golems that have been removed from play, they cannot corrupt units and must capture them instead.
+
+Corrupted units behave the same as regular units of their color, with the following exceptions:
+
+When jumping over an enemy unit, corrupted units may either corrupt or capture the jumped unit, like a journeyman.
+A corrupted unit cannot be uncorrupted and must be captured.
+If a corrupted unit ends the turn on the enemy sanctum, they cannot be used to create a hulk and must be removed from play.
+"""
             ]
         , playButton
-        ]
+        , rulesDiv False
+            [ h2 [ align "center" ]
+                [ text "WINNING" ]
+            , Markdown.toHtml [] """
+A player wins immediately under any of the following conditions:
 
+Win by Capture: The player captures the enemy journeyman.
+Win by Sanctum: The player's journeyman ends the turn on the enemy sanctum.
+Win by Immobilization: The player's opponent has no legal moves on their turn.
+Win by Resignation: The player's opponent resigns.
 
-auxPage : Int -> Model -> Html Msg
-auxPage bsize model =
-    let
-        simulatorState =
-            model.simulatorState
-
-        { horizontalWins, verticalWins, horizontalScore, verticalScore } =
-            simulatorState.simulatorResult
-
-        locale =
-            { usLocale | decimals = 1 }
-
-        hscore =
-            (toFloat horizontalScore / toFloat horizontalWins)
-                |> format locale
-
-        vscore =
-            (toFloat verticalScore / toFloat verticalWins)
-                |> format locale
-
-        percent =
-            100 * horizontalWins // (horizontalWins + verticalWins)
-
-        settings =
-            model.settings
-    in
-    rulesDiv False
-        [ br
-        , playButton
-        , rulesDiv True
-            [ br, b "Aux" ]
-        , p [ align "center" ]
-            [ b "Hide Title: "
-            , input
-                [ type_ "checkbox"
-                , checked settings.hideTitle
-                , onCheck SetHideTitle
-                ]
-                []
-            , br
-            , b "Game Count: "
-            , input
-                [ onInput SetGameCount
-                , value simulatorState.gameCountString
-                , size 4
-                ]
-                []
-            , text " "
-            , button
-                [ onClick ToggleSimulator ]
-                [ if simulatorState.gamesLeft > 0 then
-                    text "Stop"
-
-                  else
-                    text "Simulate"
-                ]
-            , br
-            , if horizontalWins == 0 && verticalWins == 0 then
-                text ""
-
-              else
-                span []
-                    [ text "Zephyrus/Notus points: "
-                    , text hscore
-                    , text "/"
-                    , text vscore
-                    , text ", games: "
-                    , text <| String.fromInt horizontalWins
-                    , text "/"
-                    , text <| String.fromInt verticalWins
-                    , text ", "
-                    , text <| String.fromInt percent
-                    , text "/"
-                    , text <| String.fromInt (100 - percent)
-                    , text "%"
-                    ]
+Draws are not possible in A•G•O•G.
+"""
             ]
         , playButton
         ]

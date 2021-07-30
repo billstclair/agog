@@ -127,7 +127,6 @@ type Page
     = MainPage
     | RulesPage
     | InstructionsPage
-    | AuxPage
     | PublicPage
 
 

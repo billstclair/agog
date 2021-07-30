@@ -170,9 +170,6 @@ encodePage page =
             InstructionsPage ->
                 "InstructionsPage"
 
-            AuxPage ->
-                "AuxPage"
-
             PublicPage ->
                 "PublicPage"
 
@@ -191,9 +188,6 @@ pageDecoder =
 
                     "InstructionsPage" ->
                         JD.succeed InstructionsPage
-
-                    "AuxPage" ->
-                        JD.succeed AuxPage
 
                     "PublicPage" ->
                         JD.succeed PublicPage
