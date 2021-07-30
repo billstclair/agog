@@ -415,29 +415,32 @@ render style size tagger sizer decoration player notRotated path board =
             tos size
 
         delta =
-            (size - lineWidth) // 9
+            round (toFloat (size - lineWidth) / 8 / sqrt 2)
 
         translate =
-            tos <| delta * 3
+            (size - 8 * delta) // 2
+
+        center =
+            size // 2
     in
     svg
         [ width sizeS
         , height sizeS
         ]
         [ g
-            (if rotated then
-                [ transform
-                    ("rotate(-90,"
-                        ++ translate
-                        ++ ","
-                        ++ translate
-                        ++ ")"
-                    )
-                ]
-
-             else
-                []
-            )
+            [ transform
+                (" translate("
+                    ++ tos translate
+                    ++ " "
+                    ++ tos 0
+                    ++ ")"
+                    ++ " rotate(-45,"
+                    ++ tos center
+                    ++ " "
+                    ++ tos center
+                    ++ ")"
+                )
+            ]
           <|
             List.concat
                 [ drawRows style delta rotated
@@ -546,7 +549,7 @@ drawClickRects style delta rotated tagger =
             [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
 
         docol rowidx colidx res =
-            drawClickRect delta tagger rowidx colidx
+            drawClickRect style delta tagger rowidx colidx
                 :: res
 
         dorow rowidx res =
@@ -555,25 +558,48 @@ drawClickRects style delta rotated tagger =
     List.foldl dorow [] indices
 
 
-drawClickRect : Int -> (( Int, Int ) -> msg) -> Int -> Int -> Svg msg
-drawClickRect delta tagger rowidx colidx =
+drawClickRect : Style -> Int -> (( Int, Int ) -> msg) -> Int -> Int -> Svg msg
+drawClickRect style delta tagger rowidx colidx =
     let
         xc =
             delta * colidx + delta // 2
 
         yc =
             delta * rowidx + delta // 2
+
+        shade delt =
+            Svg.rect
+                [ x <| tos (xc + lineWidth // 2)
+                , y <| tos (yc + lineWidth // 2)
+                , width <| tos (delta - lineWidth)
+                , height <| tos (delta - lineWidth)
+                , fill style.shadeColor
+                ]
+                []
+
+        draw delt =
+            Svg.rect
+                [ x <| tos xc
+                , y <| tos yc
+                , width <| tos delta
+                , height <| tos delta
+                , strokeWidth "0"
+                , fillOpacity "0"
+                , Events.onClick (tagger ( rowidx, colidx ))
+                ]
+                []
+
+        idxSum =
+            rowidx + colidx
     in
-    Svg.rect
-        [ x <| tos (xc - delta // 2)
-        , y <| tos (yc - delta // 2)
-        , width <| tos delta
-        , height <| tos delta
-        , strokeWidth "0"
-        , fillOpacity "0"
-        , Events.onClick (tagger ( rowidx, colidx ))
-        ]
-        []
+    if rowidx < 8 && colidx < 8 && idxSum /= idxSum // 2 * 2 then
+        g []
+            [ shade delta
+            , draw delta
+            ]
+
+    else
+        draw delta
 
 
 drawCols : Style -> Int -> Bool -> Maybe Sizer -> NewBoard -> List (Svg msg)

@@ -162,6 +162,7 @@ type alias Style =
     , highlightOpacity : String
     , compassColor : String
     , compassOpacity : String
+    , shadeColor : String
     }
 
 
@@ -175,6 +176,7 @@ lightStyle =
     , highlightOpacity = "0.3"
     , compassColor = "black"
     , compassOpacity = "0.5"
+    , shadeColor = "lightgray"
     }
 
 
@@ -188,6 +190,7 @@ darkStyle =
     , highlightOpacity = "0.4"
     , compassColor = "white"
     , compassOpacity = "0.3"
+    , shadeColor = "lightgray"
     }
 
 

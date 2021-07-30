@@ -2,6 +2,6 @@
 
 which=$1
 if [[ -z $which ]]; then which='local';fi
-cp src/Zephyrnot/WhichServer.elm.$which src/Zephyrnot/WhichServer.elm
+cp src/Agog/WhichServer.elm.$which src/Agog/WhichServer.elm
 
 elm make src/Main.elm --output site/elm.js
