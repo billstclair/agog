@@ -2463,96 +2463,7 @@ instructionsPage bsize model =
             [ br, b "Instructions" ]
         , rulesDiv False
             [ Markdown.toHtml [] """
-The "North is up" checkbox controls the rotation of the board. If it
-is unchecked, the default, then north will be up when Notus is
-playing, and east will be up when Zephyrus is playing. Each player
-will choose a row, and attempt to make a path from the top to the
-bottom of the board, as they see it. Check "North is up" to always
-keep the board displayed with north up. In that case, Notus chooses
-rows and Zephyrus chooses columns, which is mostly useful for
-single-player experimentation.
-
-The "Dark Mode" checkbox displays dark colors when checked. Good for
-night-time play, and people who just like dark mode.
-
-Play may either be networked, through the server at zephyrus.com, or
-local, with no server connection. The "Local" checkbox controls this.
-
-**Networked Play**
-
-The "You play" radio buttons control which player you will be if you
-click "Start Game". Zephyrus is the first stone placer.
-
-Fill in "Your Name" and either click "Start Game" or fill in the
-"Game ID" and click "Join". If you "Start Game", the "Game ID" will be
-filled in, and you'll need to give this to the other player, so they
-can "Join" (or use a public game).
-
-To create a public game, which will appear on the "Public" page, check
-the "Public" checkbox. If you fill in "for name", then only players
-with that name will be able to see that game. Otherwise, anyone who
-goes to the public games page will be able to join your game.
-
-After both players are connected, on each turn, Zephyrus chooses a
-north-south line and Notus chooses an east-west line. Instructions
-continue at "Both Local and Networked" below.
-
-During networked play, a chat box appears below the board. You may
-enter text in the area to the left of the "Send" button, and press the
-return/enter key or click "Send" to send it. Click "Clear" to clear
-the chat output area (on your screen only). The up/down/O buttons to
-the left of the chat box change its font size.
-
-**Local Play**
-
-The "Choose first" radio buttons control which player chooses first
-for each stone placement. This is amenable to using a portable device
-(e.g. a smart phone or tablet), and passing it back and forth to make
-selections.
-
-The "Reset" button resets the score numbers to 0.
-
-The players must choose who will be Zephyrus, placing the first stone,
-and attempting to create a path connecting the east and west
-edges, and who will be Notus, placing the second stone, and attempting
-to create a path connecting the north and south edges.
-
-Zephyrus taps a north-south line to select it, then taps another to
-change the selection, or the same one again to choose it.
-
-Notus taps an east-west line to select it, then taps another to
-change the selection, or the same one again to choose it.
-
-**Both Local and Networked**
-
-After both players have made their selection, the stone at the
-intersection of the selected north-south and east-west line is
-placed. If there is already a stone there, it is highlighted in red,
-and the player placing the stone must choose another line that is
-that is unoccupied.
-
-Play continues until there is a path connecting two opposite
-edges. Click the "New Game" button to play again.
-
-Click the "Resign" button to let the Wookie win. Click the
-"Disconnect" button to stop playing, leaving the other player in the
-lurch.
-
-Click the "Clear" button at the bottom of the page to remove all stored
-state from your browser, and restart with an empty board.
-
-The "Public" games page lists all public games known to the server,
-except those that were registered for another name than "Your
-Name". Click on an underlined GameId to join that game. The "Creator"
-column shows the name of the player who started the game. The "Player"
-column shows which player he will be. You will be the other player.
-
-The "Aux" page has a "Hide Title" checkbox, which, if checked, hides
-the title at the top of the page, making more fit in your browser
-without scrolling. The "Simulate" button will run the number of games
-in the "Game Count" text box, using random moves, and display the
-outcome.
-
+TO BE DONE
 """
             ]
         , playButton
@@ -2621,8 +2532,11 @@ If a corrupted unit ends the turn on the enemy sanctum, they cannot be used to c
 A player wins immediately under any of the following conditions:
 
 Win by Capture: The player captures the enemy journeyman.
+                
 Win by Sanctum: The player's journeyman ends the turn on the enemy sanctum.
+                
 Win by Immobilization: The player's opponent has no legal moves on their turn.
+                       
 Win by Resignation: The player's opponent resigns.
 
 Draws are not possible in A•G•O•G.
