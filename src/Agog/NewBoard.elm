@@ -565,7 +565,7 @@ drawShadeRect style delta rowidx colidx =
         idxsum =
             rowidx + colidx
     in
-    if idxsum /= idxsum // 2 * 2 then
+    if idxsum == idxsum // 2 * 2 then
         g [] []
 
     else
