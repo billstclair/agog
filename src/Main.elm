@@ -1762,7 +1762,7 @@ view model =
                             ]
                             [ text "A Game of Golems" ]
                         , p [ style "margin" "0" ]
-                            [ text "Invented by Chris St. Clair" ]
+                            [ text "Designed by Christopher St. Clair" ]
                         ]
                 , case model.page of
                     MainPage ->
