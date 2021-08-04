@@ -568,7 +568,7 @@ drawRows style delta rotated =
 
 fontSize : Int -> Int
 fontSize delta =
-    delta // 4
+    delta // 2
 
 
 fontStyle : Int -> String
