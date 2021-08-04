@@ -44,6 +44,7 @@ module Agog.Types exposing
     , messageToGameid
     , messageToPlayer
     , messageToPlayerid
+    , otherColor
     , otherPlayer
     , typeToStyle
     , zeroOneScore
@@ -68,6 +69,16 @@ type alias Board =
 type Color
     = BlackColor
     | WhiteColor
+
+
+otherColor : Color -> Color
+otherColor color =
+    case color of
+        BlackColor ->
+            WhiteColor
+
+        WhiteColor ->
+            BlackColor
 
 
 type PieceType

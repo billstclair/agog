@@ -17,6 +17,7 @@ module Agog.NewBoard exposing
     , empty
     , get
     , getSizer
+    , initial
     , render
     , rowToString
     , score
@@ -28,6 +29,7 @@ module Agog.NewBoard exposing
 import Agog.Types as Types
     exposing
         ( Board
+        , Color(..)
         , Decoration(..)
         , NewBoard
         , Piece
@@ -98,7 +100,80 @@ import Svg.Events as Events
 
 empty : NewBoard
 empty =
-    Array.repeat 6 (Array.repeat 6 Types.emptyPiece)
+    Array.repeat 8 (Array.repeat 8 Types.emptyPiece)
+
+
+initial : NewBoard
+initial =
+    let
+        whiteGolem =
+            { color = WhiteColor
+            , pieceType = Golem
+            , corrupted = False
+            }
+
+        whiteJourneyman =
+            { whiteGolem | pieceType = Journeyman }
+
+        blackGolem =
+            { whiteGolem | color = BlackColor }
+
+        blackJourneyman =
+            { blackGolem | pieceType = Journeyman }
+
+        fillGolems : NewBoard -> Piece -> Int -> Int -> Int -> NewBoard
+        fillGolems b p col startRow endRow =
+            if startRow > endRow then
+                b
+
+            else
+                fillGolems
+                    (set startRow col p b)
+                    p
+                    col
+                    (startRow + 1)
+                    endRow
+
+        b0 =
+            set 0 7 blackJourneyman (set 7 0 whiteJourneyman empty)
+
+        b1 =
+            fillGolems b0 whiteGolem 0 2 6
+
+        b2 =
+            fillGolems b1 whiteGolem 1 3 7
+
+        b3 =
+            fillGolems b2 whiteGolem 2 4 7
+
+        b4 =
+            fillGolems b3 whiteGolem 3 5 7
+
+        b5 =
+            fillGolems b4 whiteGolem 4 6 7
+
+        b6 =
+            fillGolems b5 whiteGolem 5 7 7
+
+        b7 =
+            fillGolems b6 blackGolem 2 0 0
+
+        b8 =
+            fillGolems b7 blackGolem 3 0 1
+
+        b9 =
+            fillGolems b8 blackGolem 4 0 2
+
+        b10 =
+            fillGolems b9 blackGolem 5 0 3
+
+        b11 =
+            fillGolems b10 blackGolem 6 0 4
+
+        b12 =
+            fillGolems b11 blackGolem 7 1 5
+    in
+    b12
 
 
 count : NewBoard -> Int
@@ -445,7 +520,7 @@ render style size tagger sizer decoration player notRotated path board =
             List.concat
                 [ drawRows style delta rotated
                 , drawCols style delta rotated sizer board
-                , drawShadeRects style delta
+                , drawRects style board delta
                 , drawClickRects style delta rotated tagger
                 ]
         ]
@@ -543,20 +618,108 @@ drawRow style delta rotated idx =
     ]
 
 
-drawShadeRects : Style -> Int -> List (Svg msg)
-drawShadeRects style delta =
+drawRects : Style -> NewBoard -> Int -> List (Svg msg)
+drawRects style board delta =
     let
         indices =
             [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
         docol rowidx colidx res =
-            drawShadeRect style delta rowidx colidx
+            drawRect style board delta rowidx colidx
                 :: res
 
         dorow rowidx res =
             List.foldl (docol rowidx) res indices
     in
     List.foldl dorow [] indices
+
+
+drawRect : Style -> NewBoard -> Int -> Int -> Int -> Svg msg
+drawRect style board delta rowidx colidx =
+    g []
+        [ drawShadeRect style delta rowidx colidx
+        , drawPiece style board delta rowidx colidx
+        ]
+
+
+drawCircle : Style -> Color -> Float -> Float -> Float -> Svg msg
+drawCircle style color delta rowidx colidx =
+    let
+        xc =
+            delta * colidx + delta
+
+        yc =
+            delta * rowidx + delta
+
+        diameter =
+            delta * 3 / 4
+
+        colorString =
+            case color of
+                BlackColor ->
+                    "DarkSlateGray"
+
+                WhiteColor ->
+                    "FloralWhite"
+    in
+    Svg.circle
+        [ cx <| String.fromFloat xc
+        , cy <| String.fromFloat yc
+        , r <| String.fromFloat (diameter / 2)
+        , stroke "Red"
+        , strokeWidth "2"
+        , fill colorString
+        ]
+        []
+
+
+drawPiece : Style -> NewBoard -> Int -> Int -> Int -> Svg msg
+drawPiece style board delta rowidx colidx =
+    let
+        piece =
+            get rowidx colidx board
+
+        deltaF =
+            toFloat delta
+
+        rowidxF =
+            toFloat rowidx
+
+        colidxF =
+            toFloat colidx
+
+        offset =
+            3.0 / 32.0
+
+        draw color pieceType corrupted =
+            if corrupted then
+                g []
+                    [ drawCircle style (Types.otherColor color) deltaF (rowidxF + offset) (colidxF - offset)
+                    , draw color pieceType False
+                    ]
+
+            else
+                case pieceType of
+                    NoPiece ->
+                        g [] []
+
+                    Golem ->
+                        drawCircle style color deltaF rowidxF colidxF
+
+                    Hulk ->
+                        g []
+                            [ drawCircle style color deltaF rowidxF colidxF
+                            , drawCircle style color deltaF (rowidxF - offset) (colidxF + offset)
+                            ]
+
+                    Journeyman ->
+                        g []
+                            [ drawCircle style color deltaF (rowidxF + offset) (colidxF - offset)
+                            , drawCircle style (Types.otherColor color) deltaF rowidxF colidxF
+                            , drawCircle style color deltaF (rowidxF - offset) (colidxF + offset)
+                            ]
+    in
+    draw piece.color piece.pieceType piece.corrupted
 
 
 drawShadeRect : Style -> Int -> Int -> Int -> Svg msg
@@ -728,11 +891,6 @@ connectColor style =
 pathColor : Style -> String
 pathColor style =
     style.pathColor
-
-
-centers : Int -> Int -> Int -> ( Int, Int )
-centers delta rowidx colidx =
-    ( delta * colidx + delta // 2, delta * rowidx + delta // 2 )
 
 
 rowNameDict : Dict Int String

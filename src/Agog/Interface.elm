@@ -52,7 +52,7 @@ import WebSocketFramework.Types
 emptyGameState : PlayerNames -> GameState
 emptyGameState players =
     { board = Board.empty
-    , newBoard = NewBoard.empty
+    , newBoard = NewBoard.initial
     , moves = []
     , players = players
     , whoseTurn = Zephyrus
