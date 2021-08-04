@@ -398,7 +398,7 @@ tos x =
 
 lineWidthO2 : Int
 lineWidthO2 =
-    3
+    1
 
 
 lineWidth : Int
@@ -486,17 +486,23 @@ render style size tagger sizer decoration player notRotated path board =
         rotated =
             False
 
+        whiteSpace =
+            5
+
+        innerSize =
+            size - (2 * whiteSpace)
+
         sizeS =
             tos size
 
         delta =
-            round (toFloat (size - lineWidth) / 8 / sqrt 2)
+            round (toFloat (innerSize - lineWidth) / 8 / sqrt 2)
 
         translate =
-            (size - 8 * delta) // 2
+            (innerSize - 8 * delta) // 2
 
         center =
-            size // 2
+            innerSize // 2
     in
     svg
         [ width sizeS
@@ -504,25 +510,35 @@ render style size tagger sizer decoration player notRotated path board =
         ]
         [ g
             [ transform
-                (" translate("
-                    ++ tos translate
+                ("translate("
+                    ++ tos whiteSpace
                     ++ " "
-                    ++ tos 0
-                    ++ ")"
-                    ++ " rotate(-45,"
-                    ++ tos center
-                    ++ " "
-                    ++ tos center
+                    ++ tos whiteSpace
                     ++ ")"
                 )
             ]
-          <|
-            List.concat
-                [ drawRows style delta rotated
-                , drawCols style delta rotated sizer board
-                , drawRects style board delta
-                , drawClickRects style delta rotated tagger
+            [ g
+                [ transform
+                    (" translate("
+                        ++ tos translate
+                        ++ " "
+                        ++ tos 0
+                        ++ ")"
+                        ++ " rotate(-45,"
+                        ++ tos center
+                        ++ " "
+                        ++ tos center
+                        ++ ")"
+                    )
                 ]
+              <|
+                List.concat
+                    [ drawRows style delta rotated
+                    , drawCols style delta rotated sizer board
+                    , drawRects style board delta
+                    , drawClickRects style delta rotated tagger
+                    ]
+            ]
         ]
 
 
@@ -557,7 +573,7 @@ fontSize delta =
 
 fontStyle : Int -> String
 fontStyle fsize =
-    "font-weight: bold; font-size: "
+    "font-size: "
         ++ tos fsize
         ++ ";"
 
@@ -574,15 +590,19 @@ drawRow style delta rotated idx =
         fsize =
             fontSize delta
     in
-    [ Svg.line
-        [ x1 <| tos (delta // 2 - lineWidth // 2)
-        , y1 ycs
-        , x2 <| tos (delta * 8 + delta // 2 + lineWidth // 2)
-        , y2 ycs
-        , strokeWidth <| tos lineWidth
-        , stroke style.lineColor
-        ]
-        []
+    [ if idx == 0 || idx == 8 then
+        Svg.line
+            [ x1 <| tos (delta // 2 - lineWidth // 2)
+            , y1 ycs
+            , x2 <| tos (delta * 8 + delta // 2 + lineWidth // 2)
+            , y2 ycs
+            , strokeWidth <| tos lineWidth
+            , stroke style.lineColor
+            ]
+            []
+
+      else
+        g [] []
     , if idx >= 8 then
         g [] []
 
@@ -652,22 +672,22 @@ drawCircle style color delta rowidx colidx =
             delta * rowidx + delta
 
         diameter =
-            delta * 3 / 4
+            delta * 9 / 16
 
         colorString =
             case color of
                 BlackColor ->
-                    "DarkSlateGray"
+                    "Sienna"
 
                 WhiteColor ->
-                    "FloralWhite"
+                    "WhiteSmoke"
     in
     Svg.circle
         [ cx <| String.fromFloat xc
         , cy <| String.fromFloat yc
         , r <| String.fromFloat (diameter / 2)
-        , stroke "Red"
-        , strokeWidth "2"
+        , stroke "Black"
+        , strokeWidth "1"
         , fill colorString
         ]
         []
@@ -689,13 +709,13 @@ drawPiece style board delta rowidx colidx =
             toFloat colidx
 
         offset =
-            3.0 / 32.0
+            1.0 / 8.0
 
-        draw color pieceType corrupted =
+        draw color off pieceType corrupted =
             if corrupted then
                 g []
                     [ drawCircle style (Types.otherColor color) deltaF (rowidxF + offset) (colidxF - offset)
-                    , draw color pieceType False
+                    , draw color offset pieceType False
                     ]
 
             else
@@ -704,22 +724,22 @@ drawPiece style board delta rowidx colidx =
                         g [] []
 
                     Golem ->
-                        drawCircle style color deltaF rowidxF colidxF
+                        drawCircle style color deltaF (rowidxF + off) (colidxF - off)
 
                     Hulk ->
                         g []
-                            [ drawCircle style color deltaF rowidxF colidxF
-                            , drawCircle style color deltaF (rowidxF - offset) (colidxF + offset)
+                            [ drawCircle style color deltaF (rowidxF + off) (colidxF - off)
+                            , drawCircle style color deltaF (rowidxF - offset + off) (colidxF + offset - off)
                             ]
 
                     Journeyman ->
                         g []
-                            [ drawCircle style color deltaF (rowidxF + offset) (colidxF - offset)
-                            , drawCircle style (Types.otherColor color) deltaF rowidxF colidxF
-                            , drawCircle style color deltaF (rowidxF - offset) (colidxF + offset)
+                            [ drawCircle style color deltaF (rowidxF + off) (colidxF - off)
+                            , drawCircle style (Types.otherColor color) deltaF (rowidxF - offset + off) (colidxF + offset - off)
+                            , drawCircle style color deltaF (rowidxF - 2 * offset + off) (colidxF + 2 * offset - off)
                             ]
     in
-    draw piece.color piece.pieceType piece.corrupted
+    draw piece.color 0.0 piece.pieceType piece.corrupted
 
 
 drawShadeRect : Style -> Int -> Int -> Int -> Svg msg
@@ -733,17 +753,45 @@ drawShadeRect style delta rowidx colidx =
 
     else
         let
+            xoff =
+                if colidx == 0 then
+                    lineWidth // 2
+
+                else
+                    0
+
+            yoff =
+                if rowidx == 0 then
+                    lineWidth // 2
+
+                else
+                    0
+
+            xreduce =
+                if colidx == 7 then
+                    lineWidth // 2
+
+                else
+                    0
+
+            yreduce =
+                if rowidx == 7 then
+                    lineWidth // 2
+
+                else
+                    0
+
             xc =
-                delta * colidx + delta // 2
+                delta * colidx + delta // 2 + xoff
 
             yc =
-                delta * rowidx + delta // 2
+                delta * rowidx + delta // 2 + yoff
         in
         Svg.rect
-            [ x <| tos (xc + lineWidth // 2)
-            , y <| tos (yc + lineWidth // 2)
-            , width <| tos (delta - lineWidth)
-            , height <| tos (delta - lineWidth)
+            [ x <| tos xc
+            , y <| tos yc
+            , width <| tos (delta - xoff - xreduce)
+            , height <| tos (delta - yoff - yreduce)
             , fill style.shadeColor
             ]
             []
@@ -823,15 +871,19 @@ drawCol style delta rotated sizer board idx =
                 ( xc + delta // 2, delta * 9 )
     in
     List.concat
-        [ [ Svg.line
-                [ x1 xcs
-                , y1 <| tosy delta rotated (delta // 2)
-                , x2 xcs
-                , y2 <| tosy delta rotated (delta * 8 + delta // 2)
-                , strokeWidth <| tos lineWidth
-                , stroke style.lineColor
-                ]
-                []
+        [ [ if idx == 0 || idx == 8 then
+                Svg.line
+                    [ x1 xcs
+                    , y1 <| tosy delta rotated (delta // 2)
+                    , x2 xcs
+                    , y2 <| tosy delta rotated (delta * 8 + delta // 2)
+                    , strokeWidth <| tos lineWidth
+                    , stroke style.lineColor
+                    ]
+                    []
+
+            else
+                g [] []
           , if idx >= 8 then
                 g [] []
 
