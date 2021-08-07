@@ -25,6 +25,15 @@ module Agog.Board exposing
     , winner
     )
 
+import Agog.Types
+    exposing
+        ( Board
+        , Decoration(..)
+        , Player(..)
+        , SavedModel
+        , Style
+        , Winner(..)
+        )
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Html exposing (Html)
@@ -82,15 +91,6 @@ import Svg.Attributes as Attributes
         , y2
         )
 import Svg.Events as Events
-import Agog.Types
-    exposing
-        ( Board
-        , Decoration(..)
-        , Player(..)
-        , SavedModel
-        , Style
-        , Winner(..)
-        )
 
 
 empty : Board
@@ -229,17 +229,17 @@ winner player board =
             vloop 0 Set.empty
     in
     if hwin && vwin then
-        if player == Zephyrus then
-            ( ZephyrusWinner, hpath )
+        if player == WhitePlayer then
+            ( WhiteWinner, hpath )
 
         else
-            ( NotusWinner, vpath )
+            ( BlackWinner, vpath )
 
     else if hwin then
-        ( ZephyrusWinner, hpath )
+        ( WhiteWinner, hpath )
 
     else if vwin then
-        ( NotusWinner, vpath )
+        ( BlackWinner, vpath )
 
     else
         ( NoWinner, [] )
@@ -261,10 +261,10 @@ simulateGame seed =
 
                 player =
                     if isH then
-                        Zephyrus
+                        WhitePlayer
 
                     else
-                        Notus
+                        BlackPlayer
 
                 ( win, _ ) =
                     winner player b2
@@ -555,12 +555,12 @@ drawDirectionArrow style delta rotated mplayer =
             let
                 ( ( xx1, yy1 ), ( xx2, yy2 ) ) =
                     case player of
-                        Zephyrus ->
+                        WhitePlayer ->
                             ( ( delta, delta )
                             , ( delta * 5, delta )
                             )
 
-                        Notus ->
+                        BlackPlayer ->
                             ( ( delta, delta )
                             , ( delta, delta * 5 )
                             )
@@ -935,52 +935,7 @@ drawConnections style delta rotated rowidx colidx sizer board =
 
 drawDecoration : Style -> Int -> Bool -> Decoration -> List (Svg msg)
 drawDecoration style delta rotated decoration =
-    case decoration of
-        NoDecoration ->
-            []
-
-        RowSelectedDecoration rowidx ->
-            [ Svg.rect
-                [ x <| tos (delta // 2 - delta // 6 - 1)
-                , y <| tosy delta rotated (rowidx * delta + delta // 2 - delta // 6 - 1)
-                , width <| tos (5 * delta + delta // 3 + 2)
-                , height <| tos (delta // 3 + 2)
-                , rx <| tos (delta // 6 + 1)
-                , strokeWidth "0"
-                , fill style.lineColor
-                , fillOpacity style.highlightOpacity
-                ]
-                []
-            ]
-
-        ColSelectedDecoration colidx ->
-            [ Svg.rect
-                [ y <| tos (delta // 2 - delta // 6 - 1)
-                , x <| tosy delta rotated (colidx * delta + delta // 2 - delta // 6 - 1)
-                , height <| tos (5 * delta + delta // 3 + 2)
-                , width <| tos (delta // 3 + 2)
-                , ry <| tos (delta // 6 + 1)
-                , strokeWidth "0"
-                , fill style.lineColor
-                , fillOpacity style.highlightOpacity
-                ]
-                []
-            ]
-
-        AlreadyFilledDecoration ( rowidx, colidx ) ->
-            let
-                ( xc, yc ) =
-                    ( delta * colidx + delta // 2, delta * rowidx + delta // 2 )
-            in
-            [ Svg.circle
-                [ cx <| tos xc
-                , cy <| tosy delta rotated yc
-                , r <| tos (delta // 4)
-                , strokeWidth "0"
-                , fill style.alreadyFilledColor
-                ]
-                []
-            ]
+    []
 
 
 drawPath : Style -> Int -> Bool -> Maybe Sizer -> List ( Int, Int ) -> List (Svg msg)

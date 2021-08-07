@@ -8,6 +8,15 @@
 -- See LICENSE.txt
 --
 ----------------------------------------------------------------------
+---
+--- TODO:
+---
+--- Zooming the screen should make the board bigger, but not fit.
+--- This means that sizing should depend on screen size, not browser
+--- window size. In any case, we need some way to be able to choose
+--- pieces on a small screen.
+---
+----------------------------------------------------------------------
 
 
 module Main exposing (main)
@@ -208,7 +217,6 @@ type alias Model =
     , player : Player
     , gameState : GameState
     , isLocal : Bool
-    , northIsUp : Bool
     , gameid : String
     , playerid : PlayerId
     , isLive : Bool
@@ -220,10 +228,10 @@ type alias Model =
 isPlaying : Model -> Bool
 isPlaying model =
     let
-        { zephyrus, notus } =
+        { white, black } =
             model.gameState.players
     in
-    model.isLive && zephyrus /= "" && notus /= ""
+    model.isLive && white /= "" && black /= ""
 
 
 type Msg
@@ -232,7 +240,6 @@ type Msg
     | SetDecoration Decoration
     | SetChooseFirst Player
     | SetIsLocal Bool
-    | SetNorthIsUp Bool
     | SetDarkMode Bool
     | SetName String
     | SetIsPublic Bool
@@ -376,11 +383,10 @@ init flags url key =
             , decoration = NoDecoration
             , otherDecoration = NoDecoration
             , firstSelection = NoDecoration
-            , chooseFirst = Zephyrus
-            , player = Zephyrus
+            , chooseFirst = WhitePlayer
+            , player = WhitePlayer
             , gameState = Interface.emptyGameState (PlayerNames "" "")
-            , isLocal = False
-            , northIsUp = False
+            , isLocal = True
             , gameid = ""
             , playerid = ""
             , isLive = False
@@ -405,8 +411,8 @@ type alias NewReqBody =
 
 initialNewReqBody : NewReqBody
 initialNewReqBody =
-    { name = "Zephyrus"
-    , player = Zephyrus
+    { name = "White"
+    , player = WhitePlayer
     , publicType = NotPublic
     , restoreState = Nothing
     }
@@ -531,7 +537,6 @@ modelToSavedModel model =
     , player = model.player
     , gameState = model.gameState
     , isLocal = model.isLocal
-    , northIsUp = model.northIsUp
     , isLive = model.isLive
     , gameid = model.gameid
     , playerid = model.playerid
@@ -551,7 +556,6 @@ savedModelToModel savedModel model =
         , player = savedModel.player
         , gameState = savedModel.gameState
         , isLocal = savedModel.isLocal
-        , northIsUp = savedModel.northIsUp
         , isLive = savedModel.isLive
         , gameid = savedModel.gameid
         , playerid = savedModel.playerid
@@ -568,11 +572,11 @@ playerName player model =
             model.gameState.players
     in
     case player of
-        Zephyrus ->
-            players.zephyrus
+        WhitePlayer ->
+            players.white
 
-        Notus ->
-            players.notus
+        BlackPlayer ->
+            players.black
 
 
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
@@ -596,13 +600,13 @@ incomingMessage interface message mdl =
                     (if not model.isLocal then
                         Cmd.none
 
-                     else if player == Zephyrus then
+                     else if player == WhitePlayer then
                         send model <|
-                            JoinReq { gameid = gameid, name = "Notus" }
+                            JoinReq { gameid = gameid, name = "Black" }
 
                      else
                         send model <|
-                            JoinReq { gameid = gameid, name = "Zephyrus" }
+                            JoinReq { gameid = gameid, name = "White" }
                     )
 
         JoinRsp { gameid, playerid, player, gameState } ->
@@ -696,15 +700,7 @@ incomingMessage interface message mdl =
             if not model.isLocal then
                 let
                     ( idx, od ) =
-                        case decoration of
-                            ColSelectedDecoration x ->
-                                ( x, decoration )
-
-                            RowSelectedDecoration x ->
-                                ( x, decoration )
-
-                            _ ->
-                                ( 0, NoDecoration )
+                        ( 0, NoDecoration )
 
                     ( d, od2 ) =
                         if idx < 0 then
@@ -729,12 +725,7 @@ incomingMessage interface message mdl =
             else
                 let
                     ( newDecoration, firstSelection ) =
-                        case decoration of
-                            AlreadyFilledDecoration _ ->
-                                ( decoration, model.firstSelection )
-
-                            _ ->
-                                ( NoDecoration, decoration )
+                        ( NoDecoration, decoration )
                 in
                 { model
                     | gameState = gameState
@@ -988,11 +979,11 @@ update msg model =
         ( mdl, cmd ) =
             updateInternal msg model
 
-        { zephyrus, notus } =
+        { white, black } =
             mdl.gameState.players
 
         focus =
-            --not mdl.isLocal && mdl.isLive && zephyrus /= "" && notus /= ""
+            --not mdl.isLocal && mdl.isLive && white /= "" && black /= ""
             --might be able to be smart and do this just on desktop, but not for now
             False
 
@@ -1104,10 +1095,6 @@ updateInternal msg model =
                      else
                         Cmd.none
                     )
-
-        SetNorthIsUp northIsUp ->
-            { model | northIsUp = northIsUp }
-                |> withNoCmd
 
         SetDarkMode darkMode ->
             let
@@ -1224,10 +1211,10 @@ updateInternal msg model =
 
                     else
                         case resigning of
-                            Zephyrus ->
+                            WhitePlayer ->
                                 model.playerid
 
-                            Notus ->
+                            BlackPlayer ->
                                 model.otherPlayerid
 
                 ( playerid, placement ) =
@@ -1240,7 +1227,7 @@ updateInternal msg model =
                         let
                             player =
                                 if model.isLocal then
-                                    Zephyrus
+                                    WhitePlayer
 
                                 else
                                     -- This should probably be enforced
@@ -1375,10 +1362,10 @@ updateInternal msg model =
 
                             ( ( c12, c22 ), ( s12, s22 ) ) =
                                 case winner of
-                                    ZephyrusWinner ->
+                                    WhiteWinner ->
                                         ( ( c1 + 1, c2 ), ( s1 + score, s2 ) )
 
-                                    NotusWinner ->
+                                    BlackWinner ->
                                         ( ( c1, c2 + 1 ), ( s1, s2 + score ) )
 
                                     _ ->
@@ -1567,126 +1554,16 @@ doClick row col model =
             withACmd =
                 withPlayReq model.playerid <|
                     case model.player of
-                        Zephyrus ->
+                        WhitePlayer ->
                             ChooseCol col
 
-                        Notus ->
+                        BlackPlayer ->
                             ChooseRow row
         in
-        case model.decoration of
-            AlreadyFilledDecoration _ ->
-                if model.player /= gameState.whoseTurn then
-                    model |> withNoCmd
-
-                else
-                    model |> withACmd
-
-            _ ->
-                model |> withACmd
+        model |> withACmd
 
     else
-        case model.firstSelection of
-            ColSelectedDecoration selectedCol ->
-                case model.decoration of
-                    RowSelectedDecoration selectedRow ->
-                        if row /= selectedRow then
-                            { model
-                                | decoration =
-                                    RowSelectedDecoration row
-                            }
-                                |> withNoCmd
-
-                        else
-                            model
-                                |> (withPlayReq model.otherPlayerid <| ChooseRow row)
-
-                    AlreadyFilledDecoration ( ar, ac ) ->
-                        model
-                            |> (case gameState.whoseTurn of
-                                    Zephyrus ->
-                                        withPlayReq model.playerid <| ChooseCol col
-
-                                    Notus ->
-                                        withPlayReq model.otherPlayerid <| ChooseRow row
-                               )
-
-                    _ ->
-                        { model
-                            | decoration =
-                                RowSelectedDecoration row
-                        }
-                            |> withNoCmd
-
-            RowSelectedDecoration selectedRow ->
-                case model.decoration of
-                    ColSelectedDecoration selectedCol ->
-                        if col /= selectedCol then
-                            { model
-                                | decoration =
-                                    ColSelectedDecoration col
-                            }
-                                |> withNoCmd
-
-                        else
-                            model
-                                |> (withPlayReq model.playerid <| ChooseCol col)
-
-                    AlreadyFilledDecoration ( ar, ac ) ->
-                        model
-                            |> (case gameState.whoseTurn of
-                                    Zephyrus ->
-                                        withPlayReq model.playerid <| ChooseCol col
-
-                                    Notus ->
-                                        withPlayReq model.otherPlayerid <| ChooseRow row
-                               )
-
-                    _ ->
-                        { model
-                            | decoration =
-                                ColSelectedDecoration col
-                        }
-                            |> withNoCmd
-
-            _ ->
-                case model.decoration of
-                    NoDecoration ->
-                        { model
-                            | decoration =
-                                if model.player == Zephyrus then
-                                    ColSelectedDecoration col
-
-                                else
-                                    RowSelectedDecoration row
-                        }
-                            |> withNoCmd
-
-                    ColSelectedDecoration c ->
-                        if c == col then
-                            model
-                                |> (withPlayReq model.playerid <| ChooseCol col)
-
-                        else
-                            { model
-                                | decoration =
-                                    ColSelectedDecoration col
-                            }
-                                |> withNoCmd
-
-                    RowSelectedDecoration r ->
-                        if r == row then
-                            model
-                                |> (withPlayReq model.otherPlayerid <| ChooseRow row)
-
-                        else
-                            { model
-                                | decoration =
-                                    RowSelectedDecoration row
-                            }
-                                |> withNoCmd
-
-                    _ ->
-                        model |> withNoCmd
+        model |> withNoCmd
 
 
 cellName : ( Int, Int ) -> String
@@ -1803,44 +1680,28 @@ mainPage bsize model =
         count =
             Board.count gameState.board
 
-        { zephyrus, notus } =
+        { white, black } =
             gameState.players
 
         currentPlayer =
             if not model.isLocal then
                 Just model.player
 
+            else if model.firstSelection == NoDecoration then
+                Just model.chooseFirst
+
             else
-                case model.decoration of
-                    NoDecoration ->
-                        if model.firstSelection == NoDecoration then
-                            Just model.chooseFirst
-
-                        else
-                            Just <| Types.otherPlayer model.chooseFirst
-
-                    RowSelectedDecoration _ ->
-                        Just Notus
-
-                    ColSelectedDecoration _ ->
-                        Just Zephyrus
-
-                    AlreadyFilledDecoration _ ->
-                        Just gameState.whoseTurn
+                Just <| Types.otherPlayer model.chooseFirst
 
         ( rowname, colname ) =
-            if model.northIsUp || currentPlayer == Just Notus then
+            if currentPlayer == Just BlackPlayer then
                 ( "row", "column" )
 
             else
                 ( "column", "row" )
 
         rotated =
-            if model.northIsUp then
-                False
-
-            else
-                currentPlayer == Just Zephyrus
+            currentPlayer == Just WhitePlayer
 
         ( playing, message ) =
             if not model.isLive then
@@ -1848,15 +1709,15 @@ mainPage bsize model =
                 , "Enter \"Your Name\" and either click \"Start Game\" or enter \"Game ID\" and click \"Join\""
                 )
 
-            else if zephyrus == "" || notus == "" then
+            else if white == "" || black == "" then
                 ( False
                 , let
                     waitingFor =
-                        if zephyrus == "" then
-                            "Zephyrus"
+                        if white == "" then
+                            "White"
 
                         else
-                            "Notus"
+                            "Black"
                   in
                   "Waiting for " ++ waitingFor ++ " to join"
                 )
@@ -1879,108 +1740,18 @@ mainPage bsize model =
                         name ++ " won in " ++ String.fromInt count ++ "!"
                   in
                   case gameState.winner of
-                    ZephyrusWinner ->
-                        winString Zephyrus
+                    WhiteWinner ->
+                        winString WhitePlayer
 
-                    NotusWinner ->
-                        winString Notus
+                    BlackWinner ->
+                        winString BlackPlayer
 
                     NoWinner ->
-                        case model.firstSelection of
-                            NoDecoration ->
-                                case model.decoration of
-                                    NoDecoration ->
-                                        if currentPlayer == Just Zephyrus then
-                                            zephyrus ++ ", pick a " ++ colname
+                        if currentPlayer == Just WhitePlayer then
+                            white ++ ", pick a " ++ colname
 
-                                        else
-                                            notus ++ ", pick a " ++ rowname
-
-                                    ColSelectedDecoration _ ->
-                                        if model.isLocal then
-                                            zephyrus ++ ", confirm or pick another " ++ colname
-
-                                        else
-                                            "Waiting for " ++ notus ++ " to pick a " ++ rowname ++ " (you may pick another " ++ colname ++ ")"
-
-                                    RowSelectedDecoration _ ->
-                                        if model.isLocal then
-                                            notus ++ ", confirm or pick another " ++ rowname
-
-                                        else
-                                            "Waiting for " ++ zephyrus ++ " to pick a " ++ colname ++ " (you may pick another " ++ rowname ++ ")"
-
-                                    AlreadyFilledDecoration _ ->
-                                        case gameState.whoseTurn of
-                                            Zephyrus ->
-                                                if
-                                                    model.isLocal
-                                                        || (model.player == Zephyrus)
-                                                then
-                                                    zephyrus ++ ", pick another " ++ colname
-
-                                                else
-                                                    "Waiting for " ++ zephyrus ++ " to pick another " ++ colname
-
-                                            Notus ->
-                                                if
-                                                    model.isLocal
-                                                        || (model.player == Notus)
-                                                then
-                                                    notus ++ ", pick another " ++ rowname
-
-                                                else
-                                                    "Waiting for " ++ notus ++ " to pick another " ++ rowname
-
-                            RowSelectedDecoration _ ->
-                                case model.decoration of
-                                    NoDecoration ->
-                                        notus ++ " chose. " ++ zephyrus ++ ", pick a " ++ colname
-
-                                    AlreadyFilledDecoration _ ->
-                                        case gameState.whoseTurn of
-                                            Zephyrus ->
-                                                if
-                                                    model.isLocal
-                                                        || (model.player == Zephyrus)
-                                                then
-                                                    zephyrus ++ ", pick another " ++ colname
-
-                                                else
-                                                    "Waiting for " ++ zephyrus ++ " to pick another " ++ colname
-
-                                            Notus ->
-                                                if
-                                                    model.isLocal
-                                                        || (model.player == Notus)
-                                                then
-                                                    notus ++ ", pick another " ++ rowname
-
-                                                else
-                                                    "Waiting for " ++ notus ++ " to pick another " ++ rowname
-
-                                    _ ->
-                                        notus ++ " chose. " ++ zephyrus ++ ", confirm or pick another " ++ colname
-
-                            ColSelectedDecoration _ ->
-                                case model.decoration of
-                                    NoDecoration ->
-                                        zephyrus ++ " chose. " ++ notus ++ ", pick a " ++ rowname
-
-                                    AlreadyFilledDecoration _ ->
-                                        case gameState.whoseTurn of
-                                            Zephyrus ->
-                                                zephyrus ++ ", pick another " ++ colname
-
-                                            Notus ->
-                                                notus ++ ", pick another " ++ rowname
-
-                                    _ ->
-                                        zephyrus ++ " chose. " ++ notus ++ ", confirm or pick another " ++ rowname
-
-                            AlreadyFilledDecoration _ ->
-                                -- Can't happen
-                                ""
+                        else
+                            black ++ ", pick a " ++ rowname
                 )
     in
     div [ align "center" ]
@@ -2033,13 +1804,6 @@ mainPage bsize model =
                 ]
                 [ text message ]
             , br
-            , b "North is up: "
-            , input
-                [ type_ "checkbox"
-                , checked model.northIsUp
-                , onCheck SetNorthIsUp
-                ]
-                []
             , b " Dark Mode: "
             , input
                 [ type_ "checkbox"
@@ -2053,19 +1817,19 @@ mainPage bsize model =
 
               else
                 span []
-                    [ b "Stone Placer: "
+                    [ b "Whose turn: "
                     , text <|
                         case gameState.whoseTurn of
-                            Zephyrus ->
-                                gameState.players.zephyrus
+                            WhitePlayer ->
+                                gameState.players.white
 
-                            Notus ->
-                                gameState.players.notus
+                            BlackPlayer ->
+                                gameState.players.black
                     , br
                     ]
             , if not model.isLocal && model.isLive then
                 span []
-                    [ if zephyrus == "" || notus == "" then
+                    [ if white == "" || black == "" then
                         text ""
 
                       else
@@ -2089,57 +1853,35 @@ mainPage bsize model =
                             , ElmChat.chat chatSettings
                             , br
                             ]
-                    , b "Zephyrus: "
+                    , b "White: "
                     , text <|
-                        case zephyrus of
+                        case white of
                             "" ->
                                 ""
 
                             _ ->
-                                if model.player == Zephyrus then
-                                    "You (" ++ zephyrus ++ ")"
+                                if model.player == WhitePlayer then
+                                    "You (" ++ white ++ ")"
 
                                 else
-                                    zephyrus
+                                    white
                     , br
-                    , b "Notus: "
+                    , b "Black: "
                     , text <|
-                        case notus of
+                        case black of
                             "" ->
                                 ""
 
                             _ ->
-                                if model.player == Notus then
-                                    "You (" ++ notus ++ ")"
+                                if model.player == BlackPlayer then
+                                    "You (" ++ black ++ ")"
 
                                 else
-                                    notus
+                                    black
                     ]
 
               else
-                let
-                    disabled =
-                        model.isLive && not model.isLocal
-                in
-                span []
-                    [ b <|
-                        if model.isLocal then
-                            "Choose first: "
-
-                        else
-                            "You play: "
-                    , radio "choose"
-                        "Zephyrus"
-                        (model.chooseFirst == Zephyrus)
-                        disabled
-                        (SetChooseFirst Zephyrus)
-                    , text " "
-                    , radio "choose"
-                        "Notus"
-                        (model.chooseFirst == Notus)
-                        disabled
-                        (SetChooseFirst Notus)
-                    ]
+                text ""
             , if gameState.score == Dict.empty then
                 text ""
 
@@ -2195,7 +1937,7 @@ mainPage bsize model =
                 [ type_ "checkbox"
                 , checked model.isLocal
                 , onCheck SetIsLocal
-                , disabled <| not model.isLocal && model.isLive
+                , disabled True -- <| not model.isLocal && model.isLive
                 ]
                 []
             , text " "
@@ -2383,38 +2125,6 @@ pairToString ( s1, s2 ) =
 -- For testing. No longer used.
 
 
-decorationRadios : Model -> Html Msg
-decorationRadios model =
-    let
-        ( none, ( rowp, colp, filledp ) ) =
-            case model.decoration of
-                NoDecoration ->
-                    ( True, ( False, False, False ) )
-
-                RowSelectedDecoration _ ->
-                    ( False, ( True, False, False ) )
-
-                ColSelectedDecoration _ ->
-                    ( False, ( False, True, False ) )
-
-                _ ->
-                    ( False, ( False, False, True ) )
-    in
-    p []
-        [ radio "decoration" "none" none False (SetDecoration NoDecoration)
-        , text " "
-        , radio "decoration" "row" rowp False (SetDecoration (RowSelectedDecoration 3))
-        , text " "
-        , radio "decoration" "col" colp False (SetDecoration (ColSelectedDecoration 2))
-        , text " "
-        , radio "decoration"
-            "conflict"
-            filledp
-            False
-            (SetDecoration (AlreadyFilledDecoration ( 1, 3 )))
-        ]
-
-
 radio : String -> String -> Bool -> Bool -> msg -> Html msg
 radio group name isChecked isDisabled msg =
     label []
@@ -2434,6 +2144,7 @@ rulesDiv : Bool -> List (Html Msg) -> Html Msg
 rulesDiv alignCenter body =
     div
         [ style "width" "25em"
+        , style "max-width" "95%"
         , if alignCenter then
             align "center"
 
@@ -2633,11 +2344,11 @@ renderPublicGameRow myGameid name playing { gameid, creator, player, forName } =
 playerString : Player -> String
 playerString player =
     case player of
-        Zephyrus ->
-            "Zephyrus"
+        WhitePlayer ->
+            "White"
 
-        Notus ->
-            "Notus"
+        BlackPlayer ->
+            "Black"
 
 
 b : String -> Html msg

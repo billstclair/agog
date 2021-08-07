@@ -38,6 +38,7 @@ import Agog.Types as Types
         , OneScore
         , Page(..)
         , Piece
+        , PieceSelected
         , PieceType(..)
         , Player(..)
         , PlayerNames
@@ -124,7 +125,6 @@ encodeSavedModel model =
         , ( "player", encodePlayer model.player )
         , ( "gameState", encodeGameState True model.gameState )
         , ( "isLocal", JE.bool model.isLocal )
-        , ( "northIsUp", JE.bool model.northIsUp )
         , ( "isLive", JE.bool model.isLive )
         , ( "gameid", JE.string model.gameid )
         , ( "playerid", JE.string model.playerid )
@@ -149,7 +149,6 @@ savedModelDecoder =
         |> required "player" playerDecoder
         |> required "gameState" gameStateDecoder
         |> optional "isLocal" JD.bool False
-        |> optional "northIsUp" JD.bool False
         |> optional "isLive" JD.bool False
         |> optional "gameid" JD.string ""
         |> optional "playerid" JD.string ""
@@ -197,20 +196,31 @@ pageDecoder =
             )
 
 
+encodePieceSelected : PieceSelected -> Value
+encodePieceSelected { selected, moves, jumps } =
+    JE.object
+        [ ( "selected", encodeIntPair selected )
+        , ( "moves", JE.list encodeIntPair moves )
+        , ( "jumps", JE.list (\pairList -> JE.list encodeIntPair pairList) jumps )
+        ]
+
+
+pieceSelectedDecoder : Decoder PieceSelected
+pieceSelectedDecoder =
+    JD.succeed PieceSelected
+        |> required "selected" intPairDecoder
+        |> required "moves" (JD.list intPairDecoder)
+        |> required "jumps" (JD.list (JD.list intPairDecoder))
+
+
 encodeDecoration : Decoration -> Value
 encodeDecoration decoration =
     case decoration of
         NoDecoration ->
             JE.string "NoDecoration"
 
-        RowSelectedDecoration rowidx ->
-            JE.object [ ( "RowSelectedDecoration", JE.int rowidx ) ]
-
-        ColSelectedDecoration colidx ->
-            JE.object [ ( "ColSelectedDecoration", JE.int colidx ) ]
-
-        AlreadyFilledDecoration pair ->
-            JE.object [ ( "AlreadyFilledDecoration", encodeIntPair pair ) ]
+        PieceSelectedDecoration pieceSelected ->
+            JE.object [ ( "PieceSelectedDecoration", encodePieceSelected pieceSelected ) ]
 
 
 decorationDecoder : Decoder Decoration
@@ -225,20 +235,10 @@ decorationDecoder =
                     else
                         JD.fail <| "Unknown Decoration: " ++ s
                 )
-        , JD.field "RowSelectedDecoration" JD.int
+        , JD.field "PieceSelectedDecoration" pieceSelectedDecoder
             |> JD.andThen
-                (\rowidx ->
-                    JD.succeed <| RowSelectedDecoration rowidx
-                )
-        , JD.field "ColSelectedDecoration" JD.int
-            |> JD.andThen
-                (\colidx ->
-                    JD.succeed <| ColSelectedDecoration colidx
-                )
-        , JD.field "AlreadyFilledDecoration" intPairDecoder
-            |> JD.andThen
-                (\pair ->
-                    JD.succeed <| AlreadyFilledDecoration pair
+                (\pieceSelected ->
+                    JD.succeed <| PieceSelectedDecoration pieceSelected
                 )
         ]
 
@@ -246,11 +246,11 @@ decorationDecoder =
 encodePlayer : Player -> Value
 encodePlayer player =
     case player of
-        Zephyrus ->
-            JE.string "Zephyrus"
+        WhitePlayer ->
+            JE.string "White"
 
-        Notus ->
-            JE.string "Notus"
+        BlackPlayer ->
+            JE.string "Black"
 
 
 playerDecoder : Decoder Player
@@ -259,11 +259,11 @@ playerDecoder =
         |> JD.andThen
             (\s ->
                 case s of
-                    "Zephyrus" ->
-                        JD.succeed Zephyrus
+                    "White" ->
+                        JD.succeed WhitePlayer
 
-                    "Notus" ->
-                        JD.succeed Notus
+                    "Black" ->
+                        JD.succeed BlackPlayer
 
                     _ ->
                         JD.fail <| "Unknown player: " ++ s
@@ -277,11 +277,11 @@ encodeWinner winner =
             NoWinner ->
                 "NoWinner"
 
-            ZephyrusWinner ->
-                "ZephyrusWinner"
+            WhiteWinner ->
+                "WhiteWinner"
 
-            NotusWinner ->
-                "NotusWinner"
+            BlackWinner ->
+                "BlackWinner"
 
 
 winnerDecoder : Decoder Winner
@@ -293,19 +293,11 @@ winnerDecoder =
                     "NoWinner" ->
                         JD.succeed NoWinner
 
-                    "ZephyrusWinner" ->
-                        JD.succeed ZephyrusWinner
+                    "WhiteWinner" ->
+                        JD.succeed WhiteWinner
 
-                    -- Backward compatibility
-                    "HorizontalWinner" ->
-                        JD.succeed ZephyrusWinner
-
-                    "NotusWinner" ->
-                        JD.succeed NotusWinner
-
-                    --  Backward compatibility
-                    "VerticalWinner" ->
-                        JD.succeed NotusWinner
+                    "BlackWinner" ->
+                        JD.succeed BlackWinner
 
                     _ ->
                         JD.fail <| "Unknown winner: " ++ s
@@ -444,7 +436,6 @@ pieceDecoder =
     JD.succeed Piece
         |> required "color" colorDecoder
         |> required "pieceType" pieceTypeDecoder
-        |> required "corrupted" JD.bool
 
 
 colorDecoder : Decoder Color
@@ -535,18 +526,18 @@ settingsDecoder =
 
 
 encodePlayerNames : PlayerNames -> Value
-encodePlayerNames { zephyrus, notus } =
+encodePlayerNames { white, black } =
     JE.object
-        [ ( "zephyrus", JE.string zephyrus )
-        , ( "notus", JE.string notus )
+        [ ( "white", JE.string white )
+        , ( "black", JE.string black )
         ]
 
 
 playerNamesDecoder : Decoder PlayerNames
 playerNamesDecoder =
     JD.succeed PlayerNames
-        |> required "zephyrus" JD.string
-        |> required "notus" JD.string
+        |> required "white" JD.string
+        |> required "black" JD.string
 
 
 encodePrivateGameState : PrivateGameState -> Value

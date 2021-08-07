@@ -21,6 +21,7 @@ module Agog.Types exposing
     , OneScore
     , Page(..)
     , Piece
+    , PieceSelected
     , PieceType(..)
     , Player(..)
     , PlayerNames
@@ -84,6 +85,7 @@ otherColor color =
 type PieceType
     = Golem
     | Hulk
+    | CorruptedHulk
     | Journeyman
     | NoPiece
 
@@ -91,7 +93,6 @@ type PieceType
 type alias Piece =
     { color : Color
     , pieceType : PieceType
-    , corrupted : Bool
     }
 
 
@@ -99,7 +100,6 @@ emptyPiece : Piece
 emptyPiece =
     { color = BlackColor
     , pieceType = NoPiece
-    , corrupted = False
     }
 
 
@@ -108,30 +108,35 @@ type alias NewBoard =
 
 
 type Player
-    = Zephyrus -- Choose column
-    | Notus -- Choose row
+    = WhitePlayer
+    | BlackPlayer
 
 
 otherPlayer : Player -> Player
 otherPlayer player =
-    if player == Zephyrus then
-        Notus
+    if player == WhitePlayer then
+        BlackPlayer
 
     else
-        Zephyrus
+        WhitePlayer
 
 
 type Winner
     = NoWinner
-    | ZephyrusWinner
-    | NotusWinner
+    | WhiteWinner
+    | BlackWinner
+
+
+type alias PieceSelected =
+    { selected : ( Int, Int )
+    , moves : List ( Int, Int )
+    , jumps : List (List ( Int, Int ))
+    }
 
 
 type Decoration
     = NoDecoration
-    | RowSelectedDecoration Int
-    | ColSelectedDecoration Int
-    | AlreadyFilledDecoration ( Int, Int )
+    | PieceSelectedDecoration PieceSelected
 
 
 type Page
@@ -249,7 +254,6 @@ type alias SavedModel =
     , player : Player
     , gameState : GameState
     , isLocal : Bool
-    , northIsUp : Bool
     , isLive : Bool
     , gameid : String
     , playerid : String
@@ -297,8 +301,8 @@ type alias GameState =
 
 
 type alias PlayerNames =
-    { zephyrus : String
-    , notus : String
+    { white : String
+    , black : String
     }
 
 

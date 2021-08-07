@@ -2,7 +2,7 @@
 --
 -- NewBoard.elm
 -- Zephyrnot board, storage and rendering.
--- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE.txt
@@ -109,7 +109,6 @@ initial =
         whiteGolem =
             { color = WhiteColor
             , pieceType = Golem
-            , corrupted = False
             }
 
         whiteJourneyman =
@@ -240,10 +239,10 @@ simulateGame seed =
 
                 player =
                     if isH then
-                        Zephyrus
+                        WhitePlayer
 
                     else
-                        Notus
+                        BlackPlayer
 
                 ( win, _ ) =
                     winner player b2
@@ -711,35 +710,34 @@ drawPiece style board delta rowidx colidx =
         offset =
             1.0 / 8.0
 
-        draw color off pieceType corrupted =
-            if corrupted then
-                g []
-                    [ drawCircle style (Types.otherColor color) deltaF (rowidxF + offset) (colidxF - offset)
-                    , draw color offset pieceType False
-                    ]
+        draw color pieceType =
+            case pieceType of
+                NoPiece ->
+                    g [] []
 
-            else
-                case pieceType of
-                    NoPiece ->
-                        g [] []
+                Golem ->
+                    drawCircle style color deltaF rowidxF colidxF
 
-                    Golem ->
-                        drawCircle style color deltaF (rowidxF + off) (colidxF - off)
+                Hulk ->
+                    g []
+                        [ drawCircle style color deltaF rowidxF colidxF
+                        , drawCircle style color deltaF (rowidxF - offset) (colidxF + offset)
+                        ]
 
-                    Hulk ->
-                        g []
-                            [ drawCircle style color deltaF (rowidxF + off) (colidxF - off)
-                            , drawCircle style color deltaF (rowidxF - offset + off) (colidxF + offset - off)
-                            ]
+                CorruptedHulk ->
+                    g []
+                        [ drawCircle style (Types.otherColor color) deltaF rowidxF colidxF
+                        , drawCircle style color deltaF (rowidxF - offset) (colidxF + offset)
+                        ]
 
-                    Journeyman ->
-                        g []
-                            [ drawCircle style color deltaF (rowidxF + off) (colidxF - off)
-                            , drawCircle style (Types.otherColor color) deltaF (rowidxF - offset + off) (colidxF + offset - off)
-                            , drawCircle style color deltaF (rowidxF - 2 * offset + off) (colidxF + 2 * offset - off)
-                            ]
+                Journeyman ->
+                    g []
+                        [ drawCircle style color deltaF rowidxF colidxF
+                        , drawCircle style (Types.otherColor color) deltaF (rowidxF - offset) (colidxF + offset)
+                        , drawCircle style color deltaF (rowidxF - 2 * offset) (colidxF + 2 * offset)
+                        ]
     in
-    draw piece.color 0.0 piece.pieceType piece.corrupted
+    draw piece.color piece.pieceType
 
 
 drawShadeRect : Style -> Int -> Int -> Int -> Svg msg

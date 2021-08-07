@@ -55,7 +55,7 @@ emptyGameState players =
     , newBoard = NewBoard.initial
     , moves = []
     , players = players
-    , whoseTurn = Zephyrus
+    , whoseTurn = WhitePlayer
     , score = Types.zeroScore
     , winner = NoWinner
     , path = []
@@ -114,14 +114,14 @@ messageProcessor state message =
                 let
                     players =
                         case player of
-                            Zephyrus ->
-                                { zephyrus = name
-                                , notus = ""
+                            WhitePlayer ->
+                                { white = name
+                                , black = ""
                                 }
 
-                            Notus ->
-                                { zephyrus = ""
-                                , notus = name
+                            BlackPlayer ->
+                                { white = ""
+                                , black = name
                                 }
 
                     gameState =
@@ -200,13 +200,13 @@ messageProcessor state message =
                         players =
                             gameState.players
 
-                        { zephyrus, notus } =
+                        { white, black } =
                             players
                     in
-                    if zephyrus /= "" && notus /= "" then
+                    if white /= "" && black /= "" then
                         errorRes message state "Game already has two players"
 
-                    else if name == "" || name == zephyrus || name == notus then
+                    else if name == "" || name == white || name == black then
                         errorRes message
                             state
                             ("Blank or existing name: " ++ name)
@@ -214,11 +214,11 @@ messageProcessor state message =
                     else
                         let
                             ( players2, player ) =
-                                if zephyrus == "" then
-                                    ( { players | zephyrus = name }, Zephyrus )
+                                if white == "" then
+                                    ( { players | white = name }, WhitePlayer )
 
                                 else
-                                    ( { players | notus = name }, Notus )
+                                    ( { players | black = name }, BlackPlayer )
 
                             ( playerid, state2 ) =
                                 ServerInterface.newPlayerid state
@@ -305,11 +305,11 @@ messageProcessor state message =
 
                                             else
                                                 let
-                                                    { zephyrus, notus } =
+                                                    { white, black } =
                                                         gameState.players
                                                 in
-                                                { zephyrus = notus
-                                                , notus = zephyrus
+                                                { white = black
+                                                , black = white
                                                 }
 
                                         gs =
@@ -364,11 +364,11 @@ messageProcessor state message =
                                     let
                                         winner =
                                             case player of
-                                                Zephyrus ->
-                                                    NotusWinner
+                                                WhitePlayer ->
+                                                    BlackWinner
 
-                                                Notus ->
-                                                    ZephyrusWinner
+                                                BlackPlayer ->
+                                                    WhiteWinner
 
                                         gs =
                                             { gameState | winner = winner }
@@ -387,10 +387,10 @@ messageProcessor state message =
                                     errorRes message state "Game already over"
 
                         ChooseRow row ->
-                            if player == Zephyrus then
+                            if player == WhitePlayer then
                                 errorRes message
                                     state
-                                    "Zephyrus may not choose rows"
+                                    "White may not choose rows"
 
                             else
                                 let
@@ -401,26 +401,15 @@ messageProcessor state message =
                                         gameState.board
 
                                     decoration =
-                                        case private.decoration of
-                                            NoDecoration ->
-                                                RowSelectedDecoration row
-
-                                            RowSelectedDecoration _ ->
-                                                RowSelectedDecoration row
-
-                                            ColSelectedDecoration col ->
-                                                AlreadyFilledDecoration ( row, col )
-
-                                            AlreadyFilledDecoration ( _, col ) ->
-                                                AlreadyFilledDecoration ( row, col )
+                                        NoDecoration
                                 in
                                 doPlay decoration gameid gameState state
 
                         ChooseCol col ->
-                            if player == Notus then
+                            if player == BlackPlayer then
                                 errorRes message
                                     state
-                                    "Notus may not choose columns"
+                                    "Black may not choose columns"
 
                             else
                                 let
@@ -431,18 +420,7 @@ messageProcessor state message =
                                         gameState.board
 
                                     decoration =
-                                        case private.decoration of
-                                            NoDecoration ->
-                                                ColSelectedDecoration col
-
-                                            ColSelectedDecoration _ ->
-                                                ColSelectedDecoration col
-
-                                            RowSelectedDecoration row ->
-                                                AlreadyFilledDecoration ( row, col )
-
-                                            AlreadyFilledDecoration ( row, _ ) ->
-                                                AlreadyFilledDecoration ( row, col )
+                                        NoDecoration
                                 in
                                 doPlay decoration gameid gameState state
 
@@ -493,11 +471,11 @@ messageProcessor state message =
 
                         name =
                             case player of
-                                Zephyrus ->
-                                    players.zephyrus
+                                WhitePlayer ->
+                                    players.white
 
-                                Notus ->
-                                    players.notus
+                                BlackPlayer ->
+                                    players.black
                     in
                     ( state
                     , Just <|
@@ -528,36 +506,7 @@ doPlay decoration gameid gameState state =
             gameState.moves
 
         ( ( newDecoration, newBoard, newWhoseTurn ), ( newWinner, newPath, newMoves ) ) =
-            case decoration of
-                AlreadyFilledDecoration ( row, col ) ->
-                    if Board.get row col board then
-                        ( ( decoration, board, whoseTurn ), ( NoWinner, [], moves ) )
-
-                    else
-                        let
-                            board2 =
-                                Board.set row col board
-
-                            moves2 =
-                                List.concat [ moves, [ cellName ( row, col ) ] ]
-
-                            ( winner, path ) =
-                                Board.winner whoseTurn board2
-
-                            whoseTurn2 =
-                                case winner of
-                                    NoWinner ->
-                                        Types.otherPlayer whoseTurn
-
-                                    _ ->
-                                        whoseTurn
-                        in
-                        ( ( NoDecoration, board2, whoseTurn2 )
-                        , ( winner, path, moves2 )
-                        )
-
-                _ ->
-                    ( ( decoration, board, whoseTurn ), ( NoWinner, [], moves ) )
+            ( ( decoration, board, whoseTurn ), ( NoWinner, [], moves ) )
 
         gs =
             { gameState
@@ -613,11 +562,11 @@ updateScore gameState =
                 NoWinner ->
                     ""
 
-                ZephyrusWinner ->
-                    names.zephyrus
+                WhiteWinner ->
+                    names.white
 
-                NotusWinner ->
-                    names.notus
+                BlackWinner ->
+                    names.black
     in
     if gameState.winner == NoWinner then
         gameState
