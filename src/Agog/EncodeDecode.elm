@@ -45,11 +45,13 @@ import Agog.Types as Types
         , PrivateGameState
         , PublicGame
         , PublicType(..)
+        , RowCol
         , SavedModel
         , Score
         , Settings
         , Socket
         , StyleType(..)
+        , UndoState
         , Winner(..)
         )
 import Array exposing (Array)
@@ -420,6 +422,18 @@ oldBoardDecoder =
             )
 
 
+encodeNewBoard : NewBoard -> Value
+encodeNewBoard board =
+    Array.toList board
+        |> List.map
+            (\a ->
+                Array.toList a
+                    |> List.map encodePiece
+                    |> JE.list identity
+            )
+        |> JE.list identity
+
+
 newBoardDecoder : Decoder NewBoard
 newBoardDecoder =
     JD.list (JD.list pieceDecoder)
@@ -431,11 +445,31 @@ newBoardDecoder =
             )
 
 
+encodePiece : Piece -> Value
+encodePiece { color, pieceType } =
+    JE.object
+        [ ( "color", encodeColor color )
+        , ( "pieceType", encodePieceType pieceType )
+        ]
+
+
 pieceDecoder : Decoder Piece
 pieceDecoder =
     JD.succeed Piece
         |> required "color" colorDecoder
         |> required "pieceType" pieceTypeDecoder
+
+
+encodeColor : Color -> Value
+encodeColor color =
+    (case color of
+        BlackColor ->
+            "B"
+
+        WhiteColor ->
+            "W"
+    )
+        |> JE.string
 
 
 colorDecoder : Decoder Color
@@ -451,18 +485,42 @@ colorDecoder =
             )
 
 
+encodePieceType : PieceType -> Value
+encodePieceType pieceType =
+    (case pieceType of
+        Golem ->
+            "G"
+
+        Hulk ->
+            "H"
+
+        CorruptedHulk ->
+            "CH"
+
+        Journeyman ->
+            "J"
+
+        NoPiece ->
+            "-"
+    )
+        |> JE.string
+
+
 pieceTypeDecoder : Decoder PieceType
 pieceTypeDecoder =
     JD.string
         |> JD.andThen
             (\pt ->
-                (if pt == "Golem" then
+                (if pt == "G" then
                     Golem
 
-                 else if pt == "Hulk" then
+                 else if pt == "H" then
                     Hulk
 
-                 else if pt == "Journeyman" then
+                 else if pt == "CH" then
+                    CorruptedHulk
+
+                 else if pt == "J" then
                     Journeyman
 
                  else
@@ -596,10 +654,25 @@ privateGameStateDecoder =
         |> optional "subscribers" subscribersDecoder Set.empty
 
 
+encodeUndoState : UndoState -> Value
+encodeUndoState { board, selected } =
+    JE.object
+        [ ( "board", encodeNewBoard board )
+        , ( "selected", encodeMaybe encodeRowCol selected )
+        ]
+
+
+undoStateDecoder : Decoder UndoState
+undoStateDecoder =
+    JD.succeed UndoState
+        |> required "board" newBoardDecoder
+        |> required "selected" (JD.nullable rowColDecoder)
+
+
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { board, moves, players, whoseTurn, score, winner, path } =
+        { board, newBoard, moves, players, whoseTurn, selected, legalMoves, undoStates, score, winner, path } =
             gameState
 
         privateValue =
@@ -611,9 +684,13 @@ encodeGameState includePrivate gameState =
     in
     JE.object
         [ ( "board", encodeBoard board )
+        , ( "newBoard", encodeNewBoard newBoard )
         , ( "moves", encodeMoves moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
+        , ( "selected", encodeMaybe encodeRowCol selected )
+        , ( "legalMoves", JE.list encodeRowCol legalMoves )
+        , ( "undoStates", JE.list encodeUndoState undoStates )
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         , ( "path", JE.list encodeIntPair path )
@@ -629,21 +706,39 @@ gameStateDecoder =
         |> required "moves" movesDecoder
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder
+        |> required "selected" (JD.nullable rowColDecoder)
+        |> required "legalMoves" (JD.list rowColDecoder)
+        |> required "undoStates" (JD.list undoStateDecoder)
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
         |> required "path" (JD.list intPairDecoder)
         |> required "private" privateGameStateDecoder
 
 
+encodeRowCol : RowCol -> Value
+encodeRowCol { row, col } =
+    JE.object
+        [ ( "row", JE.int row )
+        , ( "col", JE.int col )
+        ]
+
+
+rowColDecoder : Decoder RowCol
+rowColDecoder =
+    JD.succeed RowCol
+        |> required "row" JD.int
+        |> required "col" JD.int
+
+
 encodeChoice : Choice -> Value
 encodeChoice choice =
     JE.object
         [ case choice of
-            ChooseRow row ->
-                ( "ChooseRow", JE.int row )
+            ChoosePiece rowCol ->
+                ( "ChoosePiece", encodeRowCol rowCol )
 
-            ChooseCol col ->
-                ( "ChooseCol", JE.int col )
+            ChooseMove rowCol ->
+                ( "Choosemove", encodeRowCol rowCol )
 
             ChooseResign player ->
                 ( "ChooseResign", encodePlayer player )
@@ -656,10 +751,10 @@ encodeChoice choice =
 choiceDecoder : Decoder Choice
 choiceDecoder =
     JD.oneOf
-        [ JD.field "ChooseRow" JD.int
-            |> JD.andThen (ChooseRow >> JD.succeed)
-        , JD.field "ChooseCol" JD.int
-            |> JD.andThen (ChooseCol >> JD.succeed)
+        [ JD.field "ChoosePiece" rowColDecoder
+            |> JD.andThen (ChoosePiece >> JD.succeed)
+        , JD.field "ChooseMove" rowColDecoder
+            |> JD.andThen (ChooseMove >> JD.succeed)
         , JD.field "ChooseResign" playerDecoder
             |> JD.andThen (ChooseResign >> JD.succeed)
         , JD.field "ChooseNew" playerDecoder

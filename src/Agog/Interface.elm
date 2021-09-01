@@ -56,6 +56,9 @@ emptyGameState players =
     , moves = []
     , players = players
     , whoseTurn = WhitePlayer
+    , selected = Nothing
+    , legalMoves = []
+    , undoStates = []
     , score = Types.zeroScore
     , winner = NoWinner
     , path = []
@@ -386,43 +389,13 @@ messageProcessor state message =
                                 _ ->
                                     errorRes message state "Game already over"
 
-                        ChooseRow row ->
-                            if player == WhitePlayer then
-                                errorRes message
-                                    state
-                                    "White may not choose rows"
+                        ChoosePiece rowCol ->
+                            -- TODO
+                            ( state, Nothing )
 
-                            else
-                                let
-                                    private =
-                                        gameState.private
-
-                                    board =
-                                        gameState.board
-
-                                    decoration =
-                                        NoDecoration
-                                in
-                                doPlay decoration gameid gameState state
-
-                        ChooseCol col ->
-                            if player == BlackPlayer then
-                                errorRes message
-                                    state
-                                    "Black may not choose columns"
-
-                            else
-                                let
-                                    private =
-                                        gameState.private
-
-                                    board =
-                                        gameState.board
-
-                                    decoration =
-                                        NoDecoration
-                                in
-                                doPlay decoration gameid gameState state
+                        ChooseMove rowCol ->
+                            -- TODO
+                            ( state, Nothing )
 
         PublicGamesReq { subscribe, forName, gameid } ->
             -- subscribe is processed by the server code only

@@ -28,6 +28,7 @@ module Agog.Types exposing
     , PrivateGameState
     , PublicGame
     , PublicType(..)
+    , RowCol
     , SavedModel
     , Score
     , ServerState
@@ -36,6 +37,7 @@ module Agog.Types exposing
     , Style
     , StyleType(..)
     , SubscriptionSet
+    , UndoState
     , Winner(..)
     , darkStyle
     , emptyPiece
@@ -287,12 +289,21 @@ emptyPrivateGameState =
     PrivateGameState NoDecoration Set.empty
 
 
+type alias UndoState =
+    { board : NewBoard
+    , selected : Maybe RowCol
+    }
+
+
 type alias GameState =
     { board : Board
     , newBoard : NewBoard
     , moves : List String
     , players : PlayerNames
     , whoseTurn : Player
+    , selected : Maybe RowCol
+    , legalMoves : List RowCol
+    , undoStates : List UndoState
     , score : Score
     , winner : Winner
     , path : List ( Int, Int )
@@ -306,9 +317,15 @@ type alias PlayerNames =
     }
 
 
+type alias RowCol =
+    { row : Int
+    , col : Int
+    }
+
+
 type Choice
-    = ChooseRow Int
-    | ChooseCol Int
+    = ChoosePiece RowCol
+    | ChooseMove RowCol
     | ChooseResign Player
     | ChooseNew Player
 

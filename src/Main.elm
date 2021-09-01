@@ -1,7 +1,7 @@
 ---------------------------------------------------------------------
 --
 -- Main.elm
--- Zephyrnot top-level
+-- AGoG top-level
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
@@ -1548,22 +1548,20 @@ doClick row col model =
                         , placement = placement
                         }
                     )
+
+        rowCol =
+            { row = row, col = col }
+
+        withACmd =
+            withPlayReq model.playerid <|
+                case gameState.selected of
+                    Nothing ->
+                        ChoosePiece rowCol
+
+                    Just _ ->
+                        ChooseMove rowCol
     in
-    if not model.isLocal then
-        let
-            withACmd =
-                withPlayReq model.playerid <|
-                    case model.player of
-                        WhitePlayer ->
-                            ChooseCol col
-
-                        BlackPlayer ->
-                            ChooseRow row
-        in
-        model |> withACmd
-
-    else
-        model |> withNoCmd
+    model |> withACmd
 
 
 cellName : ( Int, Int ) -> String
