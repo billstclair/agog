@@ -17,6 +17,8 @@ module Agog.Board exposing
     , empty
     , get
     , getSizer
+    , newget
+    , newset
     , render
     , rowToString
     , score
@@ -25,11 +27,17 @@ module Agog.Board exposing
     , winner
     )
 
-import Agog.Types
+import Agog.Types as Types
     exposing
         ( Board
+        , Color
         , Decoration(..)
+        , GameState
+        , NewBoard
+        , Piece
+        , PieceType(..)
         , Player(..)
+        , RowCol
         , SavedModel
         , Style
         , Winner(..)
@@ -136,6 +144,37 @@ set row col board =
         Just r ->
             Array.set row
                 (Array.set col True r)
+                board
+
+
+newget : RowCol -> NewBoard -> Piece
+newget rowCol board =
+    let
+        { row, col } =
+            rowCol
+    in
+    case Array.get row board of
+        Nothing ->
+            Types.emptyPiece
+
+        Just r ->
+            case Array.get col r of
+                Nothing ->
+                    Types.emptyPiece
+
+                Just res ->
+                    res
+
+
+newset : Int -> Int -> Piece -> NewBoard -> NewBoard
+newset row col piece board =
+    case Array.get row board of
+        Nothing ->
+            board
+
+        Just r ->
+            Array.set row
+                (Array.set col piece r)
                 board
 
 
@@ -1122,3 +1161,199 @@ drawCompass style delta rotated =
         , compassText (negate <| fr + fsize // 3) (fsize // 3) "W"
         , compassText (fr + fsize // 3) (fsize // 3) "E"
         ]
+
+
+populateLegalMoves : GameState -> GameState
+populateLegalMoves gameState =
+    let
+        { newBoard, selected } =
+            gameState
+    in
+    { gameState
+        | legalMoves = computeLegalMoves newBoard selected
+    }
+
+
+computeLegalMoves : NewBoard -> Maybe RowCol -> List RowCol
+computeLegalMoves newBoard selected =
+    case selected of
+        Nothing ->
+            []
+
+        Just rowCol ->
+            let
+                jumps =
+                    legalJumps newBoard rowCol
+            in
+            if jumps == [] then
+                legalSlides newBoard rowCol
+
+            else
+                jumps
+
+
+mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapAllNeighbors =
+    mapNeighbors True
+
+
+mapForwardNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapForwardNeighbors =
+    mapNeighbors False
+
+
+mapNeighbors : Bool -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapNeighbors all mapper board startPos init =
+    let
+        map r c res =
+            let
+                neighborPos =
+                    { row = r, col = c }
+            in
+            if not <| isValidRowCol neighborPos then
+                res
+
+            else
+                mapper neighborPos
+                    (newget neighborPos board)
+                    res
+
+        { row, col } =
+            startPos
+    in
+    (if all then
+        map (row - 1) col init
+            |> map row (col - 1)
+
+     else
+        init
+    )
+        |> map row (col + 1)
+        |> map (row + 1) col
+
+
+isValidRowCol : RowCol -> Bool
+isValidRowCol { row, col } =
+    row >= 0 && row < 8 && col >= 0 && col < 8
+
+
+stepAgain : RowCol -> RowCol -> RowCol
+stepAgain from to =
+    if from.row < to.row then
+        { row = to.row + 1, col = to.col }
+
+    else if from.row > to.row then
+        { row = to.row - 1, col = to.col }
+
+    else if from.col < to.col then
+        { row = to.row, col = to.col + 1 }
+
+    else if from.col > to.col then
+        { row = to.row, col = to.col - 1 }
+
+    else
+        to
+
+
+legalLongJumps : Color -> NewBoard -> RowCol -> List RowCol
+legalLongJumps color board startPos =
+    -- TODO
+    -- Get only the first in the longest of the series.
+    -- Don't allow direction reversal.
+    -- Ask Christopher about circling back to a row or column.
+    []
+
+
+isHulkType : PieceType -> Bool
+isHulkType pieceType =
+    pieceType == Hulk || pieceType == CorruptedHulk
+
+
+legalJumps : NewBoard -> RowCol -> List RowCol
+legalJumps board startPos =
+    let
+        { color, pieceType } =
+            newget startPos board
+    in
+    if pieceType == NoPiece then
+        []
+
+    else if isHulkType pieceType then
+        legalLongJumps color board startPos
+
+    else
+        let
+            mapper : RowCol -> Piece -> List RowCol -> List RowCol
+            mapper jumpedPos piece res =
+                let
+                    jumpedPiece =
+                        newget jumpedPos board
+                in
+                if color == jumpedPiece.color then
+                    res
+
+                else
+                    let
+                        landingPos =
+                            stepAgain startPos jumpedPos
+                    in
+                    if not <| isValidRowCol landingPos then
+                        res
+
+                    else
+                        let
+                            landingPiece =
+                                newget landingPos board
+                        in
+                        if landingPiece.pieceType /= NoPiece then
+                            res
+
+                        else
+                            landingPos :: res
+        in
+        mapAllNeighbors mapper board startPos []
+
+
+legalLongSlides : NewBoard -> RowCol -> List RowCol
+legalLongSlides board startPos =
+    let
+        getSlide pos res =
+            if not <| isValidRowCol pos then
+                res
+
+            else if (newget pos board |> .pieceType) /= NoPiece then
+                res
+
+            else
+                getSlide (stepAgain startPos pos) (pos :: res)
+
+        mapper : RowCol -> Piece -> List RowCol -> List RowCol
+        mapper pos _ res =
+            getSlide pos res
+    in
+    mapForwardNeighbors mapper board startPos []
+
+
+legalSlides : NewBoard -> RowCol -> List RowCol
+legalSlides board startPos =
+    let
+        { color, pieceType } =
+            newget startPos board
+    in
+    if pieceType == NoPiece then
+        []
+
+    else if isHulkType pieceType then
+        legalLongSlides board startPos
+
+    else
+        let
+            mapper : RowCol -> Piece -> List RowCol -> List RowCol
+            mapper slidePos piece res =
+                if piece.pieceType == NoPiece then
+                    slidePos :: res
+
+                else
+                    res
+        in
+        mapForwardNeighbors mapper board startPos []
