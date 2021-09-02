@@ -942,40 +942,59 @@ legalJumps board startPos =
         legalLongJumps color board startPos
 
     else
-        let
-            mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
-            mapper jumpedPos piece res =
+        computeJumpSequences color board startPos
+            |> removeNonMaximalJumpSequences
+            |> List.map List.reverse
+
+
+removeNonMaximalJumpSequences : List JumpSequence -> List JumpSequence
+removeNonMaximalJumpSequences jumpSequences =
+    let
+        maxlen =
+            List.foldr
+                (\seq res ->
+                    max res <| List.length seq
+                )
+                0
+                jumpSequences
+    in
+    List.filter (\l -> maxlen == List.length l) jumpSequences
+
+
+computeJumpSequences : Color -> NewBoard -> RowCol -> List JumpSequence
+computeJumpSequences color board startPos =
+    -- TODO
+    -- Get the whole jump sequence, not just its first element
+    let
+        mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
+        mapper jumpedPos jumpedPiece res =
+            if color == jumpedPiece.color then
+                res
+
+            else
                 let
-                    jumpedPiece =
-                        get jumpedPos board
+                    landingPos =
+                        stepAgain startPos jumpedPos
                 in
-                if color == jumpedPiece.color then
+                if not <| isValidRowCol landingPos then
                     res
 
                 else
                     let
-                        landingPos =
-                            stepAgain startPos jumpedPos
+                        landingPiece =
+                            get landingPos board
                     in
-                    if not <| isValidRowCol landingPos then
+                    if landingPiece.pieceType /= NoPiece then
                         res
 
                     else
-                        let
-                            landingPiece =
-                                get landingPos board
-                        in
-                        if landingPiece.pieceType /= NoPiece then
-                            res
-
-                        else
-                            [ { over = jumpedPos
-                              , to = landingPos
-                              }
-                            ]
-                                :: res
-        in
-        mapAllNeighbors mapper board startPos []
+                        [ { over = jumpedPos
+                          , to = landingPos
+                          }
+                        ]
+                            :: res
+    in
+    mapAllNeighbors mapper board startPos []
 
 
 legalLongSlides : NewBoard -> RowCol -> List RowCol
