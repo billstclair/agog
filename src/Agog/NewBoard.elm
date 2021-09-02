@@ -18,11 +18,11 @@ module Agog.NewBoard exposing
     , get
     , getSizer
     , initial
+    , rc
     , render
     , rowToString
     , score
     , set
-    , simulateGame
     , winner
     )
 
@@ -31,10 +31,12 @@ import Agog.Types as Types
         ( Board
         , Color(..)
         , Decoration(..)
+        , GameState
         , NewBoard
         , Piece
         , PieceType(..)
         , Player(..)
+        , RowCol
         , SavedModel
         , Style
         , Winner(..)
@@ -103,6 +105,11 @@ empty =
     Array.repeat 8 (Array.repeat 8 Types.emptyPiece)
 
 
+rc : Int -> Int -> RowCol
+rc row col =
+    { row = row, col = col }
+
+
 initial : NewBoard
 initial =
     let
@@ -127,14 +134,16 @@ initial =
 
             else
                 fillGolems
-                    (set startRow col p b)
+                    (set (rc startRow col) p b)
                     p
                     col
                     (startRow + 1)
                     endRow
 
         b0 =
-            set 0 7 blackJourneyman (set 7 0 whiteJourneyman empty)
+            set (rc 0 7)
+                blackJourneyman
+                (set (rc 7 0) whiteJourneyman empty)
 
         b1 =
             fillGolems b0 whiteGolem 0 2 6
@@ -189,8 +198,8 @@ score board =
     31 - count board
 
 
-get : Int -> Int -> NewBoard -> Piece
-get row col board =
+get : RowCol -> NewBoard -> Piece
+get { row, col } board =
     case Array.get row board of
         Nothing ->
             Types.emptyPiece
@@ -204,8 +213,8 @@ get row col board =
                     res
 
 
-set : Int -> Int -> Piece -> NewBoard -> NewBoard
-set row col piece board =
+set : RowCol -> Piece -> NewBoard -> NewBoard
+set { row, col } piece board =
     case Array.get row board of
         Nothing ->
             board
@@ -221,167 +230,6 @@ set row col piece board =
 winner : Player -> NewBoard -> ( Winner, List ( Int, Int ) )
 winner player board =
     ( NoWinner, [] )
-
-
-
----
---- Simulation
----
-
-
-simulateGame : Seed -> ( Winner, Int, Seed )
-simulateGame seed =
-    let
-        loop s b isH =
-            let
-                ( s2, b2 ) =
-                    simulateMove s b isH
-
-                player =
-                    if isH then
-                        WhitePlayer
-
-                    else
-                        BlackPlayer
-
-                ( win, _ ) =
-                    winner player b2
-            in
-            if win == NoWinner then
-                loop s2 b2 (not isH)
-
-            else
-                ( win, score b2, s2 )
-    in
-    loop seed empty True
-
-
-simulateMove : Seed -> NewBoard -> Bool -> ( Seed, NewBoard )
-simulateMove seed board isH =
-    let
-        gen =
-            Random.int 0 5
-
-        ( row, seed2 ) =
-            Random.step gen seed
-
-        ( col, seed3 ) =
-            Random.step gen seed2
-
-        ( board2, seed5 ) =
-            let
-                p =
-                    get row col board
-            in
-            if p.pieceType /= NoPiece then
-                if isH then
-                    let
-                        cnt =
-                            emptyCols row board
-
-                        ( c, seed4 ) =
-                            Random.step (Random.int 0 (cnt - 1)) seed3
-                    in
-                    ( setEmptyCol row c board, seed4 )
-
-                else
-                    let
-                        cnt =
-                            emptyRows col board
-
-                        ( r, seed4 ) =
-                            Random.step (Random.int 0 (cnt - 1)) seed3
-                    in
-                    ( setEmptyRow r col board, seed4 )
-
-            else
-                ( set row col Types.emptyPiece board, seed3 )
-    in
-    ( seed5, board2 )
-
-
-emptyCols : Int -> NewBoard -> Int
-emptyCols row board =
-    List.foldl
-        (\col sum ->
-            let
-                p =
-                    get row col board
-            in
-            if p.pieceType /= NoPiece then
-                sum
-
-            else
-                sum + 1
-        )
-        0
-        (List.range 0 5)
-
-
-setEmptyCol : Int -> Int -> NewBoard -> NewBoard
-setEmptyCol row col board =
-    let
-        loop cnt c =
-            let
-                p =
-                    get row c board
-            in
-            if not <| p.pieceType == NoPiece then
-                if cnt == 0 then
-                    set row c Types.emptyPiece board
-
-                else
-                    loop (cnt - 1) (c + 1)
-
-            else if c >= 5 then
-                board
-
-            else
-                loop cnt (c + 1)
-    in
-    loop row 0
-
-
-emptyRows : Int -> NewBoard -> Int
-emptyRows col board =
-    List.foldl
-        (\row sum ->
-            let
-                p =
-                    get row col board
-            in
-            if p.pieceType /= NoPiece then
-                sum
-
-            else
-                sum + 1
-        )
-        0
-        (List.range 0 5)
-
-
-setEmptyRow : Int -> Int -> NewBoard -> NewBoard
-setEmptyRow row col board =
-    let
-        loop cnt r =
-            let
-                p =
-                    get r col board
-            in
-            if p.pieceType /= NoPiece then
-                if cnt == 0 then
-                    set r col Types.emptyPiece board
-
-                else
-                    loop (cnt - 1) (r + 1)
-
-            else if r >= 5 then
-                board
-
-            else
-                loop cnt (r + 1)
-    in
-    loop row 0
 
 
 
@@ -695,8 +543,11 @@ drawCircle style color delta rowidx colidx =
 drawPiece : Style -> NewBoard -> Int -> Int -> Int -> Svg msg
 drawPiece style board delta rowidx colidx =
     let
+        rowcol =
+            rc rowidx colidx
+
         piece =
-            get rowidx colidx board
+            get rowcol board
 
         deltaF =
             toFloat delta
@@ -970,3 +821,199 @@ colToString y =
 rowToString : Int -> String
 rowToString x =
     tos <| 8 - x
+
+
+populateLegalMoves : GameState -> GameState
+populateLegalMoves gameState =
+    let
+        { newBoard, selected } =
+            gameState
+    in
+    { gameState
+        | legalMoves = computeLegalMoves newBoard selected
+    }
+
+
+computeLegalMoves : NewBoard -> Maybe RowCol -> List RowCol
+computeLegalMoves newBoard selected =
+    case selected of
+        Nothing ->
+            []
+
+        Just rowCol ->
+            let
+                jumps =
+                    legalJumps newBoard rowCol
+            in
+            if jumps == [] then
+                legalSlides newBoard rowCol
+
+            else
+                jumps
+
+
+mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapAllNeighbors =
+    mapNeighbors True
+
+
+mapForwardNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapForwardNeighbors =
+    mapNeighbors False
+
+
+mapNeighbors : Bool -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapNeighbors all mapper board startPos init =
+    let
+        map r c res =
+            let
+                neighborPos =
+                    rc r c
+            in
+            if not <| isValidRowCol neighborPos then
+                res
+
+            else
+                mapper neighborPos
+                    (get neighborPos board)
+                    res
+
+        { row, col } =
+            startPos
+    in
+    (if all then
+        map (row - 1) col init
+            |> map row (col - 1)
+
+     else
+        init
+    )
+        |> map row (col + 1)
+        |> map (row + 1) col
+
+
+isValidRowCol : RowCol -> Bool
+isValidRowCol { row, col } =
+    row >= 0 && row < 8 && col >= 0 && col < 8
+
+
+stepAgain : RowCol -> RowCol -> RowCol
+stepAgain from to =
+    if from.row < to.row then
+        rc (to.row + 1) to.col
+
+    else if from.row > to.row then
+        rc (to.row - 1) to.col
+
+    else if from.col < to.col then
+        rc to.row (to.col + 1)
+
+    else if from.col > to.col then
+        rc to.row (to.col - 1)
+
+    else
+        to
+
+
+legalLongJumps : Color -> NewBoard -> RowCol -> List RowCol
+legalLongJumps color board startPos =
+    -- TODO
+    -- Get only the first in the longest of the series.
+    -- Don't allow direction reversal.
+    -- Ask Christopher about circling back to a row or column.
+    []
+
+
+isHulkType : PieceType -> Bool
+isHulkType pieceType =
+    pieceType == Hulk || pieceType == CorruptedHulk
+
+
+legalJumps : NewBoard -> RowCol -> List RowCol
+legalJumps board startPos =
+    let
+        { color, pieceType } =
+            get startPos board
+    in
+    if pieceType == NoPiece then
+        []
+
+    else if isHulkType pieceType then
+        legalLongJumps color board startPos
+
+    else
+        let
+            mapper : RowCol -> Piece -> List RowCol -> List RowCol
+            mapper jumpedPos piece res =
+                let
+                    jumpedPiece =
+                        get jumpedPos board
+                in
+                if color == jumpedPiece.color then
+                    res
+
+                else
+                    let
+                        landingPos =
+                            stepAgain startPos jumpedPos
+                    in
+                    if not <| isValidRowCol landingPos then
+                        res
+
+                    else
+                        let
+                            landingPiece =
+                                get landingPos board
+                        in
+                        if landingPiece.pieceType /= NoPiece then
+                            res
+
+                        else
+                            landingPos :: res
+        in
+        mapAllNeighbors mapper board startPos []
+
+
+legalLongSlides : NewBoard -> RowCol -> List RowCol
+legalLongSlides board startPos =
+    let
+        getSlide pos res =
+            if not <| isValidRowCol pos then
+                res
+
+            else if (get pos board |> .pieceType) /= NoPiece then
+                res
+
+            else
+                getSlide (stepAgain startPos pos) (pos :: res)
+
+        mapper : RowCol -> Piece -> List RowCol -> List RowCol
+        mapper pos _ res =
+            getSlide pos res
+    in
+    mapForwardNeighbors mapper board startPos []
+
+
+legalSlides : NewBoard -> RowCol -> List RowCol
+legalSlides board startPos =
+    let
+        { color, pieceType } =
+            get startPos board
+    in
+    if pieceType == NoPiece then
+        []
+
+    else if isHulkType pieceType then
+        legalLongSlides board startPos
+
+    else
+        let
+            mapper : RowCol -> Piece -> List RowCol -> List RowCol
+            mapper slidePos piece res =
+                if piece.pieceType == NoPiece then
+                    slidePos :: res
+
+                else
+                    res
+        in
+        mapForwardNeighbors mapper board startPos []
