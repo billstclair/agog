@@ -27,6 +27,7 @@ import Agog.Types as Types
         , Decoration(..)
         , GameState
         , Message(..)
+        , MovesOrJumps(..)
         , Player(..)
         , PlayerNames
         , PublicType(..)
@@ -57,7 +58,7 @@ emptyGameState players =
     , players = players
     , whoseTurn = WhitePlayer
     , selected = Nothing
-    , legalMoves = []
+    , legalMoves = Moves []
     , undoStates = []
     , score = Types.zeroScore
     , winner = NoWinner

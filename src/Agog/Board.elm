@@ -2,6 +2,7 @@
 --
 -- Board.elm
 -- Zephyrnot board, storage and rendering.
+-- This file will be replaced by NewBoard.elm, once I have excised it.
 -- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License

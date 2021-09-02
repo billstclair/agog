@@ -1,8 +1,8 @@
 ---------------------------------------------------------------------
 --
 -- Types.elm
--- Zephyrnot shared types.
--- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
+-- AGOG shared types.
+-- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE.txt
@@ -16,8 +16,11 @@ module Agog.Types exposing
     , Color(..)
     , Decoration(..)
     , GameState
+    , JumpSequence
     , Message(..)
+    , MovesOrJumps(..)
     , NewBoard
+    , OneJump
     , OneScore
     , Page(..)
     , Piece
@@ -289,6 +292,21 @@ emptyPrivateGameState =
     PrivateGameState NoDecoration Set.empty
 
 
+type alias OneJump =
+    { over : RowCol
+    , to : RowCol
+    }
+
+
+type alias JumpSequence =
+    List OneJump
+
+
+type MovesOrJumps
+    = Moves (List RowCol)
+    | Jumps (List JumpSequence)
+
+
 type alias UndoState =
     { board : NewBoard
     , selected : Maybe RowCol
@@ -302,7 +320,7 @@ type alias GameState =
     , players : PlayerNames
     , whoseTurn : Player
     , selected : Maybe RowCol
-    , legalMoves : List RowCol
+    , legalMoves : MovesOrJumps
     , undoStates : List UndoState
     , score : Score
     , winner : Winner

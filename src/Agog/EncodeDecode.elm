@@ -33,8 +33,11 @@ import Agog.Types as Types
         , Color(..)
         , Decoration(..)
         , GameState
+        , JumpSequence
         , Message(..)
+        , MovesOrJumps(..)
         , NewBoard
+        , OneJump
         , OneScore
         , Page(..)
         , Piece
@@ -689,7 +692,7 @@ encodeGameState includePrivate gameState =
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
         , ( "selected", encodeMaybe encodeRowCol selected )
-        , ( "legalMoves", JE.list encodeRowCol legalMoves )
+        , ( "legalMoves", encodeMovesOrJumps legalMoves )
         , ( "undoStates", JE.list encodeUndoState undoStates )
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
@@ -707,7 +710,7 @@ gameStateDecoder =
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder
         |> required "selected" (JD.nullable rowColDecoder)
-        |> required "legalMoves" (JD.list rowColDecoder)
+        |> required "legalMoves" movesOrJumpsDecoder
         |> required "undoStates" (JD.list undoStateDecoder)
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
@@ -728,6 +731,61 @@ rowColDecoder =
     JD.succeed RowCol
         |> required "row" JD.int
         |> required "col" JD.int
+
+
+encodeRowColList : List RowCol -> Value
+encodeRowColList rowcols =
+    JE.list encodeRowCol rowcols
+
+
+rowColListDecoder : Decoder (List RowCol)
+rowColListDecoder =
+    JD.list rowColDecoder
+
+
+encodeJumpSequence : JumpSequence -> Value
+encodeJumpSequence jumps =
+    JE.list encodeOneJump jumps
+
+
+jumpSequenceDecoder : Decoder JumpSequence
+jumpSequenceDecoder =
+    JD.list oneJumpDecoder
+
+
+encodeOneJump : OneJump -> Value
+encodeOneJump { over, to } =
+    JE.object
+        [ ( "over", encodeRowCol over )
+        , ( "to", encodeRowCol to )
+        ]
+
+
+oneJumpDecoder : Decoder OneJump
+oneJumpDecoder =
+    JD.succeed OneJump
+        |> required "over" rowColDecoder
+        |> required "to" rowColDecoder
+
+
+encodeMovesOrJumps : MovesOrJumps -> Value
+encodeMovesOrJumps movesOrJumps =
+    case movesOrJumps of
+        Moves rowcols ->
+            JE.object [ ( "moves", encodeRowColList rowcols ) ]
+
+        Jumps jumps ->
+            JE.object [ ( "jumps", JE.list encodeJumpSequence jumps ) ]
+
+
+movesOrJumpsDecoder : Decoder MovesOrJumps
+movesOrJumpsDecoder =
+    JD.oneOf
+        [ JD.field "moves" rowColListDecoder
+            |> JD.andThen (\rowcols -> JD.succeed <| Moves rowcols)
+        , JD.field "jumps" (JD.list jumpSequenceDecoder)
+            |> JD.andThen (\sequences -> JD.succeed <| Jumps sequences)
+        ]
 
 
 encodeChoice : Choice -> Value

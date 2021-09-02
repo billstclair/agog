@@ -1,7 +1,7 @@
 ---------------------------------------------------------------------
 --
 -- NewBoard.elm
--- Zephyrnot board, storage and rendering.
+-- AGOG board, storage and rendering.
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
@@ -32,7 +32,10 @@ import Agog.Types as Types
         , Color(..)
         , Decoration(..)
         , GameState
+        , JumpSequence
+        , MovesOrJumps(..)
         , NewBoard
+        , OneJump
         , Piece
         , PieceType(..)
         , Player(..)
@@ -823,35 +826,6 @@ rowToString x =
     tos <| 8 - x
 
 
-populateLegalMoves : GameState -> GameState
-populateLegalMoves gameState =
-    let
-        { newBoard, selected } =
-            gameState
-    in
-    { gameState
-        | legalMoves = computeLegalMoves newBoard selected
-    }
-
-
-computeLegalMoves : NewBoard -> Maybe RowCol -> List RowCol
-computeLegalMoves newBoard selected =
-    case selected of
-        Nothing ->
-            []
-
-        Just rowCol ->
-            let
-                jumps =
-                    legalJumps newBoard rowCol
-            in
-            if jumps == [] then
-                legalSlides newBoard rowCol
-
-            else
-                jumps
-
-
 mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
 mapAllNeighbors =
     mapNeighbors True
@@ -915,7 +889,33 @@ stepAgain from to =
         to
 
 
-legalLongJumps : Color -> NewBoard -> RowCol -> List RowCol
+populateLegalMoves : GameState -> GameState
+populateLegalMoves gameState =
+    let
+        { newBoard, selected } =
+            gameState
+    in
+    { gameState
+        | legalMoves = computeLegalMoves newBoard selected
+    }
+
+
+computeLegalMoves : NewBoard -> Maybe RowCol -> MovesOrJumps
+computeLegalMoves newBoard selected =
+    case selected of
+        Nothing ->
+            Moves []
+
+        Just rowCol ->
+            case legalJumps newBoard rowCol of
+                [] ->
+                    Moves <| legalSlides newBoard rowCol
+
+                jumpSequences ->
+                    Jumps jumpSequences
+
+
+legalLongJumps : Color -> NewBoard -> RowCol -> List JumpSequence
 legalLongJumps color board startPos =
     -- TODO
     -- Get only the first in the longest of the series.
@@ -929,7 +929,7 @@ isHulkType pieceType =
     pieceType == Hulk || pieceType == CorruptedHulk
 
 
-legalJumps : NewBoard -> RowCol -> List RowCol
+legalJumps : NewBoard -> RowCol -> List JumpSequence
 legalJumps board startPos =
     let
         { color, pieceType } =
@@ -943,7 +943,7 @@ legalJumps board startPos =
 
     else
         let
-            mapper : RowCol -> Piece -> List RowCol -> List RowCol
+            mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
             mapper jumpedPos piece res =
                 let
                     jumpedPiece =
@@ -969,7 +969,11 @@ legalJumps board startPos =
                             res
 
                         else
-                            landingPos :: res
+                            [ { over = jumpedPos
+                              , to = landingPos
+                              }
+                            ]
+                                :: res
         in
         mapAllNeighbors mapper board startPos []
 
