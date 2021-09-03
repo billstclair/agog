@@ -18,6 +18,7 @@ module Agog.NewBoard exposing
     , get
     , getSizer
     , initial
+    , populateLegalMoves
     , rc
     , render
     , rowToString
@@ -915,15 +916,6 @@ computeLegalMoves newBoard selected =
                     Jumps jumpSequences
 
 
-legalLongJumps : Color -> NewBoard -> RowCol -> List JumpSequence
-legalLongJumps color board startPos =
-    -- TODO
-    -- Get only the first in the longest of the series.
-    -- Don't allow direction reversal.
-    -- Ask Christopher about circling back to a row or column.
-    []
-
-
 isHulkType : PieceType -> Bool
 isHulkType pieceType =
     pieceType == Hulk || pieceType == CorruptedHulk
@@ -934,17 +926,18 @@ legalJumps board startPos =
     let
         { color, pieceType } =
             get startPos board
+
+        res =
+            if pieceType == NoPiece then
+                []
+
+            else if isHulkType pieceType then
+                computeLongJumpSequences color board startPos
+
+            else
+                computeJumpSequences color board startPos
     in
-    if pieceType == NoPiece then
-        []
-
-    else if isHulkType pieceType then
-        legalLongJumps color board startPos
-
-    else
-        computeJumpSequences color board startPos
-            |> removeNonMaximalJumpSequences
-            |> List.map List.reverse
+    removeNonMaximalJumpSequences res
 
 
 removeNonMaximalJumpSequences : List JumpSequence -> List JumpSequence
@@ -963,8 +956,6 @@ removeNonMaximalJumpSequences jumpSequences =
 
 computeJumpSequences : Color -> NewBoard -> RowCol -> List JumpSequence
 computeJumpSequences color board startPos =
-    -- TODO
-    -- Get the whole jump sequence, not just its first element
     let
         mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
         mapper jumpedPos jumpedPiece res =
@@ -988,17 +979,155 @@ computeJumpSequences color board startPos =
                         res
 
                     else
-                        [ { over = jumpedPos
-                          , to = landingPos
-                          }
-                        ]
-                            :: res
+                        let
+                            jump =
+                                { over = jumpedPos
+                                , to = landingPos
+                                }
+
+                            moreJumps =
+                                computeJumpSequences color
+                                    (set jumpedPos
+                                        -- prevents second jump of same piece.
+                                        { jumpedPiece | color = color }
+                                        board
+                                    )
+                                    landingPos
+                        in
+                        List.map (\seq -> jump :: seq) moreJumps
     in
     mapAllNeighbors mapper board startPos []
 
 
-legalLongSlides : NewBoard -> RowCol -> List RowCol
-legalLongSlides board startPos =
+computeLongJumpSequences : Color -> NewBoard -> RowCol -> List JumpSequence
+computeLongJumpSequences color board startPos =
+    let
+        findLastPos : RowCol -> RowCol -> Maybe ( RowCol, Piece )
+        findLastPos from towards =
+            let
+                pos =
+                    stepAgain from towards
+            in
+            if not <| isValidRowCol pos then
+                Nothing
+
+            else
+                let
+                    piece =
+                        get pos board
+                in
+                if piece.pieceType == NoPiece then
+                    findLastPos pos towards
+
+                else
+                    Just ( pos, piece )
+
+        mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
+        mapper pos piece res =
+            let
+                maybeJumpedPair =
+                    if piece.pieceType == NoPiece then
+                        Just ( pos, piece )
+
+                    else
+                        findLastPos pos (stepAgain startPos pos)
+            in
+            case maybeJumpedPair of
+                Nothing ->
+                    res
+
+                Just ( jumpedPos, jumpedPiece ) ->
+                    if color == jumpedPiece.color then
+                        res
+
+                    else
+                        let
+                            getLandingPoss : RowCol -> List RowCol -> List RowCol
+                            getLandingPoss lpos poss =
+                                let
+                                    landingPos =
+                                        stepAgain startPos lpos
+                                in
+                                if not <| isValidRowCol landingPos then
+                                    poss
+
+                                else
+                                    let
+                                        landingPiece =
+                                            get landingPos board
+                                    in
+                                    if landingPiece.pieceType /= NoPiece then
+                                        poss
+
+                                    else
+                                        getLandingPoss landingPos <|
+                                            landingPos
+                                                :: poss
+
+                            landingPoss =
+                                getLandingPoss jumpedPos []
+
+                            landingPosMapper : RowCol -> List JumpSequence -> List JumpSequence
+                            landingPosMapper lpos jumpSequencess =
+                                let
+                                    jump =
+                                        { over = jumpedPos
+                                        , to = lpos
+                                        }
+
+                                    moreJumps =
+                                        computeLongJumpSequences color
+                                            (set jumpedPos
+                                                -- prevents second jump of same piece.
+                                                { jumpedPiece
+                                                    | color = color
+                                                }
+                                                board
+                                            )
+                                            lpos
+                                in
+                                List.map (\seq -> jump :: seq) moreJumps
+                        in
+                        List.foldr
+                            (\lpos js ->
+                                landingPosMapper lpos [] ++ js
+                            )
+                            []
+                            landingPoss
+    in
+    mapAllNeighbors mapper
+        board
+        startPos
+        []
+
+
+legalSlides : NewBoard -> RowCol -> List RowCol
+legalSlides board startPos =
+    let
+        { color, pieceType } =
+            get startPos board
+    in
+    if pieceType == NoPiece then
+        []
+
+    else if isHulkType pieceType then
+        computeLongSlides board startPos
+
+    else
+        let
+            mapper : RowCol -> Piece -> List RowCol -> List RowCol
+            mapper slidePos piece res =
+                if piece.pieceType == NoPiece then
+                    slidePos :: res
+
+                else
+                    res
+        in
+        mapForwardNeighbors mapper board startPos []
+
+
+computeLongSlides : NewBoard -> RowCol -> List RowCol
+computeLongSlides board startPos =
     let
         getSlide pos res =
             if not <| isValidRowCol pos then
@@ -1015,28 +1144,3 @@ legalLongSlides board startPos =
             getSlide pos res
     in
     mapForwardNeighbors mapper board startPos []
-
-
-legalSlides : NewBoard -> RowCol -> List RowCol
-legalSlides board startPos =
-    let
-        { color, pieceType } =
-            get startPos board
-    in
-    if pieceType == NoPiece then
-        []
-
-    else if isHulkType pieceType then
-        legalLongSlides board startPos
-
-    else
-        let
-            mapper : RowCol -> Piece -> List RowCol -> List RowCol
-            mapper slidePos piece res =
-                if piece.pieceType == NoPiece then
-                    slidePos :: res
-
-                else
-                    res
-        in
-        mapForwardNeighbors mapper board startPos []
