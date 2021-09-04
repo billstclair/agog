@@ -829,16 +829,16 @@ rowToString x =
 
 mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
 mapAllNeighbors =
-    mapNeighbors True
+    mapNeighbors True WhiteColor
 
 
-mapForwardNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
-mapForwardNeighbors =
-    mapNeighbors False
+mapForwardNeighbors : Color -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapForwardNeighbors color =
+    mapNeighbors False color
 
 
-mapNeighbors : Bool -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
-mapNeighbors all mapper board startPos init =
+mapNeighbors : Bool -> Color -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapNeighbors all color mapper board startPos init =
     let
         map r c res =
             let
@@ -853,18 +853,26 @@ mapNeighbors all mapper board startPos init =
                     (get neighborPos board)
                     res
 
+        ( plusRow, plusCol ) =
+            case color of
+                WhiteColor ->
+                    ( -1, 1 )
+
+                BlackColor ->
+                    ( 1, -1 )
+
         { row, col } =
             startPos
     in
     (if all then
-        map (row - 1) col init
-            |> map row (col - 1)
+        map (row - plusRow) col init
+            |> map row (col - plusCol)
 
      else
         init
     )
-        |> map row (col + 1)
-        |> map (row + 1) col
+        |> map row (col + plusCol)
+        |> map (row + plusRow) col
 
 
 isValidRowCol : RowCol -> Bool
@@ -1111,7 +1119,7 @@ legalSlides board startPos =
         []
 
     else if isHulkType pieceType then
-        computeLongSlides board startPos
+        computeLongSlides color board startPos
 
     else
         let
@@ -1123,11 +1131,11 @@ legalSlides board startPos =
                 else
                     res
         in
-        mapForwardNeighbors mapper board startPos []
+        mapForwardNeighbors color mapper board startPos []
 
 
-computeLongSlides : NewBoard -> RowCol -> List RowCol
-computeLongSlides board startPos =
+computeLongSlides : Color -> NewBoard -> RowCol -> List RowCol
+computeLongSlides color board startPos =
     let
         getSlide pos res =
             if not <| isValidRowCol pos then
@@ -1143,4 +1151,4 @@ computeLongSlides board startPos =
         mapper pos _ res =
             getSlide pos res
     in
-    mapForwardNeighbors mapper board startPos []
+    mapForwardNeighbors color mapper board startPos []
