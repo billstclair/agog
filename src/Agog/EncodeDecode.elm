@@ -22,8 +22,10 @@ module Agog.EncodeDecode exposing
     , messageEncoder
     , messageEncoderWithPrivate
     , movesDecoder
+    , newBoardToString
     , publicGameToFramework
     , stringToBoard
+    , stringToNewBoard
     )
 
 import Agog.Types as Types
@@ -425,26 +427,137 @@ oldBoardDecoder =
             )
 
 
+pieceToString : Piece -> String
+pieceToString { color, pieceType } =
+    let
+        letter =
+            case pieceType of
+                Golem ->
+                    "G"
+
+                Hulk ->
+                    "H"
+
+                CorruptedHulk ->
+                    "C"
+
+                Journeyman ->
+                    "J"
+
+                NoPiece ->
+                    "-"
+    in
+    case color of
+        WhiteColor ->
+            letter
+
+        BlackColor ->
+            String.toLower letter
+
+
+stringToPiece : String -> Piece
+stringToPiece string =
+    let
+        upper =
+            String.toUpper string
+
+        pieceType =
+            case upper of
+                "G" ->
+                    Golem
+
+                "H" ->
+                    Hulk
+
+                "C" ->
+                    CorruptedHulk
+
+                "J" ->
+                    Journeyman
+
+                _ ->
+                    NoPiece
+
+        color =
+            case pieceType of
+                NoPiece ->
+                    WhiteColor
+
+                _ ->
+                    if upper == string then
+                        WhiteColor
+
+                    else
+                        BlackColor
+    in
+    { color = color
+    , pieceType = pieceType
+    }
+
+
+newRowToString : Array Piece -> String
+newRowToString row =
+    Array.toList row
+        |> List.map pieceToString
+        |> String.concat
+
+
+stringToNewRow : String -> Array Piece
+stringToNewRow string =
+    String.toList string
+        |> List.map String.fromChar
+        |> List.map stringToPiece
+        |> Array.fromList
+
+
+newBoardToString : NewBoard -> String
+newBoardToString board =
+    Array.toList board
+        |> List.map newRowToString
+        |> List.intersperse "|"
+        |> String.concat
+
+
+stringToNewBoard : String -> Maybe NewBoard
+stringToNewBoard string =
+    if String.length string /= 8 * 8 + 7 then
+        Nothing
+
+    else
+        let
+            rows =
+                [ String.slice 0 8 string
+                , String.slice 9 17 string
+                , String.slice 18 26 string
+                , String.slice 27 35 string
+                , String.slice 36 44 string
+                , String.slice 45 53 string
+                , String.slice 54 62 string
+                , String.slice 63 71 string
+                ]
+        in
+        rows
+            |> List.map stringToNewRow
+            |> Array.fromList
+            |> Just
+
+
 encodeNewBoard : NewBoard -> Value
 encodeNewBoard board =
-    Array.toList board
-        |> List.map
-            (\a ->
-                Array.toList a
-                    |> List.map encodePiece
-                    |> JE.list identity
-            )
-        |> JE.list identity
+    JE.string <| newBoardToString board
 
 
 newBoardDecoder : Decoder NewBoard
 newBoardDecoder =
-    JD.list (JD.list pieceDecoder)
+    JD.string
         |> JD.andThen
-            (\l ->
-                List.map (\l2 -> Array.fromList l2) l
-                    |> Array.fromList
-                    |> JD.succeed
+            (\string ->
+                case stringToNewBoard string of
+                    Nothing ->
+                        JD.fail "Invalid board string."
+
+                    Just board ->
+                        JD.succeed board
             )
 
 
@@ -480,7 +593,7 @@ colorDecoder =
     JD.string
         |> JD.andThen
             (\s ->
-                if s == "black" then
+                if s == "B" then
                     JD.succeed BlackColor
 
                 else

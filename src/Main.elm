@@ -2079,8 +2079,10 @@ mainPage bsize model =
             ]
         , p []
             [ button
-                [ onClick ClearStorage ]
-                [ text <| "Clear" ]
+                [ onClick ClearStorage
+                , title "Clear Local Storage. Cannot be undone!"
+                ]
+                [ text <| "Clear!" ]
             ]
         ]
 
@@ -2411,7 +2413,7 @@ clear =
 
 localStoragePrefix : String
 localStoragePrefix =
-    "zephyrnot"
+    "AGOG"
 
 
 initialFunnelState : PortFunnels.State
