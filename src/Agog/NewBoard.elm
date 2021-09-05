@@ -330,9 +330,18 @@ getPathSizer sizer =
         |> .path
 
 
-render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Maybe Player -> Bool -> List ( Int, Int ) -> NewBoard -> Html msg
-render style size tagger sizer player notRotated path board =
+render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Maybe Player -> Bool -> GameState -> Html msg
+render style size tagger sizer player notRotated gameState =
     let
+        board =
+            gameState.newBoard
+
+        legalMoves =
+            gameState.legalMoves
+
+        selected =
+            gameState.selected
+
         rotated =
             False
 
@@ -385,7 +394,7 @@ render style size tagger sizer player notRotated path board =
                 List.concat
                     [ drawRows style delta rotated
                     , drawCols style delta rotated sizer board
-                    , drawRects style board delta
+                    , drawRects style selected legalMoves board delta
                     , drawClickRects style delta rotated tagger
                     ]
             ]
@@ -488,8 +497,13 @@ drawRow style delta rotated idx =
     ]
 
 
-drawRects : Style -> NewBoard -> Int -> List (Svg msg)
-drawRects style board delta =
+removeBlankGs : List (Svg msg) -> List (Svg msg)
+removeBlankGs svgs =
+    List.filter ((/=) (g [] [])) svgs
+
+
+drawRects : Style -> Maybe RowCol -> MovesOrJumps -> NewBoard -> Int -> List (Svg msg)
+drawRects style selected legalMoves board delta =
     let
         indices =
             [ 0, 1, 2, 3, 4, 5, 6, 7 ]
@@ -501,17 +515,60 @@ drawRects style board delta =
         dorow f rowidx res =
             List.foldl (docol f rowidx) res indices
     in
-    g []
-        (List.foldl (dorow (drawShadeRect style)) [] indices)
-        :: List.foldl (dorow (drawPiece style board)) [] indices
+    (List.foldr (dorow (drawShadeRect style)) [] indices
+        |> removeBlankGs
+    )
+        ++ drawHighlights style selected legalMoves delta
+        ++ (List.foldr (dorow (drawPiece style board)) [] indices
+                |> removeBlankGs
+           )
 
 
-drawRect : Style -> NewBoard -> Int -> Int -> Int -> Svg msg
-drawRect style board delta rowidx colidx =
-    g []
-        [ drawShadeRect style delta rowidx colidx
-        , drawPiece style board delta rowidx colidx
+drawHighlight : String -> Int -> RowCol -> Svg msg
+drawHighlight color delta { row, col } =
+    let
+        p =
+            shadeRectParams delta row col
+
+        w =
+            1
+    in
+    Svg.rect
+        [ x (tos <| p.x + w)
+        , y (tos <| p.y + w)
+        , width (tos <| p.width - 2 * w)
+        , height (tos <| p.height - 2 * w)
+        , strokeWidth <| tos w
+        , stroke color
         ]
+        []
+
+
+drawHighlights : Style -> Maybe RowCol -> MovesOrJumps -> Int -> List (Svg msg)
+drawHighlights style selected legalMoves delta =
+    (case selected of
+        Nothing ->
+            []
+
+        Just rowcol ->
+            [ drawHighlight style.selectedColor delta rowcol ]
+    )
+        ++ (case legalMoves of
+                Moves rowcols ->
+                    List.map (drawHighlight style.moveColor delta) rowcols
+
+                Jumps sequences ->
+                    let
+                        addSequence sequence res =
+                            case List.head sequence of
+                                Nothing ->
+                                    res
+
+                                Just { to } ->
+                                    drawHighlight style.moveColor delta to :: res
+                    in
+                    List.foldr addSequence [] sequences
+           )
 
 
 drawCircle : Style -> Color -> Float -> Float -> Float -> Svg msg
@@ -596,6 +653,52 @@ drawPiece style board delta rowidx colidx =
     draw piece.color piece.pieceType
 
 
+type alias ShadeRectParams =
+    { x : Int
+    , y : Int
+    , width : Int
+    , height : Int
+    }
+
+
+shadeRectParams : Int -> Int -> Int -> ShadeRectParams
+shadeRectParams delta rowidx colidx =
+    let
+        xoff =
+            if colidx == 0 then
+                lineWidth // 2
+
+            else
+                0
+
+        yoff =
+            if rowidx == 0 then
+                lineWidth // 2
+
+            else
+                0
+
+        xreduce =
+            if colidx == 7 then
+                lineWidth // 2
+
+            else
+                0
+
+        yreduce =
+            if rowidx == 7 then
+                lineWidth // 2
+
+            else
+                0
+    in
+    { x = delta * colidx + delta // 2 + xoff
+    , y = delta * rowidx + delta // 2 + yoff
+    , width = delta - xoff - xreduce
+    , height = delta - yoff - yreduce
+    }
+
+
 drawShadeRect : Style -> Int -> Int -> Int -> Svg msg
 drawShadeRect style delta rowidx colidx =
     let
@@ -607,45 +710,14 @@ drawShadeRect style delta rowidx colidx =
 
     else
         let
-            xoff =
-                if colidx == 0 then
-                    lineWidth // 2
-
-                else
-                    0
-
-            yoff =
-                if rowidx == 0 then
-                    lineWidth // 2
-
-                else
-                    0
-
-            xreduce =
-                if colidx == 7 then
-                    lineWidth // 2
-
-                else
-                    0
-
-            yreduce =
-                if rowidx == 7 then
-                    lineWidth // 2
-
-                else
-                    0
-
-            xc =
-                delta * colidx + delta // 2 + xoff
-
-            yc =
-                delta * rowidx + delta // 2 + yoff
+            p =
+                shadeRectParams delta rowidx colidx
         in
         Svg.rect
-            [ x <| tos xc
-            , y <| tos yc
-            , width <| tos (delta - xoff - xreduce)
-            , height <| tos (delta - yoff - yreduce)
+            [ x <| tos p.x
+            , y <| tos p.y
+            , width <| tos p.width
+            , height <| tos p.height
             , fill style.shadeColor
             ]
             []

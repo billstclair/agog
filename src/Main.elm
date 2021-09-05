@@ -1919,8 +1919,7 @@ mainPage bsize model =
             (Just <| Board.getSizer DefaultSizer)
             currentPlayer
             rotated
-            gameState.path
-            gameState.newBoard
+            gameState
         , span
             []
             [ br
