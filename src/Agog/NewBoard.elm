@@ -494,14 +494,16 @@ drawRects style board delta =
         indices =
             [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
-        docol rowidx colidx res =
-            drawRect style board delta rowidx colidx
+        docol f rowidx colidx res =
+            f delta rowidx colidx
                 :: res
 
-        dorow rowidx res =
-            List.foldl (docol rowidx) res indices
+        dorow f rowidx res =
+            List.foldl (docol f rowidx) res indices
     in
-    List.foldl dorow [] indices
+    g []
+        (List.foldl (dorow (drawShadeRect style)) [] indices)
+        :: List.foldl (dorow (drawPiece style board)) [] indices
 
 
 drawRect : Style -> NewBoard -> Int -> Int -> Int -> Svg msg

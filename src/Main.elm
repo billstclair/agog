@@ -24,7 +24,7 @@ module Main exposing (main)
 import Agog.Board as Board exposing (SizerKind(..))
 import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
-import Agog.NewBoard as NewBoard
+import Agog.NewBoard as NewBoard exposing (rc)
 import Agog.Types as Types
     exposing
         ( Board
@@ -259,6 +259,8 @@ type Msg
     | JoinGame GameId
     | Disconnect
     | SetTestMode Bool
+    | EraseBoard
+    | InitialBoard
     | SetTestClear Bool
     | SetTestColor Color
     | SetTestPieceType String
@@ -1294,6 +1296,24 @@ updateInternal msg model =
             }
                 |> withNoCmd
 
+        EraseBoard ->
+            { model
+                | gameState =
+                    { gameState
+                        | newBoard = NewBoard.empty
+                    }
+            }
+                |> withNoCmd
+
+        InitialBoard ->
+            { model
+                | gameState =
+                    { gameState
+                        | newBoard = NewBoard.initial
+                    }
+            }
+                |> withNoCmd
+
         SetTestClear testClear ->
             case gameState.testMode of
                 Nothing ->
@@ -1368,7 +1388,10 @@ updateInternal msg model =
                 |> withCmds [ clear, cmd ]
 
         Click ( row, col ) ->
-            if gameState.winner /= NoWinner || (not <| isPlaying model) then
+            if gameState.testMode /= Nothing then
+                doTestClick row col model
+
+            else if gameState.winner /= NoWinner || (not <| isPlaying model) then
                 model |> withNoCmd
 
             else
@@ -1634,6 +1657,41 @@ send model message =
 simulatorStepCmd : () -> Cmd Msg
 simulatorStepCmd x =
     Task.perform (\_ -> SimulatorStep) <| Task.succeed x
+
+
+doTestClick : Int -> Int -> Model -> ( Model, Cmd Msg )
+doTestClick row col model =
+    let
+        gameState =
+            model.gameState
+
+        board =
+            gameState.newBoard
+    in
+    case gameState.testMode of
+        Nothing ->
+            model |> withNoCmd
+
+        Just testMode ->
+            if testMode.clear then
+                { model
+                    | gameState =
+                        { gameState
+                            | newBoard =
+                                NewBoard.set (rc row col) Types.emptyPiece board
+                        }
+                }
+                    |> withNoCmd
+
+            else
+                { model
+                    | gameState =
+                        { gameState
+                            | newBoard =
+                                NewBoard.set (rc row col) testMode.piece board
+                        }
+                }
+                    |> withNoCmd
 
 
 doClick : Int -> Int -> Model -> ( Model, Cmd Msg )
@@ -2080,7 +2138,13 @@ mainPage bsize model =
                                     testMode.clear
                             in
                             div [ align "center" ]
-                                [ text "Clear: "
+                                [ button [ onClick EraseBoard ]
+                                    [ text "Erase Board!" ]
+                                , text " "
+                                , button [ onClick InitialBoard ]
+                                    [ text "Initial Setup" ]
+                                , br
+                                , text "Remove clicked: "
                                 , input
                                     [ type_ "checkbox"
                                     , checked <| testMode.clear
