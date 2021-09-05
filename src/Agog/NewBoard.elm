@@ -1154,7 +1154,7 @@ computeLongJumpSequences color board startPos =
                                 getLandingPoss jumpedPos []
 
                             landingPosMapper : RowCol -> List JumpSequence -> List JumpSequence
-                            landingPosMapper lpos jumpSequencess =
+                            landingPosMapper lpos jumpSequences =
                                 let
                                     jump =
                                         { over = jumpedPos
@@ -1173,18 +1173,13 @@ computeLongJumpSequences color board startPos =
                                             lpos
                                 in
                                 if moreJumps == [] then
-                                    [ jump ] :: res
+                                    [ jump ] :: jumpSequences
 
                                 else
                                     List.map (\seq -> jump :: seq) moreJumps
-                                        ++ res
+                                        ++ jumpSequences
                         in
-                        List.foldr
-                            (\lpos js ->
-                                landingPosMapper lpos [] ++ js
-                            )
-                            []
-                            landingPoss
+                        List.foldr landingPosMapper [] landingPoss
     in
     mapAllNeighbors mapper
         board
