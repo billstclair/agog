@@ -29,11 +29,13 @@ import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)
+        , Color(..)
         , Decoration(..)
         , GameState
         , Message(..)
         , NewBoard
         , Page(..)
+        , PieceType(..)
         , Player(..)
         , PlayerNames
         , PublicGame
@@ -43,6 +45,7 @@ import Agog.Types as Types
         , Settings
         , Style
         , StyleType(..)
+        , TestMode
         , Winner(..)
         )
 import Agog.WhichServer as WhichServer
@@ -217,6 +220,7 @@ type alias Model =
     , player : Player
     , gameState : GameState
     , isLocal : Bool
+    , lastTestMode : Maybe TestMode
     , gameid : String
     , playerid : PlayerId
     , isLive : Bool
@@ -254,6 +258,10 @@ type Msg
     | Join
     | JoinGame GameId
     | Disconnect
+    | SetTestMode Bool
+    | SetTestClear Bool
+    | SetTestColor Color
+    | SetTestPieceType String
     | ClearStorage
     | Click ( Int, Int )
     | ChatUpdate ChatSettings (Cmd Msg)
@@ -377,6 +385,7 @@ init flags url key =
             , time = Time.millisToPosix 0
             , requestedNew = False
             , styleType = LightStyle
+            , lastTestMode = Nothing
 
             -- persistent fields
             , page = MainPage
@@ -1257,6 +1266,99 @@ updateInternal msg model =
         Disconnect ->
             disconnect model
 
+        SetTestMode isTestMode ->
+            { model
+                | gameState =
+                    { gameState
+                        | testMode =
+                            if isTestMode then
+                                case model.lastTestMode of
+                                    Nothing ->
+                                        Just
+                                            { piece = { pieceType = Golem, color = WhiteColor }
+                                            , clear = False
+                                            }
+
+                                    jtm ->
+                                        jtm
+
+                            else
+                                Nothing
+                    }
+                , lastTestMode =
+                    if isTestMode then
+                        Nothing
+
+                    else
+                        gameState.testMode
+            }
+                |> withNoCmd
+
+        SetTestClear testClear ->
+            case gameState.testMode of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just testMode ->
+                    { model
+                        | gameState =
+                            { gameState
+                                | testMode =
+                                    Just { testMode | clear = testClear }
+                            }
+                    }
+                        |> withNoCmd
+
+        SetTestColor color ->
+            case gameState.testMode of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just testMode ->
+                    let
+                        testPiece =
+                            testMode.piece
+                    in
+                    { model
+                        | gameState =
+                            { gameState
+                                | testMode =
+                                    Just
+                                        { testMode
+                                            | piece =
+                                                { testPiece | color = color }
+                                        }
+                            }
+                    }
+                        |> withNoCmd
+
+        SetTestPieceType pieceString ->
+            let
+                { pieceType } =
+                    ED.stringToPiece pieceString
+            in
+            case gameState.testMode of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just testMode ->
+                    let
+                        testPiece =
+                            testMode.piece
+                    in
+                    { model
+                        | gameState =
+                            { gameState
+                                | testMode =
+                                    Just
+                                        { testMode
+                                            | piece =
+                                                { testPiece | pieceType = pieceType }
+                                        }
+                            }
+                    }
+                        |> withNoCmd
+
         ClearStorage ->
             let
                 ( mdl, cmd ) =
@@ -1757,7 +1859,6 @@ mainPage bsize model =
             bsize
             Click
             (Just <| Board.getSizer DefaultSizer)
-            model.decoration
             currentPlayer
             rotated
             gameState.path
@@ -1951,7 +2052,85 @@ mainPage bsize model =
                         "New Game"
                 ]
             , if model.isLocal then
-                text ""
+                div [ align "center" ]
+                    [ text "Test Mode: "
+                    , input
+                        [ type_ "checkbox"
+                        , checked <| gameState.testMode /= Nothing
+                        , onCheck SetTestMode
+                        ]
+                        []
+                    , case gameState.testMode of
+                        Nothing ->
+                            text ""
+
+                        Just testMode ->
+                            let
+                                testPiece =
+                                    testMode.piece
+
+                                pieceString =
+                                    ED.pieceToString testPiece
+                                        |> String.toUpper
+
+                                testColor =
+                                    testPiece.color
+
+                                testClear =
+                                    testMode.clear
+                            in
+                            div [ align "center" ]
+                                [ text "Clear: "
+                                , input
+                                    [ type_ "checkbox"
+                                    , checked <| testMode.clear
+                                    , onCheck SetTestClear
+                                    ]
+                                    []
+                                , if testMode.clear then
+                                    text ""
+
+                                  else
+                                    span []
+                                        [ br
+                                        , text "Test piece: "
+                                        , select [ onInput SetTestPieceType ]
+                                            [ option
+                                                [ value "G"
+                                                , selected <| pieceString == "G"
+                                                ]
+                                                [ text "Golem" ]
+                                            , option
+                                                [ value "H"
+                                                , selected <| pieceString == "H"
+                                                ]
+                                                [ text "Hulk" ]
+                                            , option
+                                                [ value "C"
+                                                , selected <| pieceString == "C"
+                                                ]
+                                                [ text "Corrupted Hulk" ]
+                                            , option
+                                                [ value "J"
+                                                , selected <| pieceString == "J"
+                                                ]
+                                                [ text "Journeyman" ]
+                                            ]
+                                        , text " "
+                                        , radio "testColor"
+                                            "white"
+                                            (testColor == WhiteColor)
+                                            False
+                                            (SetTestColor WhiteColor)
+                                        , text " "
+                                        , radio "testColor"
+                                            "black"
+                                            (testColor == BlackColor)
+                                            False
+                                            (SetTestColor BlackColor)
+                                        ]
+                                ]
+                    ]
 
               else
                 div [ align "center" ]

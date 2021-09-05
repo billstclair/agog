@@ -63,6 +63,7 @@ emptyGameState players =
     , score = Types.zeroScore
     , winner = NoWinner
     , path = []
+    , testMode = Nothing
     , private = Types.emptyPrivateGameState
     }
 

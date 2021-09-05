@@ -23,9 +23,11 @@ module Agog.EncodeDecode exposing
     , messageEncoderWithPrivate
     , movesDecoder
     , newBoardToString
+    , pieceToString
     , publicGameToFramework
     , stringToBoard
     , stringToNewBoard
+    , stringToPiece
     )
 
 import Agog.Types as Types
@@ -56,6 +58,7 @@ import Agog.Types as Types
         , Settings
         , Socket
         , StyleType(..)
+        , TestMode
         , UndoState
         , Winner(..)
         )
@@ -330,6 +333,21 @@ intPairDecoder =
             )
 
 
+encodeTestMode : TestMode -> Value
+encodeTestMode { piece, clear } =
+    JE.object
+        [ ( "piece", encodePiece piece )
+        , ( "clear", JE.bool clear )
+        ]
+
+
+testModeDecoder : Decoder TestMode
+testModeDecoder =
+    JD.succeed TestMode
+        |> required "piece" pieceDecoder
+        |> required "clear" JD.bool
+
+
 boolToString : Bool -> String
 boolToString bool =
     if bool then
@@ -493,6 +511,18 @@ stringToPiece string =
     { color = color
     , pieceType = pieceType
     }
+
+
+encodePiece : Piece -> Value
+encodePiece piece =
+    JE.string <| pieceToString piece
+
+
+pieceDecoder : Decoder Piece
+pieceDecoder =
+    JD.string
+        |> JD.andThen
+            (stringToPiece >> JD.succeed)
 
 
 newRowToString : Array Piece -> String
@@ -703,7 +733,7 @@ undoStateDecoder =
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { board, newBoard, moves, players, whoseTurn, selected, legalMoves, undoStates, score, winner, path } =
+        { board, newBoard, moves, players, whoseTurn, selected, legalMoves, undoStates, score, winner, path, testMode } =
             gameState
 
         privateValue =
@@ -725,6 +755,7 @@ encodeGameState includePrivate gameState =
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         , ( "path", JE.list encodeIntPair path )
+        , ( "testMode", encodeMaybe encodeTestMode testMode )
         , ( "private", privateValue )
         ]
 
@@ -743,6 +774,7 @@ gameStateDecoder =
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
         |> required "path" (JD.list intPairDecoder)
+        |> required "testMode" (JD.nullable testModeDecoder)
         |> required "private" privateGameStateDecoder
 
 

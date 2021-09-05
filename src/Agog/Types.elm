@@ -40,6 +40,7 @@ module Agog.Types exposing
     , Style
     , StyleType(..)
     , SubscriptionSet
+    , TestMode
     , UndoState
     , Winner(..)
     , darkStyle
@@ -313,6 +314,12 @@ type alias UndoState =
     }
 
 
+type alias TestMode =
+    { piece : Piece
+    , clear : Bool
+    }
+
+
 type alias GameState =
     { board : Board
     , newBoard : NewBoard
@@ -325,6 +332,7 @@ type alias GameState =
     , score : Score
     , winner : Winner
     , path : List ( Int, Int )
+    , testMode : Maybe TestMode
     , private : PrivateGameState --not sent over the wire
     }
 

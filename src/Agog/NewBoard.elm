@@ -31,7 +31,6 @@ import Agog.Types as Types
     exposing
         ( Board
         , Color(..)
-        , Decoration(..)
         , GameState
         , JumpSequence
         , MovesOrJumps(..)
@@ -331,8 +330,8 @@ getPathSizer sizer =
         |> .path
 
 
-render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Decoration -> Maybe Player -> Bool -> List ( Int, Int ) -> NewBoard -> Html msg
-render style size tagger sizer decoration player notRotated path board =
+render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Maybe Player -> Bool -> List ( Int, Int ) -> NewBoard -> Html msg
+render style size tagger sizer player notRotated path board =
     let
         rotated =
             False
