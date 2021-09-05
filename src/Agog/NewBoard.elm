@@ -531,15 +531,16 @@ drawHighlight color delta { row, col } =
             shadeRectParams delta row col
 
         w =
-            1
+            2
     in
     Svg.rect
-        [ x (tos <| p.x + w)
-        , y (tos <| p.y + w)
-        , width (tos <| p.width - 2 * w)
-        , height (tos <| p.height - 2 * w)
+        [ x (tos <| p.x + w // 2)
+        , y (tos <| p.y + w // 2)
+        , width (tos <| p.width - w)
+        , height (tos <| p.height - w)
         , strokeWidth <| tos w
         , stroke color
+        , fillOpacity "0"
         ]
         []
 
@@ -968,7 +969,7 @@ stepAgain from to =
         rc to.row (to.col - 1)
 
     else
-        to
+        { row = -1, col = -1 }
 
 
 populateLegalMoves : GameState -> GameState
@@ -1040,7 +1041,7 @@ computeJumpSequences color board startPos =
     let
         mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
         mapper jumpedPos jumpedPiece res =
-            if color == jumpedPiece.color then
+            if color == jumpedPiece.color || NoPiece == jumpedPiece.pieceType then
                 res
 
             else
@@ -1075,7 +1076,12 @@ computeJumpSequences color board startPos =
                                     )
                                     landingPos
                         in
-                        List.map (\seq -> jump :: seq) moreJumps
+                        if moreJumps == [] then
+                            [ jump ] :: res
+
+                        else
+                            List.map (\seq -> jump :: seq) moreJumps
+                                ++ res
     in
     mapAllNeighbors mapper board startPos []
 
@@ -1098,7 +1104,7 @@ computeLongJumpSequences color board startPos =
                         get pos board
                 in
                 if piece.pieceType == NoPiece then
-                    findLastPos pos towards
+                    findLastPos towards pos
 
                 else
                     Just ( pos, piece )
@@ -1107,11 +1113,11 @@ computeLongJumpSequences color board startPos =
         mapper pos piece res =
             let
                 maybeJumpedPair =
-                    if piece.pieceType == NoPiece then
+                    if piece.pieceType /= NoPiece then
                         Just ( pos, piece )
 
                     else
-                        findLastPos pos (stepAgain startPos pos)
+                        findLastPos startPos pos
             in
             case maybeJumpedPair of
                 Nothing ->
@@ -1142,8 +1148,7 @@ computeLongJumpSequences color board startPos =
 
                                     else
                                         getLandingPoss landingPos <|
-                                            landingPos
-                                                :: poss
+                                            (landingPos :: poss)
 
                             landingPoss =
                                 getLandingPoss jumpedPos []
@@ -1167,7 +1172,12 @@ computeLongJumpSequences color board startPos =
                                             )
                                             lpos
                                 in
-                                List.map (\seq -> jump :: seq) moreJumps
+                                if moreJumps == [] then
+                                    [ jump ] :: res
+
+                                else
+                                    List.map (\seq -> jump :: seq) moreJumps
+                                        ++ res
                         in
                         List.foldr
                             (\lpos js ->

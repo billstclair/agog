@@ -201,7 +201,7 @@ lightStyle =
     , compassOpacity = "0.5"
     , shadeColor = "lightgray"
     , selectedColor = "black"
-    , moveColor = "lightblue"
+    , moveColor = "blue"
     }
 
 

@@ -33,6 +33,7 @@ import Agog.Types as Types
         , Decoration(..)
         , GameState
         , Message(..)
+        , MovesOrJumps(..)
         , NewBoard
         , Page(..)
         , PieceType(..)
@@ -1301,6 +1302,8 @@ updateInternal msg model =
                 | gameState =
                     { gameState
                         | newBoard = NewBoard.empty
+                        , selected = Nothing
+                        , legalMoves = Moves []
                     }
             }
                 |> withNoCmd
@@ -1310,6 +1313,8 @@ updateInternal msg model =
                 | gameState =
                     { gameState
                         | newBoard = NewBoard.initial
+                        , selected = Nothing
+                        , legalMoves = Moves []
                     }
             }
                 |> withNoCmd
@@ -1680,16 +1685,30 @@ doTestClick row col model =
                             | newBoard =
                                 NewBoard.set (rc row col) Types.emptyPiece board
                         }
+                            |> NewBoard.populateLegalMoves
                 }
                     |> withNoCmd
 
             else
+                let
+                    rowcol =
+                        rc row col
+
+                    { pieceType } =
+                        NewBoard.get rowcol board
+
+                    gs =
+                        if pieceType == NoPiece then
+                            { gameState
+                                | newBoard =
+                                    NewBoard.set rowcol testMode.piece board
+                            }
+
+                        else
+                            { gameState | selected = Just rowcol }
+                in
                 { model
-                    | gameState =
-                        { gameState
-                            | newBoard =
-                                NewBoard.set (rc row col) testMode.piece board
-                        }
+                    | gameState = gs |> NewBoard.populateLegalMoves
                 }
                     |> withNoCmd
 
