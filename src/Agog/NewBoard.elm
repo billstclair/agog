@@ -1180,6 +1180,7 @@ computeLongJumpSequences color board startPos =
                                         ++ jumpSequences
                         in
                         List.foldr landingPosMapper [] landingPoss
+                            ++ res
     in
     mapAllNeighbors mapper
         board
