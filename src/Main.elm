@@ -521,14 +521,7 @@ handleGetResponse key value model =
 
                         else if model2.isLocal then
                             { model2 | gameid = "" }
-                                |> withCmd
-                                    (send model2 <|
-                                        NewReq
-                                            { initialNewReqBody
-                                                | restoreState =
-                                                    Just model2.gameState
-                                            }
-                                    )
+                                |> withCmd (initialNewReqCmd model2)
 
                         else
                             model2 |> withNoCmd
@@ -537,6 +530,16 @@ handleGetResponse key value model =
 
     else
         model |> withNoCmd
+
+
+initialNewReqCmd : Model -> Cmd Msg
+initialNewReqCmd model =
+    send model <|
+        NewReq
+            { initialNewReqBody
+                | restoreState =
+                    Just model.gameState
+            }
 
 
 modelToSavedModel : Model -> SavedModel
@@ -1390,7 +1393,7 @@ updateInternal msg model =
                     init JE.null "url" model.key
             in
             { mdl | started = True }
-                |> withCmds [ clear, cmd ]
+                |> withCmds [ clear, cmd, initialNewReqCmd mdl ]
 
         Click ( row, col ) ->
             if gameState.testMode /= Nothing then
