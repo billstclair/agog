@@ -216,8 +216,8 @@ darkStyle =
     , compassColor = "white"
     , compassOpacity = "0.3"
     , shadeColor = "lightgray"
-    , selectedColor = "darkgray"
-    , moveColor = "blue"
+    , selectedColor = "orange"
+    , moveColor = "green"
     }
 
 

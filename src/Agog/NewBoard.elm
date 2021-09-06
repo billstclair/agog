@@ -531,7 +531,7 @@ drawHighlight color delta { row, col } =
             shadeRectParams delta row col
 
         w =
-            2
+            4
     in
     Svg.rect
         [ x (tos <| p.x + w // 2)
