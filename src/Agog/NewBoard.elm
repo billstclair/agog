@@ -1013,11 +1013,17 @@ legalJumps board startPos =
             if pieceType == NoPiece then
                 []
 
-            else if isHulkType pieceType then
-                computeLongJumpSequences color board startPos
-
             else
-                computeJumpSequences color board startPos
+                let
+                    board2 =
+                        board |> set startPos Types.emptyPiece
+                in
+                if isHulkType pieceType then
+                    Debug.log "computeLongJumpSequences" <|
+                        computeLongJumpSequences color board2 startPos
+
+                else
+                    computeJumpSequences color board2 startPos
     in
     removeNonMaximalJumpSequences res
 
@@ -1165,9 +1171,7 @@ computeLongJumpSequences color board startPos =
                                         computeLongJumpSequences color
                                             (set jumpedPos
                                                 -- prevents second jump of same piece.
-                                                { jumpedPiece
-                                                    | color = color
-                                                }
+                                                { jumpedPiece | color = color }
                                                 board
                                             )
                                             lpos
@@ -1183,7 +1187,7 @@ computeLongJumpSequences color board startPos =
                             ++ res
     in
     mapAllNeighbors mapper
-        board
+        (board |> set startPos Types.emptyPiece)
         startPos
         []
 
