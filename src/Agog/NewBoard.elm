@@ -532,12 +532,40 @@ drawHighlight color delta { row, col } =
 
         w =
             4
+
+        xoff =
+            if col == 0 then
+                (w - lineWidth) // 2
+
+            else
+                0
+
+        xreduce =
+            if col == 7 then
+                (w - lineWidth) // 2
+
+            else
+                0
+
+        yoff =
+            if row == 0 then
+                (w - lineWidth) // 2
+
+            else
+                0
+
+        yreduce =
+            if row == 7 then
+                (w - lineWidth) // 2
+
+            else
+                0
     in
     Svg.rect
-        [ x (tos <| p.x + w // 2)
-        , y (tos <| p.y + w // 2)
-        , width (tos <| p.width - w)
-        , height (tos <| p.height - w)
+        [ x (tos <| p.x + xoff)
+        , y (tos <| p.y + yoff)
+        , width (tos <| p.width - xreduce)
+        , height (tos <| p.height - yreduce)
         , strokeWidth <| tos w
         , stroke color
         , fillOpacity "0"
@@ -547,28 +575,28 @@ drawHighlight color delta { row, col } =
 
 drawHighlights : Style -> Maybe RowCol -> MovesOrJumps -> Int -> List (Svg msg)
 drawHighlights style selected legalMoves delta =
-    (case selected of
-        Nothing ->
-            []
+    (case legalMoves of
+        Moves rowcols ->
+            List.map (drawHighlight style.moveColor delta) rowcols
 
-        Just rowcol ->
-            [ drawHighlight style.selectedColor delta rowcol ]
+        Jumps sequences ->
+            let
+                addSequence sequence res =
+                    case List.head sequence of
+                        Nothing ->
+                            res
+
+                        Just { to } ->
+                            drawHighlight style.moveColor delta to :: res
+            in
+            List.foldr addSequence [] sequences
     )
-        ++ (case legalMoves of
-                Moves rowcols ->
-                    List.map (drawHighlight style.moveColor delta) rowcols
+        ++ (case selected of
+                Nothing ->
+                    []
 
-                Jumps sequences ->
-                    let
-                        addSequence sequence res =
-                            case List.head sequence of
-                                Nothing ->
-                                    res
-
-                                Just { to } ->
-                                    drawHighlight style.moveColor delta to :: res
-                    in
-                    List.foldr addSequence [] sequences
+                Just rowcol ->
+                    [ drawHighlight style.selectedColor delta rowcol ]
            )
 
 
@@ -1019,8 +1047,7 @@ legalJumps board startPos =
                         board |> set startPos Types.emptyPiece
                 in
                 if isHulkType pieceType then
-                    Debug.log "computeLongJumpSequences" <|
-                        computeLongJumpSequences color board2 startPos
+                    computeLongJumpSequences color board2 startPos
 
                 else
                     computeJumpSequences color board2 startPos
