@@ -60,6 +60,7 @@ import Agog.Types as Types
         , StyleType(..)
         , TestMode
         , UndoState
+        , UndoWhichJumps(..)
         , Winner(..)
         )
 import Array exposing (Array)
@@ -716,10 +717,11 @@ privateGameStateDecoder =
 
 
 encodeUndoState : UndoState -> Value
-encodeUndoState { board, selected } =
+encodeUndoState { board, selected, legalMoves } =
     JE.object
         [ ( "board", encodeNewBoard board )
         , ( "selected", encodeMaybe encodeRowCol selected )
+        , ( "legalMoves", encodeMovesOrJumps legalMoves )
         ]
 
 
@@ -728,12 +730,13 @@ undoStateDecoder =
     JD.succeed UndoState
         |> required "board" newBoardDecoder
         |> required "selected" (JD.nullable rowColDecoder)
+        |> required "legalMoves" movesOrJumpsDecoder
 
 
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { board, newBoard, moves, players, whoseTurn, selected, legalMoves, undoStates, score, winner, path, testMode } =
+        { board, newBoard, moves, players, whoseTurn, selected, legalMoves, undoStates, jumps, score, winner, path, testMode } =
             gameState
 
         privateValue =
@@ -752,6 +755,7 @@ encodeGameState includePrivate gameState =
         , ( "selected", encodeMaybe encodeRowCol selected )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
         , ( "undoStates", JE.list encodeUndoState undoStates )
+        , ( "jumps", encodeJumpSequence jumps )
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         , ( "path", JE.list encodeIntPair path )
@@ -771,6 +775,7 @@ gameStateDecoder =
         |> required "selected" (JD.nullable rowColDecoder)
         |> required "legalMoves" movesOrJumpsDecoder
         |> required "undoStates" (JD.list undoStateDecoder)
+        |> required "jumps" jumpSequenceDecoder
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
         |> required "path" (JD.list intPairDecoder)
@@ -848,6 +853,34 @@ movesOrJumpsDecoder =
         ]
 
 
+encodeUndoWhichJumps : UndoWhichJumps -> Value
+encodeUndoWhichJumps undoWhichJumps =
+    JE.string
+        (case undoWhichJumps of
+            UndoOneJump ->
+                "UndoOneJump"
+
+            UndoAllJumps ->
+                "UndoAllJumps"
+        )
+
+
+undoWhichJumpsDecoder : Decoder UndoWhichJumps
+undoWhichJumpsDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                if s == "UndoOneJump" then
+                    JD.succeed UndoOneJump
+
+                else if s == "UndoAllJumps" then
+                    JD.succeed UndoAllJumps
+
+                else
+                    JD.fail <| "Unknown UndoWhichJumps: " ++ s
+            )
+
+
 encodeChoice : Choice -> Value
 encodeChoice choice =
     JE.object
@@ -857,6 +890,9 @@ encodeChoice choice =
 
             ChooseMove rowCol ->
                 ( "Choosemove", encodeRowCol rowCol )
+
+            ChooseUndoJump undoWhichJumps ->
+                ( "ChooseUndoJump", encodeUndoWhichJumps undoWhichJumps )
 
             ChooseResign player ->
                 ( "ChooseResign", encodePlayer player )
@@ -873,6 +909,8 @@ choiceDecoder =
             |> JD.andThen (ChoosePiece >> JD.succeed)
         , JD.field "ChooseMove" rowColDecoder
             |> JD.andThen (ChooseMove >> JD.succeed)
+        , JD.field "ChooseUndoJump" undoWhichJumpsDecoder
+            |> JD.andThen (ChooseUndoJump >> JD.succeed)
         , JD.field "ChooseResign" playerDecoder
             |> JD.andThen (ChooseResign >> JD.succeed)
         , JD.field "ChooseNew" playerDecoder

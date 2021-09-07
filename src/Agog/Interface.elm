@@ -1,9 +1,9 @@
 --------------------------------------------------------------------
 --
 -- Interface.elm
--- Zephyrnot server interface.
+-- AGOG server interface.
 -- Runs on local machine for local play, and server for networked play.
--- Copyright (c) 2019 Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2019-2021x Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE.txt
@@ -24,13 +24,18 @@ import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)
+        , Color(..)
         , Decoration(..)
         , GameState
+        , JumpSequence
         , Message(..)
         , MovesOrJumps(..)
+        , Piece
+        , PieceType(..)
         , Player(..)
         , PlayerNames
         , PublicType(..)
+        , RowCol
         , Score
         , ServerState
         , Winner(..)
@@ -60,6 +65,7 @@ emptyGameState players =
     , selected = Nothing
     , legalMoves = Moves []
     , undoStates = []
+    , jumps = []
     , score = Types.zeroScore
     , winner = NoWinner
     , path = []
@@ -106,10 +112,6 @@ lookupGame message playerid state =
 
 messageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 messageProcessor state message =
-    let
-        foo =
-            ( state, Nothing )
-    in
     case message of
         NewReq { name, player, publicType, restoreState } ->
             if name == "" then
@@ -392,10 +394,48 @@ messageProcessor state message =
                                     errorRes message state "Game already over"
 
                         ChoosePiece rowCol ->
-                            -- TODO
-                            ( state, Nothing )
+                            let
+                                board =
+                                    gameState.newBoard
+                            in
+                            if gameState.undoStates /= [] then
+                                errorRes message state "A jump sequence is in progress."
+
+                            else
+                                let
+                                    piece =
+                                        NewBoard.get rowCol board
+                                in
+                                if piece.pieceType == NoPiece then
+                                    errorRes message state "No piece at chosen location."
+
+                                else if not <| colorMatchesPlayer piece.color player then
+                                    errorRes message state "Chosen piece not of player's color."
+
+                                else
+                                    let
+                                        gs =
+                                            { gameState
+                                                | selected = Just rowCol
+                                            }
+                                                |> NewBoard.populateLegalMoves
+
+                                        state2 =
+                                            { state | state = Just gs }
+                                    in
+                                    ( state2
+                                    , Just <|
+                                        PlayRsp
+                                            { gameid = gameid
+                                            , gameState = gs
+                                            , decoration = NoDecoration
+                                            }
+                                    )
 
                         ChooseMove rowCol ->
+                            chooseMove state message gameid gameState player rowCol
+
+                        ChooseUndoJump undoWhichJumps ->
                             -- TODO
                             ( state, Nothing )
 
@@ -463,6 +503,103 @@ messageProcessor state message =
 
         _ ->
             errorRes message state "Received a non-request."
+
+
+chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> ( Types.ServerState, Maybe Message )
+chooseMove state message gameid gameState player rowCol =
+    let
+        board =
+            gameState.newBoard
+    in
+    case gameState.legalMoves of
+        Moves rowCols ->
+            if not <| List.member rowCol rowCols then
+                errorRes message state "Not a legal move."
+
+            else
+                case gameState.selected of
+                    Nothing ->
+                        errorRes message state "No selected piece."
+
+                    Just selected ->
+                        let
+                            gs =
+                                { gameState
+                                    | newBoard =
+                                        NewBoard.set selected Types.emptyPiece board
+                                            |> NewBoard.set rowCol (NewBoard.get selected board)
+                                    , selected = Nothing
+                                    , legalMoves = Moves []
+                                    , whoseTurn = Types.otherPlayer player
+                                    , undoStates = [] -- not necessary
+                                    , jumps = [] -- not necessary
+
+                                    -- TODO
+                                    , moves = gameState.moves
+                                    , winner = NoWinner
+                                }
+
+                            state2 =
+                                { state | state = Just gs }
+                        in
+                        ( state2
+                        , Just <|
+                            PlayRsp
+                                { gameid = gameid
+                                , gameState = gs
+                                , decoration = NoDecoration
+                                }
+                        )
+
+        Jumps sequences ->
+            if gameState.undoStates /= [] then
+                errorRes message state "You're in the middle of a jump sequence."
+
+            else
+                let
+                    remaining =
+                        List.filter (isFirstJumpTo rowCol) sequences
+                in
+                if remaining == [] then
+                    errorRes message state "Not a legal jump."
+
+                else
+                    let
+                        newSequences =
+                            List.map (List.drop 1) remaining
+                    in
+                    case List.head newSequences of
+                        Nothing ->
+                            -- Can't happen
+                            ( state, Nothing )
+
+                        Just [] ->
+                            -- End of jumps
+                            -- TODO
+                            ( state, Nothing )
+
+                        _ ->
+                            -- TODO
+                            ( state, Nothing )
+
+
+isFirstJumpTo : RowCol -> JumpSequence -> Bool
+isFirstJumpTo rowCol sequence =
+    case List.head sequence of
+        Nothing ->
+            False
+
+        Just oneJump ->
+            oneJump.to == rowCol
+
+
+colorMatchesPlayer : Color -> Player -> Bool
+colorMatchesPlayer color player =
+    if color == WhiteColor then
+        player == WhitePlayer
+
+    else
+        player == BlackPlayer
 
 
 doPlay : Decoration -> GameId -> GameState -> Types.ServerState -> ( Types.ServerState, Maybe Message )

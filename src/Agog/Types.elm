@@ -42,6 +42,7 @@ module Agog.Types exposing
     , SubscriptionSet
     , TestMode
     , UndoState
+    , UndoWhichJumps(..)
     , Winner(..)
     , darkStyle
     , emptyPiece
@@ -317,6 +318,7 @@ type MovesOrJumps
 type alias UndoState =
     { board : NewBoard
     , selected : Maybe RowCol
+    , legalMoves : MovesOrJumps
     }
 
 
@@ -335,6 +337,7 @@ type alias GameState =
     , selected : Maybe RowCol
     , legalMoves : MovesOrJumps
     , undoStates : List UndoState
+    , jumps : List OneJump
     , score : Score
     , winner : Winner
     , path : List ( Int, Int )
@@ -355,9 +358,15 @@ type alias RowCol =
     }
 
 
+type UndoWhichJumps
+    = UndoOneJump
+    | UndoAllJumps
+
+
 type Choice
     = ChoosePiece RowCol
     | ChooseMove RowCol
+    | ChooseUndoJump UndoWhichJumps
     | ChooseResign Player
     | ChooseNew Player
 
