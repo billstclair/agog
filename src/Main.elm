@@ -2529,7 +2529,7 @@ When a golem moves, record the row or column from which they moved and the coord
 
 When a unit makes a capture, record "x" between the unit label/starting row or column and the coordinates of the square they moved to. To record a journeyman creating a corrupted hulk, record "X" instead (capital "x"). For example, a journeyman making a capturing sequence from a1 to a3 to c3, capturing the first unit and creating a corrupted hulk from the second, would be recorded as "Jxa3Xc3".
 
-If White wins, record "1—0". If Black wins, record "0—1".
+If White wins, record "1-0". If Black wins, record "0-1".
 """
             ]
         , playButton
@@ -2540,6 +2540,7 @@ If White wins, record "1—0". If Black wins, record "0—1".
 If players of differing skill levels wish to play an even game, the stronger player can be given a handicap by removing 1 or more of their golems from the board before play starts. The handicapped player always plays Black, and the golems must be removed such that the remaining forces are symmetrically arranged and are removed from the squares closest to the center of the board. For example, for a handicap of 1 remove the golem on f6; for a handicap of 2, remove the golems on e6 and f5; for a handicap of 3 remove the golems on e6, f5, and f6, etc. If the weaker player wins the majority of their games at a particular handicap, reduce the handicap by 1.
 """
             ]
+        , playButton
         ]
 
 
