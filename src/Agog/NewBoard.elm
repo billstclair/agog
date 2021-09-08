@@ -339,6 +339,9 @@ render style size tagger sizer player notRotated gameState =
         legalMoves =
             gameState.legalMoves
 
+        jumps =
+            gameState.jumps
+
         selected =
             gameState.selected
 
@@ -394,7 +397,7 @@ render style size tagger sizer player notRotated gameState =
                 List.concat
                     [ drawRows style delta rotated
                     , drawCols style delta rotated sizer board
-                    , drawRects style selected legalMoves board delta
+                    , drawRects style selected legalMoves jumps board delta
                     , drawClickRects style delta rotated tagger
                     ]
             ]
@@ -502,8 +505,8 @@ removeBlankGs svgs =
     List.filter ((/=) (g [] [])) svgs
 
 
-drawRects : Style -> Maybe RowCol -> MovesOrJumps -> NewBoard -> Int -> List (Svg msg)
-drawRects style selected legalMoves board delta =
+drawRects : Style -> Maybe RowCol -> MovesOrJumps -> List OneJump -> NewBoard -> Int -> List (Svg msg)
+drawRects style selected legalMoves jumps board delta =
     let
         indices =
             [ 0, 1, 2, 3, 4, 5, 6, 7 ]
@@ -522,6 +525,7 @@ drawRects style selected legalMoves board delta =
         ++ (List.foldr (dorow (drawPiece style board)) [] indices
                 |> removeBlankGs
            )
+        ++ drawJumps style board jumps delta
 
 
 drawHighlight : String -> Int -> RowCol -> Svg msg
@@ -750,6 +754,85 @@ drawShadeRect style delta rowidx colidx =
             , fill style.shadeColor
             ]
             []
+
+
+drawJumps : Style -> NewBoard -> List OneJump -> Int -> List (Svg msg)
+drawJumps style board jumps delta =
+    let
+        color =
+            style.selectedColor
+
+        deltaF =
+            toFloat delta
+
+        offset =
+            1.0 / 8.0
+
+        drawJump oneJump =
+            let
+                { row, col } =
+                    oneJump.over
+
+                rowidxF =
+                    toFloat row
+
+                colidxF =
+                    toFloat col
+
+                piece =
+                    get oneJump.over board
+
+                ( rowF, colF ) =
+                    case piece.pieceType of
+                        Hulk ->
+                            ( rowidxF - offset, colidxF + offset )
+
+                        CorruptedHulk ->
+                            ( rowidxF - offset, colidxF + offset )
+
+                        Journeyman ->
+                            ( rowidxF - 2 * offset, colidxF + 2 * offset )
+
+                        _ ->
+                            ( rowidxF, colidxF )
+
+                xc =
+                    deltaF * colidxF + deltaF
+
+                yc =
+                    deltaF * rowidxF + deltaF
+
+                len =
+                    deltaF * (9.0 / 16.0) * (2.0 / 3.0)
+
+                leno2 =
+                    len / 2
+
+                w =
+                    "3"
+            in
+            g []
+                [ Svg.line
+                    [ x1 <| tos (round <| xc - leno2)
+                    , x2 <| tos (round <| xc + leno2)
+                    , y1 <| tos (round yc)
+                    , y2 <| tos (round yc)
+                    , strokeWidth w
+                    , stroke color
+                    ]
+                    []
+                , Svg.line
+                    [ y1 <| tos (round <| yc - leno2)
+                    , y2 <| tos (round <| yc + leno2)
+                    , x1 <| tos (round xc)
+                    , x2 <| tos (round xc)
+                    , strokeWidth w
+                    , stroke color
+                    ]
+                    []
+                ]
+    in
+    List.map drawJump jumps
 
 
 drawClickRects : Style -> Int -> Bool -> (( Int, Int ) -> msg) -> List (Svg msg)
