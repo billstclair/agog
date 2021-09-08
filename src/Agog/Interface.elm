@@ -40,6 +40,7 @@ import Agog.Types as Types
         , Score
         , ServerState
         , UndoState
+        , UndoWhichJumps(..)
         , Winner(..)
         )
 import Debug
@@ -443,8 +444,7 @@ messageProcessor state message =
                             chooseMove state message gameid gameState player rowCol
 
                         ChooseUndoJump undoWhichJumps ->
-                            -- TODO
-                            ( state, Nothing )
+                            chooseUndoJump state message gameid gameState undoWhichJumps
 
         PublicGamesReq { subscribe, forName, gameid } ->
             -- subscribe is processed by the server code only
@@ -649,6 +649,53 @@ chooseMove state message gameid gameState player rowCol =
                                             , decoration = NoDecoration
                                             }
                                     )
+
+
+chooseUndoJump : Types.ServerState -> Message -> String -> GameState -> UndoWhichJumps -> ( Types.ServerState, Maybe Message )
+chooseUndoJump state message gameid gameState undoWhichJumps =
+    case undoWhichJumps of
+        UndoAllJumps ->
+            let
+                dropCnt =
+                    List.length gameState.undoStates - 1
+
+                gs =
+                    { gameState
+                        | undoStates =
+                            List.drop dropCnt gameState.undoStates
+                        , jumps =
+                            List.drop dropCnt gameState.jumps
+                    }
+            in
+            chooseUndoJump state message gameid gs UndoOneJump
+
+        UndoOneJump ->
+            case gameState.undoStates of
+                [] ->
+                    errorRes message state "There is nothing to undo."
+
+                undoState :: undoStates ->
+                    let
+                        gs =
+                            { gameState
+                                | newBoard = undoState.board
+                                , selected = undoState.selected
+                                , legalMoves = undoState.legalMoves
+                                , undoStates = undoStates
+                                , jumps = List.drop 1 gameState.jumps
+                            }
+
+                        state2 =
+                            { state | state = Just gs }
+                    in
+                    ( state2
+                    , Just <|
+                        PlayRsp
+                            { gameid = gameid
+                            , gameState = gs
+                            , decoration = NoDecoration
+                            }
+                    )
 
 
 isFirstJumpTo : RowCol -> JumpSequence -> Bool
