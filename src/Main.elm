@@ -1736,12 +1736,16 @@ doClick row col model =
 
         withACmd =
             withPlayReq model.playerid <|
-                case gameState.selected of
-                    Nothing ->
-                        ChoosePiece rowCol
-
-                    Just _ ->
+                let
+                    piece =
+                        NewBoard.get (rc row col) gameState.newBoard
+                in
+                case piece.pieceType of
+                    NoPiece ->
                         ChooseMove rowCol
+
+                    _ ->
+                        ChoosePiece rowCol
     in
     model |> withACmd
 
@@ -1867,11 +1871,8 @@ mainPage bsize model =
             if not model.isLocal then
                 Just model.player
 
-            else if model.firstSelection == NoDecoration then
-                Just model.chooseFirst
-
             else
-                Just <| Types.otherPlayer model.chooseFirst
+                Just gameState.whoseTurn
 
         ( rowname, colname ) =
             if currentPlayer == Just BlackPlayer then

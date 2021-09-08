@@ -298,10 +298,10 @@ messageProcessor state message =
         PlayReq { playerid, placement } ->
             case lookupGame message playerid state of
                 Err res ->
-                    res
+                    Debug.log "PlayReq Err" res
 
                 Ok ( gameid, gameState, player ) ->
-                    case placement of
+                    case Debug.log "PlayReq" placement of
                         ChooseNew newPlayer ->
                             case gameState.winner of
                                 NoWinner ->
@@ -412,7 +412,7 @@ messageProcessor state message =
                                 if piece.pieceType == NoPiece then
                                     errorRes message state "No piece at chosen location."
 
-                                else if not <| colorMatchesPlayer piece.color player then
+                                else if not <| colorMatchesPlayer piece.color gameState.whoseTurn then
                                     errorRes message state "Chosen piece not of player's color."
 
                                 else
@@ -427,11 +427,8 @@ messageProcessor state message =
                                                         Just rowCol
                                             }
                                                 |> NewBoard.populateLegalMoves
-
-                                        state2 =
-                                            { state | state = Just gs }
                                     in
-                                    ( state2
+                                    ( ServerInterface.updateGame gameid gs state
                                     , Just <|
                                         PlayRsp
                                             { gameid = gameid
@@ -517,6 +514,9 @@ chooseMove state message gameid gameState player rowCol =
     let
         board =
             gameState.newBoard
+
+        rowcol2 =
+            Debug.log "chooseMove" rowCol
     in
     case gameState.selected of
         Nothing ->
@@ -544,18 +544,15 @@ chooseMove state message gameid gameState player rowCol =
                                             |> NewBoard.set rowCol piece
                                     , selected = Nothing
                                     , legalMoves = Moves []
-                                    , whoseTurn = Types.otherPlayer player
+                                    , whoseTurn = Types.otherPlayer gameState.whoseTurn
 
                                     -- TODO
                                     , moves = gameState.moves
                                     , winner = NoWinner
                                 }
                                     |> updateScore
-
-                            state2 =
-                                { state | state = Just gs }
                         in
-                        ( state2
+                        ( ServerInterface.updateGame gameid gs state
                         , Just <|
                             PlayRsp
                                 { gameid = gameid
@@ -568,20 +565,19 @@ chooseMove state message gameid gameState player rowCol =
                     let
                         remaining =
                             List.filter (isFirstJumpTo rowCol) sequences
+
+                        newSequences =
+                            List.map (List.drop 1) remaining
                     in
                     case remaining of
                         [] ->
                             errorRes message state "Not a legal jump."
 
                         firstSequence :: _ ->
-                            let
-                                newSequences =
-                                    List.map (List.drop 1) remaining
-                            in
                             case List.head newSequences of
                                 Nothing ->
                                     -- Can't happen
-                                    ( state, Nothing )
+                                    errorRes message state "No jump sequences."
 
                                 Just [] ->
                                     -- End of jumps
@@ -589,14 +585,24 @@ chooseMove state message gameid gameState player rowCol =
                                         doJump jump board2 =
                                             NewBoard.set jump.over Types.emptyPiece board2
 
+                                        jumps =
+                                            case List.head firstSequence of
+                                                Nothing ->
+                                                    -- can't happen
+                                                    gameState.jumps
+
+                                                Just jump ->
+                                                    jump :: gameState.jumps
+
                                         gs =
                                             { gameState
                                                 | newBoard =
-                                                    List.foldr doJump board gameState.jumps
+                                                    List.foldr doJump board jumps
                                                         |> NewBoard.set selected Types.emptyPiece
                                                         |> NewBoard.set rowCol piece
                                                 , selected = Nothing
                                                 , legalMoves = Moves []
+                                                , whoseTurn = Types.otherPlayer gameState.whoseTurn
                                                 , undoStates = []
                                                 , jumps = []
 
@@ -605,11 +611,8 @@ chooseMove state message gameid gameState player rowCol =
                                                 , winner = NoWinner
                                             }
                                                 |> updateScore
-
-                                        state2 =
-                                            { state | state = Just gs }
                                     in
-                                    ( state2
+                                    ( ServerInterface.updateGame gameid gs state
                                     , Just <|
                                         PlayRsp
                                             { gameid = gameid
@@ -626,7 +629,7 @@ chooseMove state message gameid gameState player rowCol =
                                                     NewBoard.set selected Types.emptyPiece board
                                                         |> NewBoard.set rowCol piece
                                                 , selected = Just rowCol
-                                                , legalMoves = Jumps remaining
+                                                , legalMoves = Jumps newSequences
                                                 , undoStates =
                                                     { board = board
                                                     , moves = gameState.moves
@@ -638,11 +641,8 @@ chooseMove state message gameid gameState player rowCol =
                                                     List.take 1 firstSequence
                                                         ++ gameState.jumps
                                             }
-
-                                        state2 =
-                                            { state | state = Just gs }
                                     in
-                                    ( state2
+                                    ( ServerInterface.updateGame gameid gs state
                                     , Just <|
                                         PlayRsp
                                             { gameid = gameid
@@ -686,11 +686,8 @@ chooseUndoJump state message gameid gameState undoWhichJumps =
                                 , undoStates = undoStates
                                 , jumps = List.drop 1 gameState.jumps
                             }
-
-                        state2 =
-                            { state | state = Just gs }
                     in
-                    ( state2
+                    ( ServerInterface.updateGame gameid gs state
                     , Just <|
                         PlayRsp
                             { gameid = gameid

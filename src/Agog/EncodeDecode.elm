@@ -891,7 +891,7 @@ encodeChoice choice =
                 ( "ChoosePiece", encodeRowCol rowCol )
 
             ChooseMove rowCol ->
-                ( "Choosemove", encodeRowCol rowCol )
+                ( "ChooseMove", encodeRowCol rowCol )
 
             ChooseUndoJump undoWhichJumps ->
                 ( "ChooseUndoJump", encodeUndoWhichJumps undoWhichJumps )
