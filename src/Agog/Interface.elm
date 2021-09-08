@@ -30,6 +30,7 @@ import Agog.Types as Types
         , JumpSequence
         , Message(..)
         , MovesOrJumps(..)
+        , NewBoard
         , Piece
         , PieceType(..)
         , Player(..)
@@ -38,6 +39,7 @@ import Agog.Types as Types
         , RowCol
         , Score
         , ServerState
+        , UndoState
         , Winner(..)
         )
 import Debug
@@ -416,7 +418,12 @@ messageProcessor state message =
                                     let
                                         gs =
                                             { gameState
-                                                | selected = Just rowCol
+                                                | selected =
+                                                    if gameState.selected == Just rowCol then
+                                                        Nothing
+
+                                                    else
+                                                        Just rowCol
                                             }
                                                 |> NewBoard.populateLegalMoves
 
@@ -511,33 +518,39 @@ chooseMove state message gameid gameState player rowCol =
         board =
             gameState.newBoard
     in
-    case gameState.legalMoves of
-        Moves rowCols ->
-            if not <| List.member rowCol rowCols then
-                errorRes message state "Not a legal move."
+    case gameState.selected of
+        Nothing ->
+            errorRes message state "No selected piece."
 
-            else
-                case gameState.selected of
-                    Nothing ->
-                        errorRes message state "No selected piece."
+        Just selected ->
+            let
+                legalMoves =
+                    gameState.legalMoves
 
-                    Just selected ->
+                piece =
+                    NewBoard.get selected board
+            in
+            case legalMoves of
+                Moves rowCols ->
+                    if not <| List.member rowCol rowCols then
+                        errorRes message state "Not a legal move."
+
+                    else
                         let
                             gs =
                                 { gameState
                                     | newBoard =
                                         NewBoard.set selected Types.emptyPiece board
-                                            |> NewBoard.set rowCol (NewBoard.get selected board)
+                                            |> NewBoard.set rowCol piece
                                     , selected = Nothing
                                     , legalMoves = Moves []
                                     , whoseTurn = Types.otherPlayer player
-                                    , undoStates = [] -- not necessary
-                                    , jumps = [] -- not necessary
 
                                     -- TODO
                                     , moves = gameState.moves
                                     , winner = NoWinner
                                 }
+                                    |> updateScore
 
                             state2 =
                                 { state | state = Just gs }
@@ -551,36 +564,91 @@ chooseMove state message gameid gameState player rowCol =
                                 }
                         )
 
-        Jumps sequences ->
-            if gameState.undoStates /= [] then
-                errorRes message state "You're in the middle of a jump sequence."
-
-            else
-                let
-                    remaining =
-                        List.filter (isFirstJumpTo rowCol) sequences
-                in
-                if remaining == [] then
-                    errorRes message state "Not a legal jump."
-
-                else
+                Jumps sequences ->
                     let
-                        newSequences =
-                            List.map (List.drop 1) remaining
+                        remaining =
+                            List.filter (isFirstJumpTo rowCol) sequences
                     in
-                    case List.head newSequences of
-                        Nothing ->
-                            -- Can't happen
-                            ( state, Nothing )
+                    case remaining of
+                        [] ->
+                            errorRes message state "Not a legal jump."
 
-                        Just [] ->
-                            -- End of jumps
-                            -- TODO
-                            ( state, Nothing )
+                        firstSequence :: _ ->
+                            let
+                                newSequences =
+                                    List.map (List.drop 1) remaining
+                            in
+                            case List.head newSequences of
+                                Nothing ->
+                                    -- Can't happen
+                                    ( state, Nothing )
 
-                        _ ->
-                            -- TODO
-                            ( state, Nothing )
+                                Just [] ->
+                                    -- End of jumps
+                                    let
+                                        doJump jump board2 =
+                                            NewBoard.set jump.over Types.emptyPiece board2
+
+                                        gs =
+                                            { gameState
+                                                | newBoard =
+                                                    List.foldr doJump board gameState.jumps
+                                                        |> NewBoard.set selected Types.emptyPiece
+                                                        |> NewBoard.set rowCol piece
+                                                , selected = Nothing
+                                                , legalMoves = Moves []
+                                                , undoStates = []
+                                                , jumps = []
+
+                                                -- TODO
+                                                , moves = gameState.moves
+                                                , winner = NoWinner
+                                            }
+                                                |> updateScore
+
+                                        state2 =
+                                            { state | state = Just gs }
+                                    in
+                                    ( state2
+                                    , Just <|
+                                        PlayRsp
+                                            { gameid = gameid
+                                            , gameState = gs
+                                            , decoration = NoDecoration
+                                            }
+                                    )
+
+                                _ ->
+                                    let
+                                        gs =
+                                            { gameState
+                                                | newBoard =
+                                                    NewBoard.set selected Types.emptyPiece board
+                                                        |> NewBoard.set rowCol piece
+                                                , selected = Just rowCol
+                                                , legalMoves = Jumps remaining
+                                                , undoStates =
+                                                    { board = board
+                                                    , legalMoves = legalMoves
+                                                    , selected = gameState.selected
+                                                    }
+                                                        :: gameState.undoStates
+                                                , jumps =
+                                                    List.take 1 firstSequence
+                                                        ++ gameState.jumps
+                                            }
+
+                                        state2 =
+                                            { state | state = Just gs }
+                                    in
+                                    ( state2
+                                    , Just <|
+                                        PlayRsp
+                                            { gameid = gameid
+                                            , gameState = gs
+                                            , decoration = NoDecoration
+                                            }
+                                    )
 
 
 isFirstJumpTo : RowCol -> JumpSequence -> Bool
