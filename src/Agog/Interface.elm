@@ -629,6 +629,7 @@ chooseMove state message gameid gameState player rowCol =
                                                 , legalMoves = Jumps remaining
                                                 , undoStates =
                                                     { board = board
+                                                    , moves = gameState.moves
                                                     , legalMoves = legalMoves
                                                     , selected = gameState.selected
                                                     }
@@ -679,6 +680,7 @@ chooseUndoJump state message gameid gameState undoWhichJumps =
                         gs =
                             { gameState
                                 | newBoard = undoState.board
+                                , moves = undoState.moves
                                 , selected = undoState.selected
                                 , legalMoves = undoState.legalMoves
                                 , undoStates = undoStates

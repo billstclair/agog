@@ -717,9 +717,10 @@ privateGameStateDecoder =
 
 
 encodeUndoState : UndoState -> Value
-encodeUndoState { board, selected, legalMoves } =
+encodeUndoState { board, moves, selected, legalMoves } =
     JE.object
         [ ( "board", encodeNewBoard board )
+        , ( "moves", JE.list JE.string moves )
         , ( "selected", encodeMaybe encodeRowCol selected )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
         ]
@@ -729,6 +730,7 @@ undoStateDecoder : Decoder UndoState
 undoStateDecoder =
     JD.succeed UndoState
         |> required "board" newBoardDecoder
+        |> required "moves" (JD.list JD.string)
         |> required "selected" (JD.nullable rowColDecoder)
         |> required "legalMoves" movesOrJumpsDecoder
 

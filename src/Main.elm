@@ -2478,25 +2478,24 @@ White goes first. On their turn, the acting player must move one unit or make a 
             , Markdown.toHtml [] """
 All unit movement in __A•G•O•G__ is orthogonal relative to the squares; diagonal relative to the players. Units can only move forward (towards the enemy sanctum), but can capture enemy units forward or backward.
 
-Units capture by jumping over an enemy unit and landing on an unoccupied square beyond them. Units cannot jump over more than one enemy at a time, and cannot move or jump off the edge of the board. If a unit making a capture lands on a square from which they can make another capture, they are compelled to do so and continue the capturing sequence until they land on a square from which no further captures are available. Captured units are immediately removed from play.
+Units capture by jumping over an enemy unit and landing on an unoccupied square beyond them. Units cannot jump over more than one enemy at a time, and cannot move or jump off the edge of the board. If a unit making a capture lands on a square from which they can make another capture, they are compelled to do so and continue the capturing sequence until they land on a square from which no further captures are available. Captured units are immediately removed from play. All jumped units remain on the board until the sequence is complete, and no unit can be jumped twice in the sequence.
 
 If a capture is available on the acting player’s turn, they are compelled to take it instead of moving a unit, and if multiple captures are available, they are compelled to take the capturing sequence that will capture the most enemy units. For example, if the acting player could either capture two enemy golems or capture the enemy journeyman alone, they are compelled to capture the two golems even though capturing the journeyman would win them the game.
 
-__The Golem__: The basic unit of __A•G•O•G__. Golems can move forward one square at a time and can capture only adjacent enemy units, landing on the square immediately beyond them.
+__The Golem:__ The basic unit of __A•G•O•G__. Golems can move forward one square at a time and can capture only adjacent enemy units, landing on the square immediately beyond them.
 
-__The Hulk__: If a golem ends the turn placed on the enemy sanctum, its player may choose to either to place it atop any of their other golems or remove it from play. If the player chooses the former, the two stacked golems become a new unit: the hulk. If a hulk ends the turn placed on the enemy sanctum, its player may either create a new hulk with the top golem of the stack and remove the bottom from play, or may remove both stacked golems from play. If they have no other golems in play when one of their units ends the turn on the enemy sanctum, that unit must be removed from play.
+__The Hulk:__ If a golem ends the turn placed on the enemy sanctum, its player may choose to either to place it atop any of their other golems or remove it from play. If the player chooses the former, the two stacked golems become a new unit: the hulk. If a hulk ends the turn placed on the enemy sanctum, its player may either create a new hulk with the top golem of the stack and remove the bottom from play, or may remove both stacked golems from play. If they have no other golems in play when one of their units ends the turn on the enemy sanctum, that unit must be removed from play.
 
 Augmented with stolen inventions from the enemy sanctum, the hulk is the most powerful unit in the game. They can move forward any distance in a straight line, and can capture at any distance in a straight line, landing on any unoccupied square beyond the captured unit (provided they do do not jump over more than one unit at a time and that they land such that they can capture the most possible enemy units in the sequence).
 
-__The Journeyman__: The most important unit. If captured, their player loses the game, whereas if a journeyman ends the turn on the enemy sanctum, their player wins the game.
+__The Journeyman:__ The most important unit. If captured, their player loses the game, whereas if a journeyman ends the turn on the enemy sanctum, their player wins the game.
 
 The journeymen move and capture the same as golems. However, when jumping over an enemy unit, they may “corrupt” the jumped unit instead of capturing it. To create a corrupted unit, the acting player places one of their golems that has been removed from play atop the jumped unit. This unit is now under the control of the player that corrupted it and becomes a “corrupted hulk”. If an enemy hulk is jumped by the acting player’s journeyman, it can be corrupted by removing the top stacked enemy golem and replacing it with one of the corrupting player’s that has been removed from play. If the corrupting player does not have any golems that have been removed from play, they cannot corrupt units and must capture them instead.
 
 Corrupted hulks behave the same as regular hulks of their color, with the following exceptions:
 
-A corrupted hulk cannot be corrupted again and must be captured if jumped by the enemy journeyman.
-
-If a corrupted hulk ends the turn on the enemy sanctum, the acting player may either place the top stacked golem of their color atop another of their golems, creating a standard hulk, and remove the bottom stacked enemy golem from play, or they may remove both stacked golems from play. 
+1. A corrupted hulk cannot be corrupted again and must be captured if jumped by the enemy journeyman.
+2. If a corrupted hulk ends the turn on the enemy sanctum, the acting player may either place the top stacked golem of their color atop another of their golems, creating a standard hulk, and remove the bottom stacked enemy golem from play, or they may remove both stacked golems from play. 
 """
             ]
         , playButton
@@ -2506,18 +2505,41 @@ If a corrupted hulk ends the turn on the enemy sanctum, the acting player may ei
             , Markdown.toHtml [] """
 A player wins immediately under any of the following conditions:
 
-Win by Capture: The player captures the enemy journeyman.
-
-Win by Sanctum: The player’s journeyman ends the turn on the enemy sanctum.
-
-Win by Immobilization: The player’s opponent has no legal moves on their turn.
-
-Win by Resignation: The player’s opponent resigns.
+1. Win by Capture: The player captures the enemy journeyman.
+2. Win by Sanctum: The player’s journeyman ends the turn on the enemy sanctum.
+3. Win by Immobilization: The player’s opponent has no legal moves on their turn.
+4. Win by Resignation: The player’s opponent resigns.
 
 Draws are not possible in __A•G•O•G__.
 """
             ]
         , playButton
+        , rulesDiv False
+            [ h2 [ align "center" ]
+                [ text "SCOREKEEPING" ]
+            , Markdown.toHtml [] """
+If desired, players may keep a game record while playing. Each pair of turns for White and Black is denoted with a numbered move, with White’s turn recorded on the left and Black’s on the right. The board is labelled with coordinates the same as a chess board, with the squares to White’s right labelled alphabetically "a" through "h" and the squares to White’s left labelled numerically "1" through "8". The units and actions are labelled as follows:
+
+* The journeyman is denoted as "J".
+* Standard hulks are denoted as "H".
+* Corrupted hulks are denoted as "C".
+* Golems require no unit label, and their movement is indicated by the coordinates alone.
+
+When a golem moves, record the row or column from which they moved and the coordinates of the square they moved to. For example, a golem moving from a6 to b6 would be recorded as "ab6". When another unit moves, record the unit and the coordinates of the square they moved to. It is not necessary to record the row or column from which they moved unless two or more of the same unit could have moved to that square. For example, if corrupted hulk is on a6 and another is on b5, the corrupted hulk moving from b5 to b6 would be recorded as "C5b6".
+
+When a unit makes a capture, record "x" between the unit label/starting row or column and the coordinates of the square they moved to. To record a journeyman creating a corrupted hulk, record "X" instead (capital "x"). For example, a journeyman making a capturing sequence from a1 to a3 to c3, capturing the first unit and creating a corrupted hulk from the second, would be recorded as "Jxa3Xc3".
+
+If White wins, record "1—0". If Black wins, record "0—1".
+"""
+            ]
+        , playButton
+        , rulesDiv False
+            [ h2 [ align "center" ]
+                [ text "HANDICAPPING" ]
+            , Markdown.toHtml [] """
+If players of differing skill levels wish to play an even game, the stronger player can be given a handicap by removing 1 or more of their golems from the board before play starts. The handicapped player always plays Black, and the golems must be removed such that the remaining forces are symmetrically arranged and are removed from the squares closest to the center of the board. For example, for a handicap of 1 remove the golem on f6; for a handicap of 2, remove the golems on e6 and f5; for a handicap of 3 remove the golems on e6, f5, and f6, etc. If the weaker player wins the majority of their games at a particular handicap, reduce the handicap by 1.
+"""
+            ]
         ]
 
 

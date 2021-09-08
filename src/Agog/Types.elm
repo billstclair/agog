@@ -317,6 +317,7 @@ type MovesOrJumps
 
 type alias UndoState =
     { board : NewBoard
+    , moves : List String
     , selected : Maybe RowCol
     , legalMoves : MovesOrJumps
     }
