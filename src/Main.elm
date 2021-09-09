@@ -1875,13 +1875,6 @@ mainPage bsize model =
             else
                 Just gameState.whoseTurn
 
-        ( rowname, colname ) =
-            if currentPlayer == Just BlackPlayer then
-                ( "row", "column" )
-
-            else
-                ( "column", "row" )
-
         rotated =
             currentPlayer == Just WhitePlayer
 
@@ -1919,7 +1912,7 @@ mainPage bsize model =
                                 else
                                     "You (" ++ rawName ++ ")"
                         in
-                        name ++ " won in " ++ String.fromInt count ++ "!"
+                        name ++ " won!"
                   in
                   case gameState.winner of
                     WhiteWinner ->
@@ -1929,11 +1922,35 @@ mainPage bsize model =
                         winString BlackPlayer
 
                     NoWinner ->
-                        if currentPlayer == Just WhitePlayer then
-                            white ++ ", pick a " ++ colname
+                        let
+                            action =
+                                case gameState.selected of
+                                    Nothing ->
+                                        if gameState.jumperLocations == [] then
+                                            "choose a piece to move"
 
-                        else
-                            black ++ ", pick a " ++ rowname
+                                        else
+                                            "choose one of the selected jumper pieces"
+
+                                    Just _ ->
+                                        case gameState.legalMoves of
+                                            Moves [] ->
+                                                "selected piece has no legal moves."
+
+                                            Moves _ ->
+                                                "click on a highlighted square to move the selected piece"
+
+                                            Jumps _ ->
+                                                "click on a highlighted square to jump"
+
+                            name =
+                                if currentPlayer == Just WhitePlayer then
+                                    white
+
+                                else
+                                    black
+                        in
+                        name ++ ", " ++ action ++ "."
                 )
     in
     div [ align "center" ]
