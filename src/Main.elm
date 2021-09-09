@@ -47,6 +47,7 @@ import Agog.Types as Types
         , Style
         , StyleType(..)
         , TestMode
+        , UndoWhichJumps(..)
         , Winner(..)
         )
 import Agog.WhichServer as WhichServer
@@ -267,6 +268,7 @@ type Msg
     | SetTestPieceType String
     | ClearStorage
     | Click ( Int, Int )
+    | SendUndoJumps UndoWhichJumps
     | ChatUpdate ChatSettings (Cmd Msg)
     | ChatSend String ChatSettings
     | ChatClear
@@ -1405,6 +1407,17 @@ updateInternal msg model =
             else
                 doClick row col model
 
+        SendUndoJumps undoWhichJumps ->
+            model
+                |> withCmd
+                    (send model
+                        (PlayReq
+                            { playerid = model.playerid
+                            , placement = ChooseUndoJump undoWhichJumps
+                            }
+                        )
+                    )
+
         ChatUpdate chatSettings cmd ->
             { model | chatSettings = chatSettings }
                 |> withCmd (putChat chatSettings)
@@ -2079,6 +2092,28 @@ mainPage bsize model =
 
               else
                 text ""
+            , let
+                undoLen =
+                    List.length gameState.undoStates
+              in
+              if undoLen == 0 then
+                text ""
+
+              else
+                span []
+                    [ br
+                    , button [ onClick <| SendUndoJumps UndoOneJump ]
+                        [ text "Undo Jump" ]
+                    , if undoLen <= 1 then
+                        text ""
+
+                      else
+                        span []
+                            [ text " "
+                            , button [ onClick <| SendUndoJumps UndoAllJumps ]
+                                [ text "Undo All Jumps" ]
+                            ]
+                    ]
             , if gameState.score == Dict.empty then
                 text ""
 
