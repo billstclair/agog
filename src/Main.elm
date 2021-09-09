@@ -1755,7 +1755,7 @@ doClick row col model =
                 in
                 case piece.pieceType of
                     NoPiece ->
-                        ChooseMove rowCol
+                        ChooseMove rowCol []
 
                     _ ->
                         ChoosePiece rowCol

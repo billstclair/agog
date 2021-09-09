@@ -24,6 +24,7 @@ import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)
+        , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)
         , GameState
@@ -447,8 +448,8 @@ messageProcessor state message =
                                             }
                                     )
 
-                        ChooseMove rowCol ->
-                            chooseMove state message gameid gameState player rowCol
+                        ChooseMove rowCol options ->
+                            chooseMove state message gameid gameState player rowCol options
 
                         ChooseUndoJump undoWhichJumps ->
                             chooseUndoJump state message gameid gameState undoWhichJumps
@@ -519,8 +520,107 @@ messageProcessor state message =
             errorRes message state "Received a non-request."
 
 
-chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> ( Types.ServerState, Maybe Message )
-chooseMove state message gameid gameState player rowCol =
+processChooseMoveOptions : List ChooseMoveOption -> RowCol -> Maybe ( RowCol, Piece ) -> GameState -> ( GameState, Maybe String )
+processChooseMoveOptions options moveTo jumpOver gameState =
+    let
+        processOption option ( gs, err ) =
+            let
+                board =
+                    gs.newBoard
+            in
+            case err of
+                Just _ ->
+                    ( gameState, err )
+
+                Nothing ->
+                    case option of
+                        CorruptJumped ->
+                            case jumpOver of
+                                Nothing ->
+                                    ( gameState, Just "Can't corrupt a jumped piece on a non-jump." )
+
+                                Just ( jumpedPos, piece ) ->
+                                    let
+                                        { pieceType, color } =
+                                            piece
+                                    in
+                                    if pieceType == Golem || pieceType == Hulk then
+                                        let
+                                            otherColor =
+                                                Types.otherColor color
+                                        in
+                                        if colorMatchesPlayer color gameState.whoseTurn then
+                                            ( gameState, Just "Can't corrupt a piece of your own color." )
+
+                                        else if
+                                            (pieceType == Golem)
+                                                && (NewBoard.countColor otherColor board >= 23)
+                                        then
+                                            -- This can happen, but I'll be it won't
+                                            -- Sorta like the two-move mate.
+                                            ( gameState, Just "There are no pieces to use to make a corrupted hulk." )
+
+                                        else
+                                            let
+                                                corruptedHulk =
+                                                    { pieceType = CorruptedHulk
+                                                    , color = Types.otherColor color
+                                                    }
+
+                                                newBoard =
+                                                    NewBoard.set jumpedPos corruptedHulk board
+                                            in
+                                            ( { gs | newBoard = newBoard }, Nothing )
+
+                                    else
+                                        ( gameState, Just "Can't corrupt a Journeyman or a Corrupted Hulk" )
+
+                        MakeHulk hulkPos ->
+                            let
+                                { pieceType, color } =
+                                    NewBoard.get moveTo board
+
+                                hulkPiece =
+                                    NewBoard.get hulkPos board
+                            in
+                            if
+                                ((color == WhiteColor) && (moveTo /= NewBoard.blackSanctum))
+                                    || ((color == BlackColor) && (moveTo /= NewBoard.whiteSanctum))
+                            then
+                                ( gameState, Just "Can't make a hulk except by landing on the other player's sanctum." )
+
+                            else if pieceType == Golem || pieceType == Hulk then
+                                if not <| colorMatchesPlayer color gs.whoseTurn then
+                                    ( gameState, Just "Can't convert another player's piece to a hulk." )
+
+                                else if moveTo == hulkPos then
+                                    ( gameState, Just "Can't convert the jumper to a hulk." )
+
+                                else
+                                    let
+                                        hulk =
+                                            { pieceType = Hulk
+                                            , color = color
+                                            }
+
+                                        newBoard =
+                                            NewBoard.clear moveTo board
+                                                |> NewBoard.set hulkPos hulk
+                                    in
+                                    ( { gs | newBoard = newBoard }, Nothing )
+
+                            else
+                                ( gameState, Just "Can't make a Hulk from a Journeyman or Corrupted Hulk." )
+    in
+    List.foldl processOption ( gameState, Nothing ) options
+
+
+
+-- TODO: Call processChooseOptions
+
+
+chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> List ChooseMoveOption -> ( Types.ServerState, Maybe Message )
+chooseMove state message gameid gameState player rowCol options =
     let
         board =
             gameState.newBoard

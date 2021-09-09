@@ -12,9 +12,12 @@
 
 module Agog.NewBoard exposing
     ( SizerKind(..)
+    , blackSanctum
+    , clear
     , colToString
     , computeJumperLocations
     , count
+    , countColor
     , empty
     , get
     , getSizer
@@ -26,6 +29,7 @@ module Agog.NewBoard exposing
     , rowToString
     , score
     , set
+    , whiteSanctum
     , winner
     )
 
@@ -115,6 +119,16 @@ rc row col =
     { row = row, col = col }
 
 
+blackSanctum : RowCol
+blackSanctum =
+    rc 0 7
+
+
+whiteSanctum : RowCol
+whiteSanctum =
+    rc 7 0
+
+
 initial : NewBoard
 initial =
     let
@@ -146,9 +160,9 @@ initial =
                     endRow
 
         b0 =
-            set (rc 0 7)
+            set blackSanctum
                 blackJourneyman
-                (set (rc 7 0) whiteJourneyman empty)
+                (set whiteSanctum whiteJourneyman empty)
 
         b1 =
             fillGolems b0 whiteGolem 0 2 6
@@ -216,6 +230,11 @@ get { row, col } board =
 
                 Just res ->
                     res
+
+
+clear : RowCol -> NewBoard -> NewBoard
+clear rowCol board =
+    set rowCol Types.emptyPiece board
 
 
 set : RowCol -> Piece -> NewBoard -> NewBoard
@@ -1407,3 +1426,45 @@ computeLongSlides color board startPos =
             getSlide pos res
     in
     mapForwardNeighbors color mapper board startPos []
+
+
+countColor : Color -> NewBoard -> Int
+countColor color board =
+    let
+        mapper _ piece total =
+            let
+                pieceColor =
+                    piece.color
+
+                increment =
+                    case piece.pieceType of
+                        Golem ->
+                            if pieceColor == color then
+                                1
+
+                            else
+                                0
+
+                        Hulk ->
+                            if pieceColor == color then
+                                2
+
+                            else
+                                0
+
+                        CorruptedHulk ->
+                            1
+
+                        Journeyman ->
+                            if pieceColor == color then
+                                2
+
+                            else
+                                1
+
+                        _ ->
+                            0
+            in
+            total + increment
+    in
+    mapWholeBoard mapper board 0

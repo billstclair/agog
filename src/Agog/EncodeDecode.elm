@@ -34,6 +34,7 @@ import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)
+        , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)
         , GameState
@@ -885,6 +886,36 @@ undoWhichJumpsDecoder =
             )
 
 
+encodeChooseMoveOption : ChooseMoveOption -> Value
+encodeChooseMoveOption option =
+    case option of
+        CorruptJumped ->
+            JE.string "CorruptJumped"
+
+        MakeHulk rowCol ->
+            JE.object [ ( "MakeHulk", encodeRowCol rowCol ) ]
+
+
+chooseMoveOptionDecoder : Decoder ChooseMoveOption
+chooseMoveOptionDecoder =
+    JD.oneOf
+        [ JD.string
+            |> JD.andThen
+                (\string ->
+                    if string == "CorruptJumped" then
+                        JD.succeed CorruptJumped
+
+                    else
+                        JD.fail <| "\"CorruptJumped\" /= \"" ++ string ++ "\""
+                )
+        , JD.field "MakeHulk" rowColDecoder
+            |> JD.andThen
+                (\rowCol ->
+                    JD.succeed <| MakeHulk rowCol
+                )
+        ]
+
+
 encodeChoice : Choice -> Value
 encodeChoice choice =
     JE.object
@@ -892,8 +923,17 @@ encodeChoice choice =
             ChoosePiece rowCol ->
                 ( "ChoosePiece", encodeRowCol rowCol )
 
-            ChooseMove rowCol ->
-                ( "ChooseMove", encodeRowCol rowCol )
+            ChooseMove rowCol options ->
+                ( "ChooseMove"
+                , if options == [] then
+                    encodeRowCol rowCol
+
+                  else
+                    JE.object
+                        [ ( "rowCol", encodeRowCol rowCol )
+                        , ( "options", JE.list encodeChooseMoveOption options )
+                        ]
+                )
 
             ChooseUndoJump undoWhichJumps ->
                 ( "ChooseUndoJump", encodeUndoWhichJumps undoWhichJumps )
@@ -911,8 +951,17 @@ choiceDecoder =
     JD.oneOf
         [ JD.field "ChoosePiece" rowColDecoder
             |> JD.andThen (ChoosePiece >> JD.succeed)
-        , JD.field "ChooseMove" rowColDecoder
-            |> JD.andThen (ChooseMove >> JD.succeed)
+        , JD.field "ChooseMove" <|
+            JD.oneOf
+                [ rowColDecoder
+                    |> JD.andThen
+                        (\rowCol ->
+                            ChooseMove rowCol [] |> JD.succeed
+                        )
+                , JD.succeed ChooseMove
+                    |> required "rowCol" rowColDecoder
+                    |> required "options" (JD.list chooseMoveOptionDecoder)
+                ]
         , JD.field "ChooseUndoJump" undoWhichJumpsDecoder
             |> JD.andThen (ChooseUndoJump >> JD.succeed)
         , JD.field "ChooseResign" playerDecoder

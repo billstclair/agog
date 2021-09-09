@@ -13,6 +13,7 @@
 module Agog.Types exposing
     ( Board
     , Choice(..)
+    , ChooseMoveOption(..)
     , Color(..)
     , Decoration(..)
     , GameState
@@ -376,9 +377,14 @@ type UndoWhichJumps
     | UndoAllJumps
 
 
+type ChooseMoveOption
+    = CorruptJumped
+    | MakeHulk RowCol
+
+
 type Choice
     = ChoosePiece RowCol
-    | ChooseMove RowCol
+    | ChooseMove RowCol (List ChooseMoveOption)
     | ChooseUndoJump UndoWhichJumps
     | ChooseResign Player
     | ChooseNew Player
