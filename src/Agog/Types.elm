@@ -54,6 +54,7 @@ module Agog.Types exposing
     , messageToPlayerid
     , otherColor
     , otherPlayer
+    , playerColor
     , typeToStyle
     , zeroOneScore
     , zeroScore
@@ -126,6 +127,16 @@ otherPlayer player =
 
     else
         WhitePlayer
+
+
+playerColor : Player -> Color
+playerColor player =
+    case player of
+        WhitePlayer ->
+            WhiteColor
+
+        BlackPlayer ->
+            BlackColor
 
 
 type Winner
@@ -336,6 +347,7 @@ type alias GameState =
     , players : PlayerNames
     , whoseTurn : Player
     , selected : Maybe RowCol
+    , jumperLocations : List RowCol
     , legalMoves : MovesOrJumps
     , undoStates : List UndoState
     , jumps : List OneJump

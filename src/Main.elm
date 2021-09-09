@@ -1747,7 +1747,8 @@ doClick row col model =
                     _ ->
                         ChoosePiece rowCol
     in
-    model |> withACmd
+    { model | error = Nothing }
+        |> withACmd
 
 
 cellName : ( Int, Int ) -> String

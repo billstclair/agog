@@ -13,11 +13,13 @@
 module Agog.NewBoard exposing
     ( SizerKind(..)
     , colToString
+    , computeJumperLocations
     , count
     , empty
     , get
     , getSizer
     , initial
+    , mapWholeBoard
     , populateLegalMoves
     , rc
     , render
@@ -336,14 +338,8 @@ render style size tagger sizer player notRotated gameState =
         board =
             gameState.newBoard
 
-        legalMoves =
-            gameState.legalMoves
-
-        jumps =
-            gameState.jumps
-
-        selected =
-            gameState.selected
+        { jumperLocations, legalMoves, jumps, selected } =
+            gameState
 
         rotated =
             False
@@ -397,7 +393,7 @@ render style size tagger sizer player notRotated gameState =
                 List.concat
                     [ drawRows style delta rotated
                     , drawCols style delta rotated sizer board
-                    , drawRects style selected legalMoves jumps board delta
+                    , drawRects style selected jumperLocations legalMoves jumps board delta
                     , drawClickRects style delta rotated tagger
                     ]
             ]
@@ -505,12 +501,14 @@ removeBlankGs svgs =
     List.filter ((/=) (g [] [])) svgs
 
 
-drawRects : Style -> Maybe RowCol -> MovesOrJumps -> List OneJump -> NewBoard -> Int -> List (Svg msg)
-drawRects style selected legalMoves jumps board delta =
-    let
-        indices =
-            [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+indices : List Int
+indices =
+    [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
+
+drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneJump -> NewBoard -> Int -> List (Svg msg)
+drawRects style selected jumperLocations legalMoves jumps board delta =
+    let
         docol f rowidx colidx res =
             f delta rowidx colidx
                 :: res
@@ -521,7 +519,7 @@ drawRects style selected legalMoves jumps board delta =
     (List.foldr (dorow (drawShadeRect style)) [] indices
         |> removeBlankGs
     )
-        ++ drawHighlights style selected legalMoves delta
+        ++ drawHighlights style selected jumperLocations legalMoves delta
         ++ (List.foldr (dorow (drawPiece style board)) [] indices
                 |> removeBlankGs
            )
@@ -577,8 +575,8 @@ drawHighlight color delta { row, col } =
         []
 
 
-drawHighlights : Style -> Maybe RowCol -> MovesOrJumps -> Int -> List (Svg msg)
-drawHighlights style selected legalMoves delta =
+drawHighlights : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> Int -> List (Svg msg)
+drawHighlights style selected jumperLocations legalMoves delta =
     (case legalMoves of
         Moves rowcols ->
             List.map (drawHighlight style.moveColor delta) rowcols
@@ -597,7 +595,7 @@ drawHighlights style selected legalMoves delta =
     )
         ++ (case selected of
                 Nothing ->
-                    []
+                    List.map (drawHighlight style.moveColor delta) jumperLocations
 
                 Just rowcol ->
                     [ drawHighlight style.selectedColor delta rowcol ]
@@ -838,9 +836,6 @@ drawJumps style board jumps delta =
 drawClickRects : Style -> Int -> Bool -> (( Int, Int ) -> msg) -> List (Svg msg)
 drawClickRects style delta rotated tagger =
     let
-        indices =
-            [ 0, 1, 2, 3, 4, 5, 6, 7 ]
-
         docol rowidx colidx res =
             drawClickRect style delta tagger rowidx colidx
                 :: res
@@ -1060,6 +1055,25 @@ mapNeighbors all color mapper board startPos init =
         |> map (row + plusRow) col
 
 
+mapWholeBoard : (RowCol -> Piece -> a -> a) -> NewBoard -> a -> a
+mapWholeBoard mapper board res =
+    let
+        mapone row col res3 =
+            let
+                rowCol =
+                    rc row col
+
+                piece =
+                    get rowCol board
+            in
+            mapper rowCol piece res3
+
+        mapcols row res2 =
+            List.foldr (mapone row) res2 indices
+    in
+    List.foldr mapcols res indices
+
+
 isValidRowCol : RowCol -> Bool
 isValidRowCol { row, col } =
     row >= 0 && row < 8 && col >= 0 && col < 8
@@ -1094,6 +1108,49 @@ populateLegalMoves gameState =
     }
 
 
+computeJumperLocations : Color -> NewBoard -> List RowCol
+computeJumperLocations color board =
+    let
+        mapper : RowCol -> Piece -> List ( RowCol, Int ) -> List ( RowCol, Int )
+        mapper rowCol piece res =
+            if piece.pieceType == NoPiece || piece.color /= color then
+                res
+
+            else
+                let
+                    jumps =
+                        legalJumpsWithPiece board rowCol piece
+                in
+                case List.head jumps of
+                    Nothing ->
+                        res
+
+                    Just sequence ->
+                        ( rowCol, List.length sequence ) :: res
+
+        jumpPairs : List ( RowCol, Int )
+        jumpPairs =
+            mapWholeBoard mapper board []
+
+        maxer : ( RowCol, Int ) -> Int -> Int
+        maxer ( _, cnt ) maxJumps =
+            max cnt maxJumps
+
+        maxLen : Int
+        maxLen =
+            List.foldl maxer 0 jumpPairs
+
+        selector : ( RowCol, Int ) -> List RowCol -> List RowCol
+        selector ( rowCol, cnt ) res =
+            if cnt == maxLen then
+                rowCol :: res
+
+            else
+                res
+    in
+    List.foldl selector [] jumpPairs
+
+
 computeLegalMoves : NewBoard -> Maybe RowCol -> MovesOrJumps
 computeLegalMoves newBoard selected =
     case selected of
@@ -1116,9 +1173,14 @@ isHulkType pieceType =
 
 legalJumps : NewBoard -> RowCol -> List JumpSequence
 legalJumps board startPos =
+    legalJumpsWithPiece board startPos <| get startPos board
+
+
+legalJumpsWithPiece : NewBoard -> RowCol -> Piece -> List JumpSequence
+legalJumpsWithPiece board startPos piece =
     let
         { color, pieceType } =
-            get startPos board
+            piece
 
         res =
             if pieceType == NoPiece then

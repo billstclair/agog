@@ -66,6 +66,7 @@ emptyGameState players =
     , players = players
     , whoseTurn = WhitePlayer
     , selected = Nothing
+    , jumperLocations = []
     , legalMoves = Moves []
     , undoStates = []
     , jumps = []
@@ -400,6 +401,9 @@ messageProcessor state message =
                             let
                                 board =
                                     gameState.newBoard
+
+                                jumperLocations =
+                                    gameState.jumperLocations
                             in
                             if gameState.undoStates /= [] then
                                 errorRes message state "A jump sequence is in progress."
@@ -414,6 +418,12 @@ messageProcessor state message =
 
                                 else if not <| colorMatchesPlayer piece.color gameState.whoseTurn then
                                     errorRes message state "Chosen piece not of player's color."
+
+                                else if
+                                    (jumperLocations /= [])
+                                        && (not <| List.member rowCol jumperLocations)
+                                then
+                                    errorRes message state "You must select a piece with a maximal jump sequence."
 
                                 else
                                     let
@@ -538,19 +548,7 @@ chooseMove state message gameid gameState player rowCol =
                     else
                         let
                             gs =
-                                { gameState
-                                    | newBoard =
-                                        NewBoard.set selected Types.emptyPiece board
-                                            |> NewBoard.set rowCol piece
-                                    , selected = Nothing
-                                    , legalMoves = Moves []
-                                    , whoseTurn = Types.otherPlayer gameState.whoseTurn
-
-                                    -- TODO
-                                    , moves = gameState.moves
-                                    , winner = NoWinner
-                                }
-                                    |> updateScore
+                                endOfTurn selected rowCol piece gameState
                         in
                         ( ServerInterface.updateGame gameid gs state
                         , Just <|
@@ -594,23 +592,14 @@ chooseMove state message gameid gameState player rowCol =
                                                 Just jump ->
                                                     jump :: gameState.jumps
 
-                                        gs =
-                                            { gameState
-                                                | newBoard =
-                                                    List.foldr doJump board jumps
-                                                        |> NewBoard.set selected Types.emptyPiece
-                                                        |> NewBoard.set rowCol piece
-                                                , selected = Nothing
-                                                , legalMoves = Moves []
-                                                , whoseTurn = Types.otherPlayer gameState.whoseTurn
-                                                , undoStates = []
-                                                , jumps = []
+                                        newBoard =
+                                            List.foldr doJump board jumps
 
-                                                -- TODO
-                                                , moves = gameState.moves
-                                                , winner = NoWinner
-                                            }
-                                                |> updateScore
+                                        gs =
+                                            endOfTurn selected
+                                                rowCol
+                                                piece
+                                                { gameState | newBoard = newBoard }
                                     in
                                     ( ServerInterface.updateGame gameid gs state
                                     , Just <|
@@ -650,6 +639,38 @@ chooseMove state message gameid gameState player rowCol =
                                             , decoration = NoDecoration
                                             }
                                     )
+
+
+endOfTurn : RowCol -> RowCol -> Piece -> GameState -> GameState
+endOfTurn selected moved piece gameState =
+    let
+        whoseTurn =
+            Types.otherPlayer gameState.whoseTurn
+
+        whoseTurnColor =
+            Types.playerColor whoseTurn
+
+        newBoard =
+            NewBoard.set selected Types.emptyPiece gameState.newBoard
+                |> NewBoard.set moved piece
+
+        jumperLocations =
+            NewBoard.computeJumperLocations whoseTurnColor newBoard
+    in
+    { gameState
+        | newBoard = newBoard
+        , selected = Nothing
+        , jumperLocations = jumperLocations
+        , legalMoves = Moves []
+        , whoseTurn = whoseTurn
+        , undoStates = []
+        , jumps = []
+
+        -- TODO
+        , moves = gameState.moves
+        , winner = NoWinner
+    }
+        |> updateScore
 
 
 chooseUndoJump : Types.ServerState -> Message -> String -> GameState -> UndoWhichJumps -> ( Types.ServerState, Maybe Message )
