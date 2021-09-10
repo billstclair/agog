@@ -41,6 +41,7 @@ import Agog.Types as Types
         , JumpSequence
         , MovesOrJumps(..)
         , NewBoard
+        , OneCorruptibleJump
         , OneJump
         , Piece
         , PieceType(..)
@@ -525,7 +526,7 @@ indices =
     [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
 
-drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneJump -> NewBoard -> Int -> List (Svg msg)
+drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> NewBoard -> Int -> List (Svg msg)
 drawRects style selected jumperLocations legalMoves jumps board delta =
     let
         docol f rowidx colidx res =
@@ -773,11 +774,14 @@ drawShadeRect style delta rowidx colidx =
             []
 
 
-drawJumps : Style -> NewBoard -> List OneJump -> Int -> List (Svg msg)
+drawJumps : Style -> NewBoard -> List OneCorruptibleJump -> Int -> List (Svg msg)
 drawJumps style board jumps delta =
     let
         color =
             style.selectedColor
+
+        corruptedColor =
+            style.corruptedHulkXColor
 
         deltaF =
             toFloat delta
@@ -828,6 +832,14 @@ drawJumps style board jumps delta =
                 w =
                     "3"
             in
+            let
+                strokeColor =
+                    if oneJump.corrupted then
+                        corruptedColor
+
+                    else
+                        color
+            in
             g []
                 [ Svg.line
                     [ x1 <| tos (round <| xc - leno2)
@@ -835,7 +847,7 @@ drawJumps style board jumps delta =
                     , y1 <| tos (round yc)
                     , y2 <| tos (round yc)
                     , strokeWidth w
-                    , stroke color
+                    , stroke strokeColor
                     ]
                     []
                 , Svg.line
@@ -844,7 +856,7 @@ drawJumps style board jumps delta =
                     , x1 <| tos (round xc)
                     , x2 <| tos (round xc)
                     , strokeWidth w
-                    , stroke color
+                    , stroke strokeColor
                     ]
                     []
                 ]

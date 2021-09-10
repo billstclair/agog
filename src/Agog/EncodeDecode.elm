@@ -42,6 +42,7 @@ import Agog.Types as Types
         , Message(..)
         , MovesOrJumps(..)
         , NewBoard
+        , OneCorruptibleJump
         , OneJump
         , OneScore
         , Page(..)
@@ -759,7 +760,7 @@ encodeGameState includePrivate gameState =
         , ( "jumperLocations", JE.list encodeRowCol jumperLocations )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
         , ( "undoStates", JE.list encodeUndoState undoStates )
-        , ( "jumps", encodeJumpSequence jumps )
+        , ( "jumps", encodeCorruptibleJumpSequence jumps )
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         , ( "path", JE.list encodeIntPair path )
@@ -780,7 +781,7 @@ gameStateDecoder =
         |> optional "jumperLocations" (JD.list rowColDecoder) []
         |> required "legalMoves" movesOrJumpsDecoder
         |> required "undoStates" (JD.list undoStateDecoder)
-        |> required "jumps" jumpSequenceDecoder
+        |> required "jumps" corruptibleJumpSequenceDecoder
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
         |> required "path" (JD.list intPairDecoder)
@@ -823,6 +824,16 @@ jumpSequenceDecoder =
     JD.list oneJumpDecoder
 
 
+encodeCorruptibleJumpSequence : List OneCorruptibleJump -> Value
+encodeCorruptibleJumpSequence jumps =
+    JE.list encodeOneCorruptibleJump jumps
+
+
+corruptibleJumpSequenceDecoder : Decoder (List OneCorruptibleJump)
+corruptibleJumpSequenceDecoder =
+    JD.list oneCorruptibleJumpDecoder
+
+
 encodeOneJump : OneJump -> Value
 encodeOneJump { over, to } =
     JE.object
@@ -836,6 +847,23 @@ oneJumpDecoder =
     JD.succeed OneJump
         |> required "over" rowColDecoder
         |> required "to" rowColDecoder
+
+
+encodeOneCorruptibleJump : OneCorruptibleJump -> Value
+encodeOneCorruptibleJump { over, to, corrupted } =
+    JE.object
+        [ ( "over", encodeRowCol over )
+        , ( "to", encodeRowCol to )
+        , ( "corrupted", JE.bool corrupted )
+        ]
+
+
+oneCorruptibleJumpDecoder : Decoder OneCorruptibleJump
+oneCorruptibleJumpDecoder =
+    JD.succeed OneCorruptibleJump
+        |> required "over" rowColDecoder
+        |> required "to" rowColDecoder
+        |> required "corrupted" JD.bool
 
 
 encodeMovesOrJumps : MovesOrJumps -> Value

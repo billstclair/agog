@@ -32,6 +32,8 @@ import Agog.Types as Types
         , Message(..)
         , MovesOrJumps(..)
         , NewBoard
+        , OneCorruptibleJump
+        , OneJump
         , Piece
         , PieceType(..)
         , Player(..)
@@ -46,6 +48,7 @@ import Agog.Types as Types
         )
 import Debug
 import Dict exposing (Dict)
+import List.Extra as LE
 import WebSocketFramework exposing (decodePlist, unknownMessage)
 import WebSocketFramework.EncodeDecode as WFED
 import WebSocketFramework.ServerInterface as ServerInterface
@@ -556,21 +559,40 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                                             (pieceType == Golem)
                                                 && (NewBoard.countColor otherColor board >= 23)
                                         then
-                                            -- This can happen, but I'll be it won't
+                                            -- This can happen, but I'll bet it won't.
                                             -- Sorta like the two-move mate.
                                             ( gameState, Just "There are no pieces to use to make a corrupted hulk." )
 
                                         else
                                             let
-                                                corruptedHulk =
-                                                    { pieceType = CorruptedHulk
-                                                    , color = Types.otherColor color
-                                                    }
+                                                ( newBoard, jumps ) =
+                                                    if gs.jumps == [] then
+                                                        let
+                                                            corruptedHulk =
+                                                                { pieceType = CorruptedHulk
+                                                                , color = Types.otherColor color
+                                                                }
+                                                        in
+                                                        ( NewBoard.set jumpedPos corruptedHulk board
+                                                        , gs.jumps
+                                                        )
 
-                                                newBoard =
-                                                    NewBoard.set jumpedPos corruptedHulk board
+                                                    else
+                                                        ( board
+                                                        , LE.updateIf
+                                                            (.over >> (==) jumpedPos)
+                                                            (\jump ->
+                                                                { jump | corrupted = True }
+                                                            )
+                                                            gs.jumps
+                                                        )
                                             in
-                                            ( { gs | newBoard = newBoard }, Nothing )
+                                            ( { gs
+                                                | newBoard = newBoard
+                                                , jumps = jumps
+                                              }
+                                            , Nothing
+                                            )
 
                                     else
                                         ( gameState, Just "Can't corrupt a Journeyman or a Corrupted Hulk" )
@@ -592,6 +614,10 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                             else if pieceType == Golem || pieceType == Hulk then
                                 if not <| colorMatchesPlayer color gs.whoseTurn then
                                     ( gameState, Just "Can't convert another player's piece to a hulk." )
+
+                                else if gs.undoStates /= [] then
+                                    -- There are jumps left
+                                    ( gameState, Just "Can only make a hulk if the sanctum is the final location." )
 
                                 else if moveTo == hulkPos then
                                     ( gameState, Just "Can't convert the jumper to a hulk." )
@@ -615,6 +641,14 @@ processChooseMoveOptions options moveTo jumpOver gameState =
     List.foldl processOption ( gameState, Nothing ) options
 
 
+toCorruptibleJump : OneJump -> OneCorruptibleJump
+toCorruptibleJump { over, to } =
+    { over = over
+    , to = to
+    , corrupted = False
+    }
+
+
 
 -- TODO: Call processChooseOptions
 
@@ -624,9 +658,6 @@ chooseMove state message gameid gameState player rowCol options =
     let
         board =
             gameState.newBoard
-
-        rowcol2 =
-            Debug.log "chooseMove" rowCol
     in
     case gameState.selected of
         Nothing ->
@@ -649,15 +680,23 @@ chooseMove state message gameid gameState player rowCol options =
                         let
                             gs =
                                 endOfTurn selected rowCol piece gameState
+
+                            ( gs2, maybeError ) =
+                                processChooseMoveOptions options rowCol Nothing gs
                         in
-                        ( ServerInterface.updateGame gameid gs state
-                        , Just <|
-                            PlayRsp
-                                { gameid = gameid
-                                , gameState = gs
-                                , decoration = NoDecoration
-                                }
-                        )
+                        case maybeError of
+                            Just err ->
+                                errorRes message state err
+
+                            Nothing ->
+                                ( ServerInterface.updateGame gameid gs state
+                                , Just <|
+                                    PlayRsp
+                                        { gameid = gameid
+                                        , gameState = gs
+                                        , decoration = NoDecoration
+                                        }
+                                )
 
                 Jumps sequences ->
                     let
@@ -672,6 +711,19 @@ chooseMove state message gameid gameState player rowCol options =
                             errorRes message state "Not a legal jump."
 
                         firstSequence :: _ ->
+                            let
+                                firstOver =
+                                    case List.head firstSequence of
+                                        Nothing ->
+                                            -- Can't happen
+                                            NewBoard.rc -1 -1
+
+                                        Just { over } ->
+                                            over
+
+                                jumpOver =
+                                    Just ( firstOver, NewBoard.get firstOver board )
+                            in
                             case List.head newSequences of
                                 Nothing ->
                                     -- Can't happen
@@ -681,7 +733,16 @@ chooseMove state message gameid gameState player rowCol options =
                                     -- End of jumps
                                     let
                                         doJump jump board2 =
-                                            NewBoard.set jump.over Types.emptyPiece board2
+                                            NewBoard.set jump.over
+                                                (if jump.corrupted then
+                                                    { color = piece.color
+                                                    , pieceType = CorruptedHulk
+                                                    }
+
+                                                 else
+                                                    Types.emptyPiece
+                                                )
+                                                board2
 
                                         jumps =
                                             case List.head firstSequence of
@@ -690,7 +751,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                     gameState.jumps
 
                                                 Just jump ->
-                                                    jump :: gameState.jumps
+                                                    toCorruptibleJump jump :: gameState.jumps
 
                                         newBoard =
                                             List.foldr doJump board jumps
@@ -700,15 +761,26 @@ chooseMove state message gameid gameState player rowCol options =
                                                 rowCol
                                                 piece
                                                 { gameState | newBoard = newBoard }
+
+                                        ( gs2, maybeError ) =
+                                            processChooseMoveOptions options
+                                                rowCol
+                                                jumpOver
+                                                gs
                                     in
-                                    ( ServerInterface.updateGame gameid gs state
-                                    , Just <|
-                                        PlayRsp
-                                            { gameid = gameid
-                                            , gameState = gs
-                                            , decoration = NoDecoration
-                                            }
-                                    )
+                                    case maybeError of
+                                        Just err ->
+                                            errorRes message state err
+
+                                        Nothing ->
+                                            ( ServerInterface.updateGame gameid gs2 state
+                                            , Just <|
+                                                PlayRsp
+                                                    { gameid = gameid
+                                                    , gameState = gs
+                                                    , decoration = NoDecoration
+                                                    }
+                                            )
 
                                 _ ->
                                     let
@@ -727,18 +799,31 @@ chooseMove state message gameid gameState player rowCol options =
                                                     }
                                                         :: gameState.undoStates
                                                 , jumps =
-                                                    List.take 1 firstSequence
+                                                    (List.take 1 firstSequence
+                                                        |> List.map toCorruptibleJump
+                                                    )
                                                         ++ gameState.jumps
                                             }
+
+                                        ( gs2, maybeError ) =
+                                            processChooseMoveOptions options
+                                                rowCol
+                                                jumpOver
+                                                gs
                                     in
-                                    ( ServerInterface.updateGame gameid gs state
-                                    , Just <|
-                                        PlayRsp
-                                            { gameid = gameid
-                                            , gameState = gs
-                                            , decoration = NoDecoration
-                                            }
-                                    )
+                                    case maybeError of
+                                        Just err ->
+                                            errorRes message state err
+
+                                        Nothing ->
+                                            ( ServerInterface.updateGame gameid gs2 state
+                                            , Just <|
+                                                PlayRsp
+                                                    { gameid = gameid
+                                                    , gameState = gs
+                                                    , decoration = NoDecoration
+                                                    }
+                                            )
 
 
 endOfTurn : RowCol -> RowCol -> Piece -> GameState -> GameState

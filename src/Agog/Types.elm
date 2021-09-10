@@ -21,6 +21,7 @@ module Agog.Types exposing
     , Message(..)
     , MovesOrJumps(..)
     , NewBoard
+    , OneCorruptibleJump
     , OneJump
     , OneScore
     , Page(..)
@@ -199,6 +200,7 @@ type alias Style =
     , shadeColor : String
     , selectedColor : String
     , moveColor : String
+    , corruptedHulkXColor : String
     }
 
 
@@ -215,6 +217,7 @@ lightStyle =
     , shadeColor = "lightgray"
     , selectedColor = "black"
     , moveColor = "blue"
+    , corruptedHulkXColor = "red"
     }
 
 
@@ -231,6 +234,7 @@ darkStyle =
     , shadeColor = "lightgray"
     , selectedColor = "orange"
     , moveColor = "green"
+    , corruptedHulkXColor = "red"
     }
 
 
@@ -322,6 +326,13 @@ type alias JumpSequence =
     List OneJump
 
 
+type alias OneCorruptibleJump =
+    { over : RowCol
+    , to : RowCol
+    , corrupted : Bool
+    }
+
+
 type MovesOrJumps
     = Moves (List RowCol)
     | Jumps (List JumpSequence)
@@ -351,7 +362,7 @@ type alias GameState =
     , jumperLocations : List RowCol
     , legalMoves : MovesOrJumps
     , undoStates : List UndoState
-    , jumps : List OneJump
+    , jumps : List OneCorruptibleJump
     , score : Score
     , winner : Winner
     , path : List ( Int, Int )
