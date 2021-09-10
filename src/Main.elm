@@ -41,6 +41,7 @@ import Agog.Types as Types
         , PlayerNames
         , PublicGame
         , PublicType(..)
+        , RowCol
         , SavedModel
         , Score
         , Settings
@@ -196,6 +197,25 @@ type alias ChatSettings =
     ElmChat.Settings Msg
 
 
+type AskYesNo a
+    = AskAsk
+    | AskYes a
+    | AskNo
+
+
+type alias ChooseMoveOptionsUI =
+    { corruptJumped : AskYesNo ()
+    , makeHulk : AskYesNo RowCol
+    }
+
+
+chooseMoveOptionsUINo : ChooseMoveOptionsUI
+chooseMoveOptionsUINo =
+    { corruptJumped = AskNo
+    , makeHulk = AskNo
+    }
+
+
 type alias Model =
     { serverUrl : String
     , interface : ServerInterface
@@ -212,6 +232,7 @@ type alias Model =
     , publicGames : List PublicGame
     , time : Posix
     , requestedNew : Bool
+    , chooseMoveOptionsUI : ChooseMoveOptionsUI
 
     -- persistent below here
     , page : Page
@@ -268,6 +289,9 @@ type Msg
     | SetTestPieceType String
     | ClearStorage
     | Click ( Int, Int )
+    | CorruptJumpedUI (AskYesNo ())
+    | MakeHulk (AskYesNo RowCol)
+    | CancelChooseMoveOptionsUI
     | SendUndoJumps UndoWhichJumps
     | ChatUpdate ChatSettings (Cmd Msg)
     | ChatSend String ChatSettings
@@ -389,6 +413,7 @@ init flags url key =
             , publicGames = []
             , time = Time.millisToPosix 0
             , requestedNew = False
+            , chooseMoveOptionsUI = chooseMoveOptionsUINo
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -1407,6 +1432,38 @@ updateInternal msg model =
             else
                 doClick row col model
 
+        CorruptJumpedUI askYesNo ->
+            let
+                chooseMoveOptionsUI =
+                    model.chooseMoveOptionsUI
+            in
+            { model
+                | chooseMoveOptionsUI =
+                    { chooseMoveOptionsUI
+                        | corruptJumped = askYesNo
+                    }
+            }
+                |> withNoCmd
+
+        MakeHulk askYesNo ->
+            let
+                chooseMoveOptionsUI =
+                    model.chooseMoveOptionsUI
+            in
+            { model
+                | chooseMoveOptionsUI =
+                    { chooseMoveOptionsUI
+                        | makeHulk = askYesNo
+                    }
+            }
+                |> withNoCmd
+
+        CancelChooseMoveOptionsUI ->
+            { model
+                | chooseMoveOptionsUI = chooseMoveOptionsUINo
+            }
+                |> withNoCmd
+
         SendUndoJumps undoWhichJumps ->
             model
                 |> withCmd
@@ -1965,9 +2022,47 @@ mainPage bsize model =
                         in
                         name ++ ", " ++ action ++ "."
                 )
+
+        { corruptJumped, makeHulk } =
+            model.chooseMoveOptionsUI
+
+        theStyle =
+            Types.typeToStyle model.styleType
     in
     div [ align "center" ]
-        [ NewBoard.render (Types.typeToStyle model.styleType)
+        [ if corruptJumped == AskAsk || makeHulk == AskAsk then
+            div
+                [ style "border" <| "3px solid orange"
+                , style "padding" "5px"
+                , style "width" "fit-content"
+                ]
+                [ if corruptJumped == AskAsk then
+                    span []
+                        [ b "Corrupt Jumped Piece: "
+                        , button [ onClick <| CorruptJumpedUI (AskYes ()) ]
+                            [ text "Yes" ]
+                        , button [ onClick <| CorruptJumpedUI AskNo ]
+                            [ text "No" ]
+                        , br
+                        ]
+
+                  else
+                    text ""
+                , if makeHulk == AskAsk then
+                    span []
+                        [ b "Click a Golem to make it a Hulk. Otherwise, any other square."
+                        , br
+                        ]
+
+                  else
+                    text ""
+                , button [ onClick CancelChooseMoveOptionsUI ]
+                    [ text "No Hulks or Corruption" ]
+                ]
+
+          else
+            text ""
+        , NewBoard.render theStyle
             bsize
             Click
             (Just <| Board.getSizer DefaultSizer)

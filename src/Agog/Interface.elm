@@ -689,11 +689,11 @@ chooseMove state message gameid gameState player rowCol options =
                                 errorRes message state err
 
                             Nothing ->
-                                ( ServerInterface.updateGame gameid gs state
+                                ( ServerInterface.updateGame gameid gs2 state
                                 , Just <|
                                     PlayRsp
                                         { gameid = gameid
-                                        , gameState = gs
+                                        , gameState = gs2
                                         , decoration = NoDecoration
                                         }
                                 )
@@ -777,7 +777,7 @@ chooseMove state message gameid gameState player rowCol options =
                                             , Just <|
                                                 PlayRsp
                                                     { gameid = gameid
-                                                    , gameState = gs
+                                                    , gameState = gs2
                                                     , decoration = NoDecoration
                                                     }
                                             )
@@ -820,7 +820,7 @@ chooseMove state message gameid gameState player rowCol options =
                                             , Just <|
                                                 PlayRsp
                                                     { gameid = gameid
-                                                    , gameState = gs
+                                                    , gameState = gs2
                                                     , decoration = NoDecoration
                                                     }
                                             )
