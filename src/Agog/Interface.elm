@@ -14,6 +14,7 @@
 module Agog.Interface exposing
     ( emptyGameState
     , forNameMatches
+    , isFirstJumpTo
     , messageProcessor
     )
 
@@ -536,6 +537,13 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                     ( gameState, err )
 
                 Nothing ->
+                    let
+                        selectedPiece =
+                            NewBoard.get moveTo board
+
+                        ( selectedType, selectedColor ) =
+                            ( selectedPiece.pieceType, selectedPiece.color )
+                    in
                     case option of
                         CorruptJumped ->
                             case jumpOver of
@@ -547,17 +555,23 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                                         { pieceType, color } =
                                             piece
                                     in
-                                    if pieceType == Golem || pieceType == Hulk then
+                                    if selectedType /= Journeyman then
+                                        ( gameState, Just "Only a Journeyman may corrupt a piece." )
+
+                                    else if pieceType /= Golem && pieceType /= Hulk then
+                                        ( gameState, Just "Can't corrupt a Journeyman or a Corrupted Hulk" )
+
+                                    else
                                         let
                                             otherColor =
                                                 Types.otherColor color
                                         in
-                                        if colorMatchesPlayer color gameState.whoseTurn then
+                                        if colorMatchesPlayer otherColor gameState.whoseTurn then
                                             ( gameState, Just "Can't corrupt a piece of your own color." )
 
                                         else if
                                             (pieceType == Golem)
-                                                && (NewBoard.countColor otherColor board >= 23)
+                                                && (NewBoard.countColor color board >= 23)
                                         then
                                             -- This can happen, but I'll bet it won't.
                                             -- Sorta like the two-move mate.
@@ -594,25 +608,19 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                                             , Nothing
                                             )
 
-                                    else
-                                        ( gameState, Just "Can't corrupt a Journeyman or a Corrupted Hulk" )
-
                         MakeHulk hulkPos ->
                             let
-                                { pieceType, color } =
-                                    NewBoard.get moveTo board
-
                                 hulkPiece =
                                     NewBoard.get hulkPos board
                             in
                             if
-                                ((color == WhiteColor) && (moveTo /= NewBoard.blackSanctum))
-                                    || ((color == BlackColor) && (moveTo /= NewBoard.whiteSanctum))
+                                ((selectedColor == WhiteColor) && (moveTo /= NewBoard.blackSanctum))
+                                    || ((selectedColor == BlackColor) && (moveTo /= NewBoard.whiteSanctum))
                             then
                                 ( gameState, Just "Can't make a hulk except by landing on the other player's sanctum." )
 
-                            else if pieceType == Golem || pieceType == Hulk then
-                                if not <| colorMatchesPlayer color gs.whoseTurn then
+                            else if selectedType == Golem || selectedType == Hulk then
+                                if selectedColor /= hulkPiece.color then
                                     ( gameState, Just "Can't convert another player's piece to a hulk." )
 
                                 else if gs.undoStates /= [] then
@@ -626,7 +634,7 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                                     let
                                         hulk =
                                             { pieceType = Hulk
-                                            , color = color
+                                            , color = selectedColor
                                             }
 
                                         newBoard =

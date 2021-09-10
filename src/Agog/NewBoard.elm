@@ -23,6 +23,7 @@ module Agog.NewBoard exposing
     , getSizer
     , initial
     , mapWholeBoard
+    , playerSanctum
     , populateLegalMoves
     , rc
     , render
@@ -128,6 +129,16 @@ blackSanctum =
 whiteSanctum : RowCol
 whiteSanctum =
     rc 7 0
+
+
+playerSanctum : Player -> RowCol
+playerSanctum player =
+    case player of
+        WhitePlayer ->
+            whiteSanctum
+
+        BlackPlayer ->
+            blackSanctum
 
 
 initial : NewBoard

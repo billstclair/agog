@@ -29,6 +29,7 @@ import Agog.Types as Types
     exposing
         ( Board
         , Choice(..)
+        , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)
         , GameState
@@ -119,6 +120,7 @@ import Html.Attributes as Attributes
 import Html.Events exposing (keyCode, on, onCheck, onClick, onInput)
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Encode as JE
+import List.Extra as LE
 import Markdown
 import PortFunnel.LocalStorage as LocalStorage
 import PortFunnel.WebSocket as WebSocket exposing (Response(..))
@@ -233,6 +235,7 @@ type alias Model =
     , time : Posix
     , requestedNew : Bool
     , chooseMoveOptionsUI : ChooseMoveOptionsUI
+    , delayedClick : Maybe RowCol
 
     -- persistent below here
     , page : Page
@@ -290,7 +293,7 @@ type Msg
     | ClearStorage
     | Click ( Int, Int )
     | CorruptJumpedUI (AskYesNo ())
-    | MakeHulk (AskYesNo RowCol)
+    | MakeHulkUI (AskYesNo RowCol)
     | CancelChooseMoveOptionsUI
     | SendUndoJumps UndoWhichJumps
     | ChatUpdate ChatSettings (Cmd Msg)
@@ -414,6 +417,7 @@ init flags url key =
             , time = Time.millisToPosix 0
             , requestedNew = False
             , chooseMoveOptionsUI = chooseMoveOptionsUINo
+            , delayedClick = Nothing
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -1437,32 +1441,32 @@ updateInternal msg model =
                 chooseMoveOptionsUI =
                     model.chooseMoveOptionsUI
             in
-            { model
-                | chooseMoveOptionsUI =
-                    { chooseMoveOptionsUI
-                        | corruptJumped = askYesNo
-                    }
-            }
-                |> withNoCmd
+            maybeDelayedClick
+                { model
+                    | chooseMoveOptionsUI =
+                        { chooseMoveOptionsUI
+                            | corruptJumped = askYesNo
+                        }
+                }
 
-        MakeHulk askYesNo ->
+        MakeHulkUI askYesNo ->
             let
                 chooseMoveOptionsUI =
                     model.chooseMoveOptionsUI
             in
-            { model
-                | chooseMoveOptionsUI =
-                    { chooseMoveOptionsUI
-                        | makeHulk = askYesNo
-                    }
-            }
-                |> withNoCmd
+            maybeDelayedClick
+                { model
+                    | chooseMoveOptionsUI =
+                        { chooseMoveOptionsUI
+                            | makeHulk = askYesNo
+                        }
+                }
 
         CancelChooseMoveOptionsUI ->
-            { model
-                | chooseMoveOptionsUI = chooseMoveOptionsUINo
-            }
-                |> withNoCmd
+            maybeDelayedClick
+                { model
+                    | chooseMoveOptionsUI = chooseMoveOptionsUINo
+                }
 
         SendUndoJumps undoWhichJumps ->
             model
@@ -1792,6 +1796,144 @@ doClick row col model =
         gameState =
             model.gameState
 
+        rowCol =
+            rc row col
+
+        board =
+            gameState.newBoard
+
+        player =
+            gameState.whoseTurn
+
+        otherPlayer =
+            Types.otherPlayer player
+
+        { pieceType } =
+            NewBoard.get rowCol board
+
+        selectedType =
+            case gameState.selected of
+                Nothing ->
+                    NoPiece
+
+                Just selectedRc ->
+                    NewBoard.get selectedRc board |> .pieceType
+    in
+    if
+        (selectedType /= NoPiece)
+            && (pieceType == Golem)
+            && (model.chooseMoveOptionsUI.makeHulk == AskAsk)
+    then
+        let
+            chooseMoveOptionsUI =
+                model.chooseMoveOptionsUI
+        in
+        model |> withCmd (Task.perform MakeHulkUI (Task.succeed <| AskYes rowCol))
+
+    else if
+        (selectedType == NoPiece)
+            || (pieceType /= NoPiece)
+            || (not model.isLocal && player /= model.player)
+    then
+        delayedClick rowCol model
+
+    else
+        let
+            jumped =
+                case gameState.legalMoves of
+                    Moves rowCols ->
+                        if List.member rowCol rowCols then
+                            Just rowCol
+
+                        else
+                            Nothing
+
+                    Jumps sequences ->
+                        case LE.find (Interface.isFirstJumpTo rowCol) sequences of
+                            Nothing ->
+                                Nothing
+
+                            Just sequence ->
+                                case List.head sequence of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just { over } ->
+                                        Just over
+        in
+        case jumped of
+            Nothing ->
+                delayedClick rowCol model
+
+            Just jumpedRc ->
+                let
+                    chooseMoveOptionsUI =
+                        if
+                            (rowCol /= NewBoard.playerSanctum otherPlayer)
+                                || (selectedType /= Golem && selectedType /= Hulk)
+                        then
+                            chooseMoveOptionsUINo
+
+                        else
+                            { chooseMoveOptionsUINo
+                                | makeHulk = AskAsk
+                            }
+
+                    chooseMoveOptionsUI2 =
+                        if rowCol == jumpedRc then
+                            chooseMoveOptionsUI
+
+                        else
+                            let
+                                jumpedType =
+                                    NewBoard.get jumpedRc board |> .pieceType
+                            in
+                            if
+                                (jumpedType /= Golem && jumpedType /= Hulk)
+                                    || (selectedType /= Journeyman)
+                            then
+                                chooseMoveOptionsUI
+
+                            else
+                                { chooseMoveOptionsUI
+                                    | corruptJumped = AskAsk
+                                }
+                in
+                if chooseMoveOptionsUI2 == chooseMoveOptionsUINo then
+                    delayedClick rowCol model
+
+                else
+                    { model
+                        | chooseMoveOptionsUI = chooseMoveOptionsUI2
+                        , delayedClick = Just rowCol
+                    }
+                        |> withNoCmd
+
+
+maybeDelayedClick : Model -> ( Model, Cmd Msg )
+maybeDelayedClick model =
+    case model.delayedClick of
+        Nothing ->
+            model |> withNoCmd
+
+        Just rowCol ->
+            let
+                { corruptJumped, makeHulk } =
+                    model.chooseMoveOptionsUI
+            in
+            if (corruptJumped == AskAsk) || (makeHulk == AskAsk) then
+                model |> withNoCmd
+
+            else
+                delayedClick rowCol model
+
+
+delayedClick : RowCol -> Model -> ( Model, Cmd Msg )
+delayedClick rowCol model =
+    let
+        gameState =
+            model.gameState
+
         withPlayReq playerid placement =
             withCmd <|
                 send model
@@ -1801,23 +1943,42 @@ doClick row col model =
                         }
                     )
 
-        rowCol =
-            { row = row, col = col }
-
         withACmd =
             withPlayReq model.playerid <|
                 let
                     piece =
-                        NewBoard.get (rc row col) gameState.newBoard
+                        NewBoard.get rowCol gameState.newBoard
                 in
                 case piece.pieceType of
                     NoPiece ->
-                        ChooseMove rowCol []
+                        let
+                            { corruptJumped, makeHulk } =
+                                model.chooseMoveOptionsUI
+
+                            chooseMoveOptions =
+                                (if corruptJumped == AskYes () then
+                                    [ CorruptJumped ]
+
+                                 else
+                                    []
+                                )
+                                    ++ (case makeHulk of
+                                            AskYes hulkPos ->
+                                                [ MakeHulk hulkPos ]
+
+                                            _ ->
+                                                []
+                                       )
+                        in
+                        ChooseMove rowCol chooseMoveOptions
 
                     _ ->
                         ChoosePiece rowCol
     in
-    { model | error = Nothing }
+    { model
+        | error = Nothing
+        , chooseMoveOptionsUI = chooseMoveOptionsUINo
+    }
         |> withACmd
 
 
