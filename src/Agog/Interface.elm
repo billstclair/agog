@@ -9,6 +9,12 @@
 -- See LICENSE.txt
 --
 ----------------------------------------------------------------------
+--
+-- TODO
+-- If a piece moves to the opposing sanctum with no option to makeHulk,
+-- remove it from play.
+-- Make the UI do this if the user clicks on an empty square (or maybe only
+-- if she clicks on the sanctum again).
 
 
 module Agog.Interface exposing
@@ -47,6 +53,7 @@ import Agog.Types as Types
         , UndoWhichJumps(..)
         , Winner(..)
         )
+import Agog.WhichServer as WhichServer
 import Debug
 import Dict exposing (Dict)
 import List.Extra as LE
@@ -287,6 +294,24 @@ messageProcessor state message =
                             }
                     )
 
+        SetGameStateReq { playerid, gameState } ->
+            if not WhichServer.allowSetGameState then
+                errorRes message state "SetGameStateReq is disabled."
+
+            else
+                case lookupGame message playerid state of
+                    Err res ->
+                        res
+
+                    Ok ( gameid, _, _ ) ->
+                        ( ServerInterface.updateGame gameid gameState state
+                        , Just <|
+                            UpdateRsp
+                                { gameid = gameid
+                                , gameState = gameState
+                                }
+                        )
+
         UpdateReq { playerid } ->
             case lookupGame message playerid state of
                 Err res ->
@@ -307,7 +332,7 @@ messageProcessor state message =
                     Debug.log "PlayReq Err" res
 
                 Ok ( gameid, gameState, player ) ->
-                    case Debug.log "PlayReq" placement of
+                    case placement of
                         ChooseNew newPlayer ->
                             case gameState.winner of
                                 NoWinner ->
@@ -619,32 +644,34 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                             then
                                 ( gameState, Just "Can't make a hulk except by landing on the other player's sanctum." )
 
-                            else if selectedType == Golem || selectedType == Hulk then
-                                if selectedColor /= hulkPiece.color then
-                                    ( gameState, Just "Can't convert another player's piece to a hulk." )
+                            else if selectedType /= Golem && selectedType /= Hulk then
+                                ( gameState, Just "Can't make a Hulk from a Journeyman or Corrupted Hulk." )
 
-                                else if gs.undoStates /= [] then
-                                    -- There are jumps left
-                                    ( gameState, Just "Can only make a hulk if the sanctum is the final location." )
+                            else if hulkPiece.pieceType /= Golem then
+                                ( gameState, Just "Can only convert a Golem to a hulk." )
 
-                                else if moveTo == hulkPos then
-                                    ( gameState, Just "Can't convert the jumper to a hulk." )
+                            else if selectedColor /= hulkPiece.color then
+                                ( gameState, Just "Can't convert another player's piece to a hulk." )
 
-                                else
-                                    let
-                                        hulk =
-                                            { pieceType = Hulk
-                                            , color = selectedColor
-                                            }
+                            else if gs.undoStates /= [] then
+                                -- There are jumps left
+                                ( gameState, Just "Can only make a hulk if the sanctum is the final location." )
 
-                                        newBoard =
-                                            NewBoard.clear moveTo board
-                                                |> NewBoard.set hulkPos hulk
-                                    in
-                                    ( { gs | newBoard = newBoard }, Nothing )
+                            else if moveTo == hulkPos then
+                                ( gameState, Just "Can't convert the jumper to a hulk." )
 
                             else
-                                ( gameState, Just "Can't make a Hulk from a Journeyman or Corrupted Hulk." )
+                                let
+                                    hulk =
+                                        { pieceType = Hulk
+                                        , color = selectedColor
+                                        }
+
+                                    newBoard =
+                                        NewBoard.clear moveTo board
+                                            |> NewBoard.set hulkPos hulk
+                                in
+                                ( { gs | newBoard = newBoard }, Nothing )
     in
     List.foldl processOption ( gameState, Nothing ) options
 
@@ -687,7 +714,7 @@ chooseMove state message gameid gameState player rowCol options =
                     else
                         let
                             gs =
-                                endOfTurn selected rowCol piece gameState
+                                endOfTurn selected rowCol piece options gameState
 
                             ( gs2, maybeError ) =
                                 processChooseMoveOptions options rowCol Nothing gs
@@ -768,6 +795,7 @@ chooseMove state message gameid gameState player rowCol options =
                                             endOfTurn selected
                                                 rowCol
                                                 piece
+                                                options
                                                 { gameState | newBoard = newBoard }
 
                                         ( gs2, maybeError ) =
@@ -834,8 +862,8 @@ chooseMove state message gameid gameState player rowCol options =
                                             )
 
 
-endOfTurn : RowCol -> RowCol -> Piece -> GameState -> GameState
-endOfTurn selected moved piece gameState =
+endOfTurn : RowCol -> RowCol -> Piece -> List ChooseMoveOption -> GameState -> GameState
+endOfTurn selected moved piece options gameState =
     let
         whoseTurn =
             Types.otherPlayer gameState.whoseTurn
@@ -843,9 +871,28 @@ endOfTurn selected moved piece gameState =
         whoseTurnColor =
             Types.playerColor whoseTurn
 
+        isMakeHulk chooseMoveOption =
+            case chooseMoveOption of
+                MakeHulk _ ->
+                    True
+
+                _ ->
+                    False
+
+        setPiece =
+            if
+                (piece.pieceType /= Journeyman)
+                    && (moved == NewBoard.playerSanctum whoseTurn)
+                    && (Nothing == LE.find isMakeHulk options)
+            then
+                Types.emptyPiece
+
+            else
+                piece
+
         newBoard =
-            NewBoard.set selected Types.emptyPiece gameState.newBoard
-                |> NewBoard.set moved piece
+            NewBoard.clear selected gameState.newBoard
+                |> NewBoard.set moved setPiece
 
         jumperLocations =
             NewBoard.computeJumperLocations whoseTurnColor newBoard
@@ -928,59 +975,6 @@ colorMatchesPlayer color player =
 
     else
         player == BlackPlayer
-
-
-doPlay : Decoration -> GameId -> GameState -> Types.ServerState -> ( Types.ServerState, Maybe Message )
-doPlay decoration gameid gameState state =
-    let
-        whoseTurn =
-            gameState.whoseTurn
-
-        private =
-            gameState.private
-
-        board =
-            gameState.board
-
-        moves =
-            gameState.moves
-
-        ( ( newDecoration, newBoard, newWhoseTurn ), ( newWinner, newPath, newMoves ) ) =
-            ( ( decoration, board, whoseTurn ), ( NoWinner, [], moves ) )
-
-        gs =
-            { gameState
-                | board = newBoard
-                , moves = newMoves
-                , whoseTurn = newWhoseTurn
-                , winner = newWinner
-                , path = newPath
-                , private = { private | decoration = newDecoration }
-            }
-                |> updateScore
-
-        state2 =
-            ServerInterface.updateGame gameid gs state
-    in
-    case newWinner of
-        NoWinner ->
-            ( state2
-            , Just <|
-                PlayRsp
-                    { gameid = gameid
-                    , gameState = gs
-                    , decoration = newDecoration
-                    }
-            )
-
-        _ ->
-            ( state2
-            , Just <|
-                GameOverRsp
-                    { gameid = gameid
-                    , gameState = gs
-                    }
-            )
 
 
 cellName : ( Int, Int ) -> String

@@ -438,6 +438,11 @@ type Message
         }
     | LeaveReq { playerid : PlayerId }
     | LeaveRsp { gameid : GameId, player : Player }
+      -- Disallowed if Agog.WhichServer.allowGameState is False
+    | SetGameStateReq
+        { playerid : PlayerId
+        , gameState : GameState
+        }
     | UpdateReq { playerid : PlayerId }
     | UpdateRsp
         { gameid : String

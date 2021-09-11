@@ -1304,8 +1304,8 @@ updateInternal msg model =
             disconnect model
 
         SetTestMode isTestMode ->
-            { model
-                | gameState =
+            let
+                gs =
                     { gameState
                         | testMode =
                             if isTestMode then
@@ -1322,14 +1322,29 @@ updateInternal msg model =
                             else
                                 Nothing
                     }
+
+                cmd =
+                    if not isTestMode then
+                        send model
+                            (SetGameStateReq
+                                { playerid = model.playerid
+                                , gameState = gs
+                                }
+                            )
+
+                    else
+                        Cmd.none
+            in
+            { model
+                | gameState = gs
                 , lastTestMode =
                     if isTestMode then
                         Nothing
 
                     else
-                        gameState.testMode
+                        gs.testMode
             }
-                |> withNoCmd
+                |> withCmd cmd
 
         EraseBoard ->
             { model
@@ -1821,14 +1836,20 @@ doClick row col model =
     in
     if
         (selectedType /= NoPiece)
-            && (pieceType == Golem)
             && (model.chooseMoveOptionsUI.makeHulk == AskAsk)
     then
         let
             chooseMoveOptionsUI =
                 model.chooseMoveOptionsUI
+
+            askYesNo =
+                if pieceType == NoPiece then
+                    AskNo
+
+                else
+                    AskYes rowCol
         in
-        model |> withCmd (Task.perform MakeHulkUI (Task.succeed <| AskYes rowCol))
+        model |> withCmd (Task.perform MakeHulkUI (Task.succeed askYesNo))
 
     else if
         (selectedType == NoPiece)
@@ -2191,39 +2212,7 @@ mainPage bsize model =
             Types.typeToStyle model.styleType
     in
     div [ align "center" ]
-        [ if corruptJumped == AskAsk || makeHulk == AskAsk then
-            div
-                [ style "border" <| "3px solid orange"
-                , style "padding" "5px"
-                , style "width" "fit-content"
-                ]
-                [ if corruptJumped == AskAsk then
-                    span []
-                        [ b "Corrupt Jumped Piece: "
-                        , button [ onClick <| CorruptJumpedUI (AskYes ()) ]
-                            [ text "Yes" ]
-                        , button [ onClick <| CorruptJumpedUI AskNo ]
-                            [ text "No" ]
-                        , br
-                        ]
-
-                  else
-                    text ""
-                , if makeHulk == AskAsk then
-                    span []
-                        [ b "Click a Golem to make it a Hulk. Otherwise, any other square."
-                        , br
-                        ]
-
-                  else
-                    text ""
-                , button [ onClick CancelChooseMoveOptionsUI ]
-                    [ text "No Hulks or Corruption" ]
-                ]
-
-          else
-            text ""
-        , NewBoard.render theStyle
+        [ NewBoard.render theStyle
             bsize
             Click
             (Just <| Board.getSizer DefaultSizer)
@@ -2293,6 +2282,38 @@ mainPage bsize model =
                                 gameState.players.black
                     , br
                     ]
+            , if corruptJumped == AskAsk || makeHulk == AskAsk then
+                div
+                    [ style "border" <| "3px solid orange"
+                    , style "padding" "5px"
+                    , style "width" "fit-content"
+                    ]
+                    [ if corruptJumped == AskAsk then
+                        span []
+                            [ b "Corrupt Jumped Piece: "
+                            , button [ onClick <| CorruptJumpedUI (AskYes ()) ]
+                                [ text "Yes" ]
+                            , button [ onClick <| CorruptJumpedUI AskNo ]
+                                [ text "No" ]
+                            , br
+                            ]
+
+                      else
+                        text ""
+                    , if makeHulk == AskAsk then
+                        span []
+                            [ b "Click a Golem to make it a Hulk. Otherwise, any empty square."
+                            , br
+                            ]
+
+                      else
+                        text ""
+                    , button [ onClick CancelChooseMoveOptionsUI ]
+                        [ text "No Hulks or Corruption" ]
+                    ]
+
+              else
+                text ""
             , if not model.isLocal && model.isLive then
                 span []
                     [ if white == "" || black == "" then

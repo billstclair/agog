@@ -1,6 +1,10 @@
-module Agog.WhichServer exposing (serverUrl)
+module Agog.WhichServer exposing (serverUrl, allowSetGameState)
 
 
 serverUrl : String
 serverUrl =
-    "wss://zephyrnot.com/zephyrnot-server"
+    "wss://agog.ninja/agog-server"
+
+allowSetGameState : Bool
+allowSetGameState =
+    False

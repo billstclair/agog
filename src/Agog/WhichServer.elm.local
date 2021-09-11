@@ -1,6 +1,10 @@
-module Agog.WhichServer exposing (serverUrl)
+module Agog.WhichServer exposing (serverUrl, allowSetGameState)
 
 
 serverUrl : String
 serverUrl =
     "ws://localhost:8081"
+
+allowSetGameState : Bool
+allowSetGameState =
+    True

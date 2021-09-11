@@ -1164,6 +1164,13 @@ messageEncoderInternal includePrivate message =
               ]
             )
 
+        SetGameStateReq { playerid, gameState } ->
+            ( Req "setGameState"
+            , [ ( "playerid", JE.string playerid )
+              , ( "gameState", encodeGameState includePrivate gameState )
+              ]
+            )
+
         UpdateReq { playerid } ->
             ( Req "update"
             , [ ( "playerid", JE.string playerid ) ]
@@ -1321,6 +1328,19 @@ leaveReqDecoder =
                 }
         )
         |> required "playerid" JD.string
+
+
+setGameStateReqDecoder : Decoder Message
+setGameStateReqDecoder =
+    JD.succeed
+        (\playerid gameState ->
+            SetGameStateReq
+                { playerid = playerid
+                , gameState = gameState
+                }
+        )
+        |> required "playerid" JD.string
+        |> required "gameState" gameStateDecoder
 
 
 updateReqDecoder : Decoder Message
@@ -1563,6 +1583,9 @@ messageDecoder ( reqrsp, plist ) =
 
                 "leave" ->
                     decodePlist leaveReqDecoder plist
+
+                "setGameState" ->
+                    decodePlist setGameStateReqDecoder plist
 
                 "update" ->
                     decodePlist updateReqDecoder plist
