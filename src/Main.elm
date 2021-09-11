@@ -1875,12 +1875,17 @@ doClick row col model =
                                 Nothing
 
                             Just sequence ->
-                                case List.head sequence of
-                                    Nothing ->
+                                case List.tail sequence of
+                                    Just _ ->
                                         Nothing
 
-                                    Just { over } ->
-                                        Just over
+                                    Nothing ->
+                                        case List.head sequence of
+                                            Nothing ->
+                                                Nothing
+
+                                            Just { over } ->
+                                                Just over
         in
         case jumped of
             Nothing ->
