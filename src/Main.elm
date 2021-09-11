@@ -2322,7 +2322,14 @@ mainPage bsize model =
                 in
                 span []
                     [ br
-                    , text <| String.fromInt games ++ " games, "
+                    , text <|
+                        String.fromInt games
+                            ++ (if games == 1 then
+                                    "game, "
+
+                                else
+                                    " games, "
+                               )
                     , text <| winString WhitePlayer whiteWins
                     , text ", "
                     , text <| winString BlackPlayer blackWins
