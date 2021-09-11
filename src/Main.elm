@@ -1875,17 +1875,12 @@ doClick row col model =
                                 Nothing
 
                             Just sequence ->
-                                case List.tail sequence of
-                                    Just _ ->
+                                case sequence of
+                                    { over } :: [] ->
+                                        Just over
+
+                                    _ ->
                                         Nothing
-
-                                    Nothing ->
-                                        case List.head sequence of
-                                            Nothing ->
-                                                Nothing
-
-                                            Just { over } ->
-                                                Just over
         in
         case jumped of
             Nothing ->
@@ -2135,6 +2130,9 @@ mainPage bsize model =
         rotated =
             currentPlayer == Just WhitePlayer
 
+        { corruptJumped, makeHulk } =
+            model.chooseMoveOptionsUI
+
         ( playing, message ) =
             if not model.isLive then
                 ( False
@@ -2181,24 +2179,28 @@ mainPage bsize model =
                     NoWinner ->
                         let
                             action =
-                                case gameState.selected of
-                                    Nothing ->
-                                        if gameState.jumperLocations == [] then
-                                            "choose a piece to move"
+                                if corruptJumped == AskAsk || makeHulk == AskAsk then
+                                    "follow the instructions in the orange-outlined box below"
 
-                                        else
-                                            "choose one of the selected jumper pieces"
+                                else
+                                    case gameState.selected of
+                                        Nothing ->
+                                            if gameState.jumperLocations == [] then
+                                                "choose a piece to move"
 
-                                    Just _ ->
-                                        case gameState.legalMoves of
-                                            Moves [] ->
-                                                "selected piece has no legal moves."
+                                            else
+                                                "choose one of the selected jumper pieces"
 
-                                            Moves _ ->
-                                                "click on a highlighted square to move the selected piece"
+                                        Just _ ->
+                                            case gameState.legalMoves of
+                                                Moves [] ->
+                                                    "selected piece has no legal moves."
 
-                                            Jumps _ ->
-                                                "click on a highlighted square to jump"
+                                                Moves _ ->
+                                                    "click on a highlighted square to move the selected piece"
+
+                                                Jumps _ ->
+                                                    "click on a highlighted square to jump"
 
                             name =
                                 if currentPlayer == Just WhitePlayer then
@@ -2209,9 +2211,6 @@ mainPage bsize model =
                         in
                         name ++ ", " ++ action ++ "."
                 )
-
-        { corruptJumped, makeHulk } =
-            model.chooseMoveOptionsUI
 
         theStyle =
             Types.typeToStyle model.styleType
@@ -2396,47 +2395,35 @@ mainPage bsize model =
                                 [ text "Undo All Jumps" ]
                             ]
                     ]
-            , if gameState.score == Dict.empty then
+            , let
+                { games, whiteWins, blackWins } =
+                    gameState.score
+              in
+              if games == 0 then
                 text ""
 
               else
+                let
+                    winString player wins =
+                        let
+                            name =
+                                playerName player model
+
+                            nameString =
+                                if not model.isLocal && player == model.player then
+                                    "You (" ++ name ++ ")"
+
+                                else
+                                    name
+                        in
+                        nameString ++ " won " ++ String.fromInt wins
+                in
                 span []
                     [ br
-                    , b "Games/Score for"
-                    , span [] <|
-                        let
-                            yourName =
-                                playerName model.player model
-                        in
-                        List.foldl
-                            (\( name, oneScore ) html ->
-                                let
-                                    nameString =
-                                        if not model.isLocal && name == yourName then
-                                            "You (" ++ name ++ ")"
-
-                                        else
-                                            name
-                                in
-                                List.concat
-                                    [ html
-                                    , [ span []
-                                            [ if html == [] then
-                                                text " "
-
-                                              else
-                                                text ", "
-                                            , text nameString
-                                            , text ": "
-                                            , text <| String.fromInt oneScore.games
-                                            , text "/"
-                                            , text <| String.fromInt oneScore.score
-                                            ]
-                                      ]
-                                    ]
-                            )
-                            []
-                            (Dict.toList gameState.score)
+                    , text <| String.fromInt games ++ " games, "
+                    , text <| winString WhitePlayer whiteWins
+                    , text ", "
+                    , text <| winString BlackPlayer blackWins
                     , text " "
                     , if not model.isLocal then
                         text ""

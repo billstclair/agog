@@ -991,36 +991,30 @@ updateScore gameState =
         names =
             gameState.players
 
-        winnerName =
+        ( winnerName, deltas ) =
             case gameState.winner of
                 NoWinner ->
-                    ""
+                    ( "", ( 0, 0 ) )
 
                 WhiteWinner ->
-                    names.white
+                    ( names.white, ( 1, 0 ) )
 
                 BlackWinner ->
-                    names.black
+                    ( names.black, ( 0, 1 ) )
     in
     if gameState.winner == NoWinner then
         gameState
 
     else
         let
-            oneScore =
-                case Dict.get winnerName score of
-                    Nothing ->
-                        Types.zeroOneScore
-
-                    Just one ->
-                        one
+            ( dw, db ) =
+                deltas
         in
         { gameState
             | score =
-                Dict.insert winnerName
-                    { oneScore
-                        | games = oneScore.games + 1
-                        , score = oneScore.score + Board.score gameState.board
-                    }
-                    score
+                { score
+                    | games = score.games + 1
+                    , whiteWins = score.whiteWins + dw
+                    , blackWins = score.blackWins + db
+                }
         }

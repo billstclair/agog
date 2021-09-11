@@ -44,7 +44,6 @@ import Agog.Types as Types
         , NewBoard
         , OneCorruptibleJump
         , OneJump
-        , OneScore
         , Page(..)
         , Piece
         , PieceSelected
@@ -594,32 +593,21 @@ newBoardDecoder =
             )
 
 
-encodeOneScore : OneScore -> Value
-encodeOneScore oneScore =
-    JE.object
-        [ ( "games", JE.int oneScore.games )
-        , ( "score", JE.int oneScore.score )
-        ]
-
-
-oneScoreDecoder : Decoder OneScore
-oneScoreDecoder =
-    JD.succeed OneScore
-        |> required "games" JD.int
-        |> required "score" JD.int
-
-
 encodeScore : Score -> Value
 encodeScore score =
-    JE.dict identity encodeOneScore score
+    JE.object
+        [ ( "games", JE.int score.games )
+        , ( "whiteWins", JE.int score.whiteWins )
+        , ( "blackWins", JE.int score.blackWins )
+        ]
 
 
 scoreDecoder : Decoder Score
 scoreDecoder =
-    JD.oneOf
-        [ JD.dict oneScoreDecoder
-        , JD.succeed Dict.empty
-        ]
+    JD.succeed Score
+        |> required "games" JD.int
+        |> required "whiteWins" JD.int
+        |> required "blackWins" JD.int
 
 
 encodeSettings : Settings -> Value

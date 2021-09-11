@@ -23,7 +23,6 @@ module Agog.Types exposing
     , NewBoard
     , OneCorruptibleJump
     , OneJump
-    , OneScore
     , Page(..)
     , Piece
     , PieceSelected
@@ -58,7 +57,6 @@ module Agog.Types exposing
     , otherPlayer
     , playerColor
     , typeToStyle
-    , zeroOneScore
     , zeroScore
     )
 
@@ -166,26 +164,19 @@ type Page
     | PublicPage
 
 
-type alias OneScore =
-    { games : Int
-    , score : Int
-    }
-
-
-zeroOneScore : OneScore
-zeroOneScore =
-    { games = 0
-    , score = 0
-    }
-
-
 type alias Score =
-    Dict String OneScore
+    { games : Int
+    , whiteWins : Int
+    , blackWins : Int
+    }
 
 
 zeroScore : Score
 zeroScore =
-    Dict.empty
+    { games = 0
+    , whiteWins = 0
+    , blackWins = 0
+    }
 
 
 type alias Style =
