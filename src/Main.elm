@@ -1838,6 +1838,7 @@ doClick row col model =
         (selectedType /= NoPiece)
             && (model.chooseMoveOptionsUI.makeHulk == AskAsk)
     then
+        -- Handle click when asking whether to make a hulk.
         let
             chooseMoveOptionsUI =
                 model.chooseMoveOptionsUI
@@ -1902,6 +1903,7 @@ doClick row col model =
 
                     chooseMoveOptionsUI2 =
                         if rowCol == jumpedRc then
+                            -- It's not a jump, nothing more to do
                             chooseMoveOptionsUI
 
                         else
@@ -2633,37 +2635,7 @@ mainPage bsize model =
             [ text "Moves: "
             , text <| movesToString gameState.moves
             ]
-        , p []
-            [ a
-                [ href "#"
-                , onClick <| SetPage PublicPage
-                ]
-                [ text "Public" ]
-            , text " "
-            , a
-                [ href "#"
-                , onClick <| SetPage InstructionsPage
-                ]
-                [ text "Instructions" ]
-            , text " "
-            , a
-                [ href "#"
-                , onClick <| SetPage RulesPage
-                ]
-                [ text "Rules" ]
-            , br
-            , a
-                [ href "https://github.com/billstclair/agog/"
-                , target "_blank"
-                ]
-                [ text "GitHub" ]
-            , text " "
-            , a
-                [ href "https://gibgoygames.com/"
-                , target "_blank"
-                ]
-                [ text "Gib Goy Games" ]
-            ]
+        , footerParagraph
         , p []
             [ button
                 [ onClick ClearStorage
@@ -2671,6 +2643,41 @@ mainPage bsize model =
                 ]
                 [ text <| "Clear!" ]
             ]
+        ]
+
+
+footerParagraph : Html Msg
+footerParagraph =
+    p []
+        [ a
+            [ href "#"
+            , onClick <| SetPage PublicPage
+            ]
+            [ text "Public" ]
+        , text " "
+        , a
+            [ href "#"
+            , onClick <| SetPage InstructionsPage
+            ]
+            [ text "Instructions" ]
+        , text " "
+        , a
+            [ href "#"
+            , onClick <| SetPage RulesPage
+            ]
+            [ text "Rules" ]
+        , br
+        , a
+            [ href "https://github.com/billstclair/agog/"
+            , target "_blank"
+            ]
+            [ text "GitHub" ]
+        , text " "
+        , a
+            [ href "https://gibgoygames.com/"
+            , target "_blank"
+            ]
+            [ text "Gib Goy Games" ]
         ]
 
 
@@ -2758,13 +2765,17 @@ instructionsPage bsize model =
         [ br
         , playButton
         , rulesDiv True
-            [ br, b "Instructions" ]
-        , rulesDiv False
-            [ Markdown.toHtml [] """
+            [ h2 [ align "center" ]
+                [ text "Instructions" ]
+            , rulesDiv False
+                [ Markdown.toHtml [] """
 TO BE DONE
 """
+                ]
             ]
         , playButton
+        , rulesDiv True
+            [ footerParagraph ]
         ]
 
 
@@ -2864,6 +2875,8 @@ If players of differing skill levels wish to play an even game, the stronger pla
 """
             ]
         , playButton
+        , rulesDiv True
+            [ footerParagraph ]
         ]
 
 
