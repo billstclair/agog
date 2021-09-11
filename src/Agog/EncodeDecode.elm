@@ -62,6 +62,7 @@ import Agog.Types as Types
         , TestMode
         , UndoState
         , UndoWhichJumps(..)
+        , WinReason(..)
         , Winner(..)
         )
 import Array exposing (Array)
@@ -282,38 +283,78 @@ playerDecoder =
             )
 
 
-encodeWinner : Winner -> Value
-encodeWinner winner =
+encodeWinReason : WinReason -> Value
+encodeWinReason reason =
     JE.string <|
-        case winner of
-            NoWinner ->
-                "NoWinner"
+        case reason of
+            WinByCapture ->
+                "WinByCapture"
 
-            WhiteWinner ->
-                "WhiteWinner"
+            WinBySanctum ->
+                "WinBySanctum"
 
-            BlackWinner ->
-                "BlackWinner"
+            WinByImmobilization ->
+                "WinByImmobilization"
+
+            WinByResignation ->
+                "WinByResignation"
 
 
-winnerDecoder : Decoder Winner
-winnerDecoder =
+winReasonDecoder : Decoder WinReason
+winReasonDecoder =
     JD.string
         |> JD.andThen
             (\s ->
                 case s of
-                    "NoWinner" ->
-                        JD.succeed NoWinner
+                    "WinByCapture" ->
+                        JD.succeed WinByCapture
 
-                    "WhiteWinner" ->
-                        JD.succeed WhiteWinner
+                    "WinBySanctum" ->
+                        JD.succeed WinBySanctum
 
-                    "BlackWinner" ->
-                        JD.succeed BlackWinner
+                    "WinByImmobilization" ->
+                        JD.succeed WinByImmobilization
+
+                    "WinByResignation" ->
+                        JD.succeed WinByResignation
 
                     _ ->
-                        JD.fail <| "Unknown winner: " ++ s
+                        JD.fail <| "Unknown win reason: " ++ s
             )
+
+
+encodeWinner : Winner -> Value
+encodeWinner winner =
+    case winner of
+        NoWinner ->
+            JE.string "NoWinner"
+
+        WhiteWinner reason ->
+            JE.object
+                [ ( "WhiteWinner", encodeWinReason reason ) ]
+
+        BlackWinner reason ->
+            JE.object
+                [ ( "BlackWinner", encodeWinReason reason ) ]
+
+
+winnerDecoder : Decoder Winner
+winnerDecoder =
+    JD.oneOf
+        [ JD.string
+            |> JD.andThen
+                (\s ->
+                    if "NoWinner" == s then
+                        JD.succeed NoWinner
+
+                    else
+                        JD.fail <| "Unknown win type: " ++ s
+                )
+        , JD.field "WhiteWinner" winReasonDecoder
+            |> JD.andThen (\reason -> WhiteWinner reason |> JD.succeed)
+        , JD.field "BlackWinner" winReasonDecoder
+            |> JD.andThen (\reason -> BlackWinner reason |> JD.succeed)
+        ]
 
 
 encodeIntPair : ( Int, Int ) -> Value
@@ -857,6 +898,9 @@ oneCorruptibleJumpDecoder =
 encodeMovesOrJumps : MovesOrJumps -> Value
 encodeMovesOrJumps movesOrJumps =
     case movesOrJumps of
+        NoMoves ->
+            JE.string "NoMoves"
+
         Moves rowcols ->
             JE.object [ ( "moves", encodeRowColList rowcols ) ]
 
@@ -867,7 +911,16 @@ encodeMovesOrJumps movesOrJumps =
 movesOrJumpsDecoder : Decoder MovesOrJumps
 movesOrJumpsDecoder =
     JD.oneOf
-        [ JD.field "moves" rowColListDecoder
+        [ JD.string
+            |> JD.andThen
+                (\s ->
+                    if "NoMoves" == s then
+                        JD.succeed NoMoves
+
+                    else
+                        JD.fail <| "Unknown MovesOrJumps: " ++ s
+                )
+        , JD.field "moves" rowColListDecoder
             |> JD.andThen (\rowcols -> JD.succeed <| Moves rowcols)
         , JD.field "jumps" (JD.list jumpSequenceDecoder)
             |> JD.andThen (\sequences -> JD.succeed <| Jumps sequences)

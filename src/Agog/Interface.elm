@@ -51,6 +51,7 @@ import Agog.Types as Types
         , ServerState
         , UndoState
         , UndoWhichJumps(..)
+        , WinReason(..)
         , Winner(..)
         )
 import Agog.WhichServer as WhichServer
@@ -79,7 +80,7 @@ emptyGameState players =
     , whoseTurn = WhitePlayer
     , selected = Nothing
     , jumperLocations = []
-    , legalMoves = Moves []
+    , legalMoves = NoMoves
     , undoStates = []
     , jumps = []
     , score = Types.zeroScore
@@ -304,11 +305,16 @@ messageProcessor state message =
                         res
 
                     Ok ( gameid, _, _ ) ->
-                        ( ServerInterface.updateGame gameid gameState state
+                        let
+                            gs =
+                                NewBoard.populateLegalMoves gameState
+                                    |> populateWinner
+                        in
+                        ( ServerInterface.updateGame gameid gs state
                         , Just <|
                             UpdateRsp
                                 { gameid = gameid
-                                , gameState = gameState
+                                , gameState = gs
                                 }
                         )
 
@@ -406,10 +412,10 @@ messageProcessor state message =
                                         winner =
                                             case player of
                                                 WhitePlayer ->
-                                                    BlackWinner
+                                                    BlackWinner WinByResignation
 
                                                 BlackPlayer ->
-                                                    WhiteWinner
+                                                    WhiteWinner WinByResignation
 
                                         gs =
                                             { gameState | winner = winner }
@@ -684,8 +690,17 @@ toCorruptibleJump { over, to } =
     }
 
 
+populateWinner : GameState -> GameState
+populateWinner gameState =
+    case gameState.winner of
+        NoWinner ->
+            { gameState
+                | winner =
+                    NewBoard.winner gameState.whoseTurn gameState.newBoard
+            }
 
--- TODO: Call processChooseOptions
+        _ ->
+            gameState
 
 
 chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> List ChooseMoveOption -> ( Types.ServerState, Maybe Message )
@@ -707,6 +722,9 @@ chooseMove state message gameid gameState player rowCol options =
                     NewBoard.get selected board
             in
             case legalMoves of
+                NoMoves ->
+                    errorRes message state "There are no legal moves."
+
                 Moves rowCols ->
                     if not <| List.member rowCol rowCols then
                         errorRes message state "Not a legal move."
@@ -724,11 +742,15 @@ chooseMove state message gameid gameState player rowCol options =
                                 errorRes message state err
 
                             Nothing ->
-                                ( ServerInterface.updateGame gameid gs2 state
+                                let
+                                    gs3 =
+                                        populateWinner gs2
+                                in
+                                ( ServerInterface.updateGame gameid gs3 state
                                 , Just <|
                                     PlayRsp
                                         { gameid = gameid
-                                        , gameState = gs2
+                                        , gameState = gs3
                                         , decoration = NoDecoration
                                         }
                                 )
@@ -809,11 +831,15 @@ chooseMove state message gameid gameState player rowCol options =
                                             errorRes message state err
 
                                         Nothing ->
-                                            ( ServerInterface.updateGame gameid gs2 state
+                                            let
+                                                gs3 =
+                                                    populateWinner gs2
+                                            in
+                                            ( ServerInterface.updateGame gameid gs3 state
                                             , Just <|
                                                 PlayRsp
                                                     { gameid = gameid
-                                                    , gameState = gs2
+                                                    , gameState = gs3
                                                     , decoration = NoDecoration
                                                     }
                                             )
@@ -901,7 +927,7 @@ endOfTurn selected moved piece options gameState =
         | newBoard = newBoard
         , selected = Nothing
         , jumperLocations = jumperLocations
-        , legalMoves = Moves []
+        , legalMoves = NoMoves
         , whoseTurn = whoseTurn
         , undoStates = []
         , jumps = []
@@ -996,10 +1022,10 @@ updateScore gameState =
                 NoWinner ->
                     ( "", ( 0, 0 ) )
 
-                WhiteWinner ->
+                WhiteWinner _ ->
                     ( names.white, ( 1, 0 ) )
 
-                BlackWinner ->
+                BlackWinner _ ->
                     ( names.black, ( 0, 1 ) )
     in
     if gameState.winner == NoWinner then

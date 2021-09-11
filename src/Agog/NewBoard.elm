@@ -50,6 +50,7 @@ import Agog.Types as Types
         , RowCol
         , SavedModel
         , Style
+        , WinReason(..)
         , Winner(..)
         )
 import Array exposing (Array)
@@ -141,23 +142,31 @@ playerSanctum player =
             blackSanctum
 
 
+whiteGolem : Piece
+whiteGolem =
+    { color = WhiteColor
+    , pieceType = Golem
+    }
+
+
+blackGolem : Piece
+blackGolem =
+    { whiteGolem | color = BlackColor }
+
+
+whiteJourneyman : Piece
+whiteJourneyman =
+    { whiteGolem | pieceType = Journeyman }
+
+
+blackJourneyman : Piece
+blackJourneyman =
+    { blackGolem | pieceType = Journeyman }
+
+
 initial : NewBoard
 initial =
     let
-        whiteGolem =
-            { color = WhiteColor
-            , pieceType = Golem
-            }
-
-        whiteJourneyman =
-            { whiteGolem | pieceType = Journeyman }
-
-        blackGolem =
-            { whiteGolem | color = BlackColor }
-
-        blackJourneyman =
-            { blackGolem | pieceType = Journeyman }
-
         fillGolems : NewBoard -> Piece -> Int -> Int -> Int -> NewBoard
         fillGolems b p col startRow endRow =
             if startRow > endRow then
@@ -261,11 +270,72 @@ set { row, col } piece board =
                 board
 
 
-{-| It might be worthwhile to have an option to increment row or col first.
+{-| This finds only WinBySanctum and WinByCapture.
+The other two are discovered during play in Interface.chooseMove.
 -}
-winner : Player -> NewBoard -> ( Winner, List ( Int, Int ) )
-winner player board =
-    ( NoWinner, [] )
+winner : Player -> NewBoard -> Winner
+winner whoseTurn board =
+    if get whiteSanctum board == blackJourneyman then
+        BlackWinner WinBySanctum
+
+    else if get blackSanctum board == whiteJourneyman then
+        WhiteWinner WinBySanctum
+
+    else
+        let
+            color =
+                Types.playerColor whoseTurn
+
+            mapper rowCol piece found =
+                let
+                    ( fw, fb, fm ) =
+                        found
+
+                    fm2 =
+                        if fm then
+                            True
+
+                        else if color == (get rowCol board |> .color) then
+                            if NoMoves /= computeLegalMoves board (Just rowCol) then
+                                True
+
+                            else
+                                False
+
+                        else
+                            fm
+                in
+                if piece == whiteJourneyman then
+                    ( True, fb, fm2 )
+
+                else if piece == blackJourneyman then
+                    ( fw, True, fm2 )
+
+                else if fm /= fm2 then
+                    ( fw, fb, fm2 )
+
+                else
+                    found
+
+            ( foundWhite, foundBlack, foundMove ) =
+                mapWholeBoard mapper board ( False, False, False )
+        in
+        if not foundWhite then
+            BlackWinner WinByCapture
+
+        else if not foundBlack then
+            WhiteWinner WinByCapture
+
+        else if not foundMove then
+            case whoseTurn of
+                WhitePlayer ->
+                    BlackWinner WinByImmobilization
+
+                BlackPlayer ->
+                    WhiteWinner WinByImmobilization
+
+        else
+            NoWinner
 
 
 
@@ -609,6 +679,9 @@ drawHighlight color delta { row, col } =
 drawHighlights : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> Int -> List (Svg msg)
 drawHighlights style selected jumperLocations legalMoves delta =
     (case legalMoves of
+        NoMoves ->
+            []
+
         Moves rowcols ->
             List.map (drawHighlight style.moveColor delta) rowcols
 
@@ -1197,12 +1270,17 @@ computeLegalMoves : NewBoard -> Maybe RowCol -> MovesOrJumps
 computeLegalMoves newBoard selected =
     case selected of
         Nothing ->
-            Moves []
+            NoMoves
 
         Just rowCol ->
             case legalJumps newBoard rowCol of
                 [] ->
-                    Moves <| legalSlides newBoard rowCol
+                    case legalSlides newBoard rowCol of
+                        [] ->
+                            NoMoves
+
+                        slides ->
+                            Moves slides
 
                 jumpSequences ->
                     Jumps jumpSequences

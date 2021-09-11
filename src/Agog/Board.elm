@@ -35,6 +35,7 @@ import Agog.Types as Types
         , Player(..)
         , SavedModel
         , Style
+        , WinReason(..)
         , Winner(..)
         )
 import Array exposing (Array)
@@ -233,16 +234,16 @@ winner player board =
     in
     if hwin && vwin then
         if player == WhitePlayer then
-            ( WhiteWinner, hpath )
+            ( WhiteWinner WinByCapture, hpath )
 
         else
-            ( BlackWinner, vpath )
+            ( BlackWinner WinByCapture, vpath )
 
     else if hwin then
-        ( WhiteWinner, hpath )
+        ( WhiteWinner WinByCapture, hpath )
 
     else if vwin then
-        ( BlackWinner, vpath )
+        ( BlackWinner WinByCapture, vpath )
 
     else
         ( NoWinner, [] )

@@ -50,6 +50,7 @@ import Agog.Types as Types
         , StyleType(..)
         , TestMode
         , UndoWhichJumps(..)
+        , WinReason(..)
         , Winner(..)
         )
 import Agog.WhichServer as WhichServer
@@ -302,8 +303,6 @@ type Msg
     | DelayedAction (Model -> ( Model, Cmd Msg )) Posix
     | SetZone Zone
     | SetGameCount String
-    | ToggleSimulator
-    | SimulatorStep
     | InitializeSeed Posix
     | WindowResize Int Int
     | HandleUrlRequest UrlRequest
@@ -1307,7 +1306,8 @@ updateInternal msg model =
             let
                 gs =
                     { gameState
-                        | testMode =
+                        | selected = Nothing
+                        , testMode =
                             if isTestMode then
                                 case model.lastTestMode of
                                     Nothing ->
@@ -1538,99 +1538,6 @@ updateInternal msg model =
             }
                 |> withNoCmd
 
-        ToggleSimulator ->
-            let
-                simulatorState =
-                    model.simulatorState
-
-                gamesLeft =
-                    if simulatorState.gamesLeft == 0 then
-                        simulatorState.gameCount
-
-                    else
-                        0
-            in
-            { model
-                | simulatorState =
-                    { simulatorState
-                        | gamesLeft = gamesLeft
-                        , simulatorResult = SimulatorResult 0 0 0 0
-                    }
-            }
-                |> withCmd
-                    (if gamesLeft > 0 then
-                        simulatorStepCmd ()
-
-                     else
-                        Cmd.none
-                    )
-
-        SimulatorStep ->
-            let
-                simulatorState =
-                    model.simulatorState
-
-                count =
-                    simulatorState.gamesLeft
-
-                loop seed left c1 c2 s1 s2 =
-                    if left <= 0 then
-                        ( SimulatorResult c1 c2 s1 s2, seed )
-
-                    else
-                        let
-                            ( winner, score, seed2 ) =
-                                Board.simulateGame seed
-
-                            ( ( c12, c22 ), ( s12, s22 ) ) =
-                                case winner of
-                                    WhiteWinner ->
-                                        ( ( c1 + 1, c2 ), ( s1 + score, s2 ) )
-
-                                    BlackWinner ->
-                                        ( ( c1, c2 + 1 ), ( s1, s2 + score ) )
-
-                                    _ ->
-                                        ( ( c1, c2 ), ( s2, s2 ) )
-                        in
-                        loop seed2 (left - 1) c12 c22 s12 s22
-
-                gamesLeft =
-                    simulatorState.gamesLeft - count
-
-                oldResult =
-                    simulatorState.simulatorResult
-
-                ( newResult, newSeed ) =
-                    loop model.seed count 0 0 0 0
-
-                simulatorResult =
-                    { horizontalWins =
-                        oldResult.horizontalWins + newResult.horizontalWins
-                    , verticalWins =
-                        oldResult.verticalWins + newResult.verticalWins
-                    , horizontalScore =
-                        oldResult.horizontalScore + newResult.horizontalScore
-                    , verticalScore =
-                        oldResult.verticalScore + newResult.verticalScore
-                    }
-            in
-            { model
-                | simulatorState =
-                    { simulatorState
-                        | simulatorResult = simulatorResult
-                        , gamesLeft = gamesLeft
-                    }
-                , seed = newSeed
-            }
-                |> withCmd
-                    (if gamesLeft > 0 then
-                        simulatorStepCmd ()
-
-                     else
-                        Cmd.none
-                    )
-
         InitializeSeed posix ->
             { model
                 | seed = Random.initialSeed <| Time.posixToMillis posix
@@ -1751,11 +1658,6 @@ send model message =
     ServerInterface.send model.interface <| Debug.log "send" message
 
 
-simulatorStepCmd : () -> Cmd Msg
-simulatorStepCmd x =
-    Task.perform (\_ -> SimulatorStep) <| Task.succeed x
-
-
 doTestClick : Int -> Int -> Model -> ( Model, Cmd Msg )
 doTestClick row col model =
     let
@@ -1863,6 +1765,9 @@ doClick row col model =
         let
             jumped =
                 case gameState.legalMoves of
+                    NoMoves ->
+                        Nothing
+
                     Moves rowCols ->
                         if List.member rowCol rowCols then
                             Just rowCol
@@ -2157,7 +2062,21 @@ mainPage bsize model =
             else
                 ( True
                 , let
-                    winString player =
+                    winReasonToDescription reason =
+                        case reason of
+                            WinByCapture ->
+                                "by capture"
+
+                            WinBySanctum ->
+                                "by sanctum"
+
+                            WinByImmobilization ->
+                                "by immobilization"
+
+                            WinByResignation ->
+                                "by resignation"
+
+                    winString player reason =
                         let
                             rawName =
                                 playerName player model
@@ -2169,14 +2088,14 @@ mainPage bsize model =
                                 else
                                     "You (" ++ rawName ++ ")"
                         in
-                        name ++ " won!"
+                        name ++ " won " ++ winReasonToDescription reason ++ "!"
                   in
                   case gameState.winner of
-                    WhiteWinner ->
-                        winString WhitePlayer
+                    WhiteWinner reason ->
+                        winString WhitePlayer reason
 
-                    BlackWinner ->
-                        winString BlackPlayer
+                    BlackWinner reason ->
+                        winString BlackPlayer reason
 
                     NoWinner ->
                         let
@@ -2195,7 +2114,7 @@ mainPage bsize model =
 
                                         Just _ ->
                                             case gameState.legalMoves of
-                                                Moves [] ->
+                                                NoMoves ->
                                                     "selected piece has no legal moves."
 
                                                 Moves _ ->

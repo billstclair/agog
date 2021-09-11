@@ -44,6 +44,7 @@ module Agog.Types exposing
     , TestMode
     , UndoState
     , UndoWhichJumps(..)
+    , WinReason(..)
     , Winner(..)
     , darkStyle
     , emptyPiece
@@ -139,10 +140,17 @@ playerColor player =
             BlackColor
 
 
+type WinReason
+    = WinByCapture
+    | WinBySanctum
+    | WinByImmobilization
+    | WinByResignation
+
+
 type Winner
     = NoWinner
-    | WhiteWinner
-    | BlackWinner
+    | WhiteWinner WinReason
+    | BlackWinner WinReason
 
 
 type alias PieceSelected =
@@ -325,7 +333,8 @@ type alias OneCorruptibleJump =
 
 
 type MovesOrJumps
-    = Moves (List RowCol)
+    = NoMoves
+    | Moves (List RowCol)
     | Jumps (List JumpSequence)
 
 
