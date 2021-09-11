@@ -24,7 +24,6 @@ module Agog.Interface exposing
     , messageProcessor
     )
 
-import Agog.Board as Board
 import Agog.EncodeDecode as ED
 import Agog.NewBoard as NewBoard
 import Agog.Types as Types
@@ -73,8 +72,7 @@ import WebSocketFramework.Types
 
 emptyGameState : PlayerNames -> GameState
 emptyGameState players =
-    { board = Board.empty
-    , newBoard = NewBoard.initial
+    { newBoard = NewBoard.initial
     , moves = []
     , players = players
     , whoseTurn = WhitePlayer
@@ -1005,7 +1003,7 @@ colorMatchesPlayer color player =
 
 cellName : ( Int, Int ) -> String
 cellName ( rowidx, colidx ) =
-    Board.colToString colidx ++ Board.rowToString rowidx
+    NewBoard.colToString colidx ++ NewBoard.rowToString rowidx
 
 
 updateScore : GameState -> GameState

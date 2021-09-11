@@ -21,10 +21,9 @@
 
 module Main exposing (main)
 
-import Agog.Board as Board exposing (SizerKind(..))
 import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
-import Agog.NewBoard as NewBoard exposing (rc)
+import Agog.NewBoard as NewBoard exposing (SizerKind(..), rc)
 import Agog.Types as Types
     exposing
         ( Board
@@ -319,24 +318,6 @@ main =
         , onUrlRequest = HandleUrlRequest
         , onUrlChange = HandleUrlChange
         }
-
-
-{-| No longer used. An initial state to test Board.render
--}
-initializeBoard : Board -> Board
-initializeBoard board =
-    board
-        |> Board.set 0 3
-        |> Board.set 1 1
-        |> Board.set 1 2
-        |> Board.set 2 2
-        |> Board.set 3 2
-        |> Board.set 3 1
-        |> Board.set 3 3
-        |> Board.set 3 4
-        |> Board.set 2 4
-        |> Board.set 4 4
-        |> Board.set 4 5
 
 
 encodeDecode : EncodeDecode Message
@@ -1912,7 +1893,7 @@ delayedClick rowCol model =
 
 cellName : ( Int, Int ) -> String
 cellName ( rowidx, colidx ) =
-    Board.colToString colidx ++ Board.rowToString rowidx
+    NewBoard.colToString colidx ++ NewBoard.rowToString rowidx
 
 
 subscriptions : Model -> Sub Msg
@@ -2022,7 +2003,7 @@ mainPage bsize model =
             gameState.score
 
         count =
-            Board.count gameState.board
+            NewBoard.count gameState.newBoard
 
         { white, black } =
             gameState.players
@@ -2140,7 +2121,7 @@ mainPage bsize model =
         [ NewBoard.render theStyle
             bsize
             Click
-            (Just <| Board.getSizer DefaultSizer)
+            (Just <| NewBoard.getSizer DefaultSizer)
             currentPlayer
             rotated
             gameState

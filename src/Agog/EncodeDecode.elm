@@ -769,7 +769,7 @@ undoStateDecoder =
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { board, newBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, path, testMode } =
+        { newBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, path, testMode } =
             gameState
 
         privateValue =
@@ -780,8 +780,7 @@ encodeGameState includePrivate gameState =
                 JE.null
     in
     JE.object
-        [ ( "board", encodeBoard board )
-        , ( "newBoard", encodeNewBoard newBoard )
+        [ ( "newBoard", encodeNewBoard newBoard )
         , ( "moves", encodeMoves moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
@@ -801,7 +800,6 @@ encodeGameState includePrivate gameState =
 gameStateDecoder : Decoder GameState
 gameStateDecoder =
     JD.succeed GameState
-        |> required "board" boardDecoder
         |> required "newBoard" newBoardDecoder
         |> required "moves" movesDecoder
         |> required "players" playerNamesDecoder

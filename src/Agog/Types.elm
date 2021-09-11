@@ -353,8 +353,7 @@ type alias TestMode =
 
 
 type alias GameState =
-    { board : Board
-    , newBoard : NewBoard
+    { newBoard : NewBoard
     , moves : List String
     , players : PlayerNames
     , whoseTurn : Player
