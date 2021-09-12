@@ -294,7 +294,6 @@ type Msg
     | Click ( Int, Int )
     | CorruptJumpedUI (AskYesNo ())
     | MakeHulkUI (AskYesNo RowCol)
-    | CancelChooseMoveOptionsUI
     | SendUndoJumps UndoWhichJumps
     | ChatUpdate ChatSettings (Cmd Msg)
     | ChatSend String ChatSettings
@@ -1309,7 +1308,7 @@ updateInternal msg model =
                         send model
                             (SetGameStateReq
                                 { playerid = model.playerid
-                                , gameState = gs
+                                , gameState = { gs | winner = NoWinner }
                                 }
                             )
 
@@ -1456,12 +1455,6 @@ updateInternal msg model =
                         { chooseMoveOptionsUI
                             | makeHulk = askYesNo
                         }
-                }
-
-        CancelChooseMoveOptionsUI ->
-            maybeDelayedClick
-                { model
-                    | chooseMoveOptionsUI = chooseMoveOptionsUINo
                 }
 
         SendUndoJumps undoWhichJumps ->
@@ -1709,13 +1702,20 @@ doClick row col model =
         { pieceType } =
             NewBoard.get rowCol board
 
-        selectedType =
-            case gameState.selected of
+        selected =
+            gameState.selected
+
+        ( selectedType, selectedColor ) =
+            case selected of
                 Nothing ->
-                    NoPiece
+                    ( NoPiece, WhiteColor )
 
                 Just selectedRc ->
-                    NewBoard.get selectedRc board |> .pieceType
+                    let
+                        p =
+                            NewBoard.get selectedRc board
+                    in
+                    ( p.pieceType, p.color )
     in
     if
         (selectedType /= NoPiece)
@@ -1763,7 +1763,7 @@ doClick row col model =
 
                             Just sequence ->
                                 case sequence of
-                                    { over } :: [] ->
+                                    { over } :: _ ->
                                         Just over
 
                                     _ ->
@@ -1783,9 +1783,25 @@ doClick row col model =
                             chooseMoveOptionsUINo
 
                         else
-                            { chooseMoveOptionsUINo
-                                | makeHulk = AskAsk
-                            }
+                            let
+                                mapper loc p found =
+                                    if
+                                        (p.pieceType == Golem)
+                                            && (p.color == selectedColor)
+                                            && (loc /= rowCol && Just loc /= selected)
+                                    then
+                                        True
+
+                                    else
+                                        found
+                            in
+                            if NewBoard.mapWholeBoard mapper board False then
+                                { chooseMoveOptionsUINo
+                                    | makeHulk = AskAsk
+                                }
+
+                            else
+                                chooseMoveOptionsUINo
 
                     chooseMoveOptionsUI2 =
                         if rowCol == jumpedRc then
@@ -2208,14 +2224,12 @@ mainPage bsize model =
                         text ""
                     , if makeHulk == AskAsk then
                         span []
-                            [ b "Click a Golem to make it a Hulk. Otherwise, any empty square."
+                            [ b "Click a Golem to make it a Hulk, Click an empty square to not make a hulk."
                             , br
                             ]
 
                       else
                         text ""
-                    , button [ onClick CancelChooseMoveOptionsUI ]
-                        [ text "No Hulks or Corruption" ]
                     ]
 
               else

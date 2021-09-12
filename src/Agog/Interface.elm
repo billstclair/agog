@@ -553,8 +553,8 @@ messageProcessor state message =
             errorRes message state "Received a non-request."
 
 
-processChooseMoveOptions : List ChooseMoveOption -> RowCol -> Maybe ( RowCol, Piece ) -> GameState -> ( GameState, Maybe String )
-processChooseMoveOptions options moveTo jumpOver gameState =
+processChooseMoveOptions : List ChooseMoveOption -> RowCol -> Bool -> Player -> Maybe ( RowCol, Piece ) -> GameState -> ( GameState, Maybe String )
+processChooseMoveOptions options moveTo lastMove whoseTurn jumpOver gameState =
     let
         processOption option ( gs, err ) =
             let
@@ -590,59 +590,57 @@ processChooseMoveOptions options moveTo jumpOver gameState =
                                     else if pieceType /= Golem && pieceType /= Hulk then
                                         ( gameState, Just "Can't corrupt a Journeyman or a Corrupted Hulk" )
 
+                                    else if colorMatchesPlayer color whoseTurn then
+                                        ( gameState, Just "Can't corrupt a piece of your own color." )
+
+                                    else if
+                                        (pieceType == Golem)
+                                            && (NewBoard.countColor color board >= 23)
+                                    then
+                                        -- This can happen, but I'll bet it won't.
+                                        -- Sorta like the two-move mate.
+                                        ( gameState, Just "There are no pieces to use to make a corrupted hulk." )
+
                                     else
                                         let
-                                            otherColor =
-                                                Types.otherColor color
+                                            ( newBoard, jumps ) =
+                                                if gs.jumps == [] then
+                                                    let
+                                                        corruptedHulk =
+                                                            { pieceType = CorruptedHulk
+                                                            , color = Types.otherColor color
+                                                            }
+                                                    in
+                                                    ( NewBoard.set jumpedPos corruptedHulk board
+                                                    , gs.jumps
+                                                    )
+
+                                                else
+                                                    ( board
+                                                    , LE.updateIf
+                                                        (.over >> (==) jumpedPos)
+                                                        (\jump ->
+                                                            { jump | corrupted = True }
+                                                        )
+                                                        gs.jumps
+                                                    )
                                         in
-                                        if colorMatchesPlayer otherColor gameState.whoseTurn then
-                                            ( gameState, Just "Can't corrupt a piece of your own color." )
-
-                                        else if
-                                            (pieceType == Golem)
-                                                && (NewBoard.countColor color board >= 23)
-                                        then
-                                            -- This can happen, but I'll bet it won't.
-                                            -- Sorta like the two-move mate.
-                                            ( gameState, Just "There are no pieces to use to make a corrupted hulk." )
-
-                                        else
-                                            let
-                                                ( newBoard, jumps ) =
-                                                    if gs.jumps == [] then
-                                                        let
-                                                            corruptedHulk =
-                                                                { pieceType = CorruptedHulk
-                                                                , color = Types.otherColor color
-                                                                }
-                                                        in
-                                                        ( NewBoard.set jumpedPos corruptedHulk board
-                                                        , gs.jumps
-                                                        )
-
-                                                    else
-                                                        ( board
-                                                        , LE.updateIf
-                                                            (.over >> (==) jumpedPos)
-                                                            (\jump ->
-                                                                { jump | corrupted = True }
-                                                            )
-                                                            gs.jumps
-                                                        )
-                                            in
-                                            ( { gs
-                                                | newBoard = newBoard
-                                                , jumps = jumps
-                                              }
-                                            , Nothing
-                                            )
+                                        ( { gs
+                                            | newBoard = newBoard
+                                            , jumps = jumps
+                                          }
+                                        , Nothing
+                                        )
 
                         MakeHulk hulkPos ->
                             let
                                 hulkPiece =
                                     NewBoard.get hulkPos board
                             in
-                            if
+                            if not lastMove then
+                                ( gameState, Just "May only make a hulk if your final jump lands on the other player's sanctum." )
+
+                            else if
                                 ((selectedColor == WhiteColor) && (moveTo /= NewBoard.blackSanctum))
                                     || ((selectedColor == BlackColor) && (moveTo /= NewBoard.whiteSanctum))
                             then
@@ -733,7 +731,7 @@ chooseMove state message gameid gameState player rowCol options =
                                 endOfTurn selected rowCol piece options gameState
 
                             ( gs2, maybeError ) =
-                                processChooseMoveOptions options rowCol Nothing gs
+                                processChooseMoveOptions options rowCol True gameState.whoseTurn Nothing gs
                         in
                         case maybeError of
                             Just err ->
@@ -821,6 +819,8 @@ chooseMove state message gameid gameState player rowCol options =
                                         ( gs2, maybeError ) =
                                             processChooseMoveOptions options
                                                 rowCol
+                                                True
+                                                gameState.whoseTurn
                                                 jumpOver
                                                 gs
                                     in
@@ -868,6 +868,8 @@ chooseMove state message gameid gameState player rowCol options =
                                         ( gs2, maybeError ) =
                                             processChooseMoveOptions options
                                                 rowCol
+                                                False
+                                                gameState.whoseTurn
                                                 jumpOver
                                                 gs
                                     in
