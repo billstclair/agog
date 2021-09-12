@@ -2,7 +2,7 @@
 --
 -- Client.elm
 -- Simple low-level client for WebSocket server
--- Copyright (c) 2018 Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2018-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE.txt
@@ -10,8 +10,20 @@
 ----------------------------------------------------------------------
 
 
-module Client exposing (Model, Msg(..), br, init, is13, main, messageView, onEnter, subscriptions, update, view)
+module Agog.Server.Client exposing (Model, Msg(..), br, init, is13, main, messageView, onEnter, subscriptions, update, view)
 
+import Agog.EncodeDecode as ED
+import Agog.Interface as Interface
+import Agog.Types as Types
+    exposing
+        ( Choice(..)
+        , GameState
+        , Message(..)
+        , Player(..)
+        , PlayerNames
+        , PublicType(..)
+        , Winner(..)
+        )
 import Browser
 import Browser.Dom as Dom
 import Html as H exposing (Html)
@@ -25,18 +37,6 @@ import Task
 import Url
 import WebSocketFramework.EncodeDecode as WSFED
 import WebSocketFramework.Types exposing (GameId, PlayerId)
-import Agog.EncodeDecode as ED
-import Agog.Interface as Interface
-import Agog.Types as Types
-    exposing
-        ( Choice(..)
-        , GameState
-        , Message(..)
-        , Player(..)
-        , PlayerNames
-        , PublicType(..)
-        , Winner(..)
-        )
 
 
 main : Program String Model Msg
@@ -57,8 +57,8 @@ type alias Model =
     { messages : List String
     , gameState : GameState
     , gameid : String
-    , zephyrus : String
-    , notus : String
+    , white : String
+    , black : String
     , input : String
     , server : String
     , error : Maybe String
@@ -71,8 +71,8 @@ init server =
     ( { messages = []
       , gameState = Interface.emptyGameState (PlayerNames "" "")
       , gameid = ""
-      , zephyrus = ""
-      , notus = ""
+      , white = ""
+      , black = ""
       , input = ""
       , server = server
       , error = Nothing
@@ -201,13 +201,13 @@ socketHandler response state mdl =
                                 NewRsp { gameid, playerid } ->
                                     { mdl2
                                         | gameid = gameid
-                                        , zephyrus = playerid
-                                        , notus = ""
+                                        , white = playerid
+                                        , black = ""
                                     }
 
                                 JoinRsp { playerid, gameState } ->
                                     { mdl2
-                                        | notus =
+                                        | black =
                                             case playerid of
                                                 Just p ->
                                                     p
@@ -229,8 +229,8 @@ socketHandler response state mdl =
                                 LeaveRsp _ ->
                                     { mdl2
                                         | gameid = ""
-                                        , zephyrus = ""
-                                        , notus = ""
+                                        , white = ""
+                                        , black = ""
                                     }
 
                                 _ ->
@@ -296,7 +296,7 @@ newReq : Message
 newReq =
     NewReq
         { name = "Bill"
-        , player = Zephyrus
+        , player = WhitePlayer
         , publicType = NotPublic
         , restoreState = Nothing
         }
@@ -313,13 +313,13 @@ chatReq playerid =
 validMessages : Model -> List Message
 validMessages model =
     let
-        { gameState, gameid, zephyrus, notus } =
+        { gameState, gameid, white, black } =
             model
     in
     if gameid == "" then
         [ newReq ]
 
-    else if notus == "" then
+    else if black == "" then
         [ JoinReq
             { gameid = gameid
             , name = "Chris"
@@ -329,37 +329,30 @@ validMessages model =
 
     else if gameState.winner /= NoWinner then
         [ PlayReq
-            { playerid = model.zephyrus
-            , placement = ChooseNew Zephyrus
+            { playerid = model.white
+            , placement = ChooseNew WhitePlayer
             }
         , newReq
-        , chatReq zephyrus
-        , chatReq notus
+        , chatReq white
+        , chatReq black
         ]
 
     else
-        [ PlayReq
-            { playerid = zephyrus
-            , placement = ChooseCol 0
+        [ -- Need some more PlayReq values here
+          PlayReq
+            { playerid = white
+            , placement = ChooseResign WhitePlayer
             }
         , PlayReq
-            { playerid = notus
-            , placement = ChooseRow 0
+            { playerid = black
+            , placement = ChooseResign BlackPlayer
             }
-        , PlayReq
-            { playerid = zephyrus
-            , placement = ChooseResign Zephyrus
-            }
-        , PlayReq
-            { playerid = notus
-            , placement = ChooseResign Notus
-            }
-        , UpdateReq { playerid = zephyrus }
-        , UpdateReq { playerid = notus }
-        , LeaveReq { playerid = zephyrus }
-        , LeaveReq { playerid = notus }
-        , chatReq zephyrus
-        , chatReq notus
+        , UpdateReq { playerid = white }
+        , UpdateReq { playerid = black }
+        , LeaveReq { playerid = white }
+        , LeaveReq { playerid = black }
+        , chatReq white
+        , chatReq black
         ]
 
 

@@ -1,5 +1,17 @@
 port module Agog.Server.Server exposing (main)
 
+import Agog.EncodeDecode as ED
+import Agog.Interface as Interface
+import Agog.Types as Types
+    exposing
+        ( Decoration(..)
+        , GameState
+        , Message(..)
+        , Player
+        , PlayerNames
+        , PublicType(..)
+        , SubscriptionSet
+        )
 import Set exposing (Set)
 import WebSocketFramework.Server
     exposing
@@ -19,18 +31,6 @@ import WebSocketFramework.Types
         , GameId
         , InputPort
         , OutputPort
-        )
-import Agog.EncodeDecode as ED
-import Agog.Interface as Interface
-import Agog.Types as Types
-    exposing
-        ( Decoration(..)
-        , GameState
-        , Message(..)
-        , Player
-        , PlayerNames
-        , PublicType(..)
-        , SubscriptionSet
         )
 
 
@@ -153,9 +153,6 @@ messageSender mdl socket state request response =
                                         model
                             in
                             sendJoinRsp model state
-
-                        PlayRsp _ ->
-                            sendPlayRsp model
 
                         AnotherGameRsp record ->
                             \_ _ ->
@@ -359,37 +356,6 @@ sendJoinRsp model state response socket =
             sendToAll model response socket
     ]
         |> Cmd.batch
-
-
-sendPlayRsp : Model -> Message -> Socket -> Cmd Msg
-sendPlayRsp model response socket =
-    case response of
-        PlayRsp playRecord ->
-            let
-                ( toOne, tagger ) =
-                    case playRecord.decoration of
-                        RowSelectedDecoration _ ->
-                            ( True, RowSelectedDecoration )
-
-                        ColSelectedDecoration _ ->
-                            ( True, ColSelectedDecoration )
-
-                        _ ->
-                            ( False, \_ -> NoDecoration )
-            in
-            if toOne then
-                Cmd.batch
-                    [ sendToOne response socket
-                    , sendToOthers model
-                        (PlayRsp { playRecord | decoration = tagger -1 })
-                        socket
-                    ]
-
-            else
-                sendToAll model response socket
-
-        _ ->
-            sendToAll model response socket
 
 
 gamesDeleter : Model -> List GameId -> ServerState -> ( Model, Cmd Msg )

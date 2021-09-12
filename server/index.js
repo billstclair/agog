@@ -9,7 +9,7 @@ var httpPort = (process.env.PORT || 8081),
       ecstatic({ root: __dirname })
     ),
     WebSocketServer = require('./WebSocketServer.js'),
-    app = require('./server.js').Elm.Zephyrnot.Server.Server.init({ flags: verbose }),
+    app = require('./server.js').Elm.Agog.Server.Server.init({ flags: verbose }),
     wss = new WebSocketServer(
       server,
       app.ports.inputPort,

@@ -1,5 +1,5 @@
 #!/bin/bash
 
 rsync -av site/js server/
-elm make src/Zephyrnot/Server/Server.elm --output server/server.js
-elm make src/Zephyrnot/Server/Client.elm --output server/client.js
+elm make src/Agog/Server/Server.elm --output server/server.js
+elm make src/Agog/Server/Client.elm --output server/client.js

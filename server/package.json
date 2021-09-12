@@ -1,11 +1,11 @@
 {
-  "name": "zephyrnot-server",
+  "name": "agog-server",
   "version": "1.0.0",
-  "description": "Websocket server for Zephyrnot.",
+  "description": "Websocket server for AGOG.",
   "author": "billstclair",
   "repository": {
     "type": "git",
-    "url": "https://github.com/billstclair/zephyrnot.git"
+    "url": "https://github.com/billstclair/agog.git"
   },
   "main": "index.js",
   "scripts": {

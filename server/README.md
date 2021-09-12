@@ -1,17 +1,17 @@
-This directory is for uploading to the web server machine for the Zephyrnot server.
+This directory is for uploading to the web server machine for the AGOG server.
 
 The server runs in `Node.js`.
 
-You build the Elm part of the server from the top-level `zephyrnot` directory:
+You build the Elm part of the server from the top-level `agog` directory:
 
-* cd .../zephyrnot
+* cd .../agog
 * bin/build-server
 
 Installing the server JavaScript libraries:
 
 One time:
 
-* `cd ...zephyrnot/server   # this directory`
+* `cd ...agog/server   # this directory`
 * `npm install`
 
 To start the server:
@@ -45,9 +45,9 @@ If you're running the server on your local machine, you can aim your browser at:
 
     http://localhost:8081
     
-to get a very simple test client (`Zephyrnot.Server.Client`) that sends the strings you type over the wire and prints what it receives back.
+to get a very simple test client (`Agog.Server.Client`) that sends the strings you type over the wire and prints what it receives back.
 
-During development, when you're running both the Zephyrnot webapp and the server on your local machine, you should connect to:
+During development, when you're running both the Agog webapp and the server on your local machine, you should connect to:
 
     ws://localhost:8081
     
