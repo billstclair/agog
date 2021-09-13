@@ -32,7 +32,7 @@ module Agog.EncodeDecode exposing
     , stringToPiece
     )
 
-import Agog.NewBoard as NewBoard
+import Agog.NewBoard as NewBoard exposing (rc)
 import Agog.Types as Types
     exposing
         ( Board
@@ -49,6 +49,7 @@ import Agog.Types as Types
         , OneJump
         , OneMove
         , OneMoveSequence(..)
+        , OneSlideRecord
         , Page(..)
         , Piece
         , PieceSelected
@@ -841,8 +842,11 @@ oneMoveSequenceToString sequence =
 
                                 head :: tail ->
                                     let
-                                        { to, corrupted } =
+                                        { over, to, corrupted } =
                                             head
+
+                                        from2 =
+                                            head.from
 
                                         x =
                                             if corrupted then
@@ -850,8 +854,17 @@ oneMoveSequenceToString sequence =
 
                                             else
                                                 "x"
+
+                                        slashOver =
+                                            if Just over == locBetween from2 to then
+                                                ""
+
+                                            else
+                                                "/" ++ NewBoard.rowColToString over
                                     in
-                                    mapper tail <| (x ++ NewBoard.rowColToString to) :: res
+                                    mapper tail <|
+                                        (slashOver ++ x ++ NewBoard.rowColToString to)
+                                            :: res
                     in
                     mapper jumps [ NewBoard.rowColToString from ]
                         |> List.reverse
@@ -895,9 +908,164 @@ stringToOneMove string =
                         }
 
 
+locBetween : RowCol -> RowCol -> Maybe RowCol
+locBetween rc1 rc2 =
+    let
+        ( r1, c1 ) =
+            ( rc1.row, rc1.col )
+
+        ( r2, c2 ) =
+            ( rc2.row, rc2.col )
+    in
+    if r1 == r2 then
+        if c1 < c2 && c1 + 2 == c2 then
+            Just <| rc r1 (c1 + 1)
+
+        else if c1 > c2 && c1 - 2 == c2 then
+            Just <| rc r1 (c1 - 1)
+
+        else
+            Nothing
+
+    else if c1 == c2 then
+        if r1 < r2 && r1 + 2 == r2 then
+            Just <| rc (r1 + 1) c1
+
+        else if r1 > r2 && r1 - 2 == r2 then
+            Just <| rc (r1 - 1) c1
+
+        else
+            Nothing
+
+    else
+        Nothing
+
+
 stringToOneMoveSequence : String -> Maybe OneMoveSequence
 stringToOneMoveSequence string =
+    let
+        jumps =
+            String.split "x" string
+
+        corruptingJumps =
+            List.map (String.split "X") jumps
+    in
+    if
+        List.head jumps
+            == Just string
+            && List.head corruptingJumps
+            == Just jumps
+    then
+        -- It's a move
+        case stringToOneSlideRecord string of
+            Nothing ->
+                Nothing
+
+            Just oneSlideRecord ->
+                Just <| OneSlide oneSlideRecord
+
+    else
+        -- It's a jump sequence
+        case listOfStringListsToOneJumpSequence corruptingJumps of
+            Nothing ->
+                Nothing
+
+            Just oneJumpSequence ->
+                Just <| OneJumpSequence oneJumpSequence
+
+
+stringToOneSlideRecord : String -> Maybe OneSlideRecord
+stringToOneSlideRecord string =
+    case String.split "-" string of
+        [ from, to ] ->
+            let
+                ( to2, hulkLoc ) =
+                    case String.split "=" to of
+                        [ _ ] ->
+                            ( Just <| NewBoard.stringToRowCol to, Nothing )
+
+                        [ to3, hrc ] ->
+                            ( Just <| NewBoard.stringToRowCol to3
+                            , Just <| NewBoard.stringToRowCol hrc
+                            )
+
+                        _ ->
+                            ( Nothing, Nothing )
+            in
+            case to2 of
+                Nothing ->
+                    Nothing
+
+                Just to3 ->
+                    let
+                        isHulkLocLegal =
+                            case hulkLoc of
+                                Nothing ->
+                                    True
+
+                                Just hl ->
+                                    not <| NewBoard.isRowColLegal hl
+
+                        from2 =
+                            NewBoard.stringToRowCol from
+
+                        isFromLegal =
+                            not <| NewBoard.isRowColLegal from2
+                    in
+                    if not isFromLegal || not isHulkLocLegal then
+                        Nothing
+
+                    else
+                        Just
+                            { from = from2
+                            , to = to3
+                            , makeHulk = hulkLoc
+                            }
+
+        _ ->
+            Nothing
+
+
+listOfStringListsToOneJumpSequence : List (List String) -> Maybe (List OneCorruptibleJump)
+listOfStringListsToOneJumpSequence listOfStringLists =
     -- TODO
+    let
+        from =
+            "foo"
+
+        to3 =
+            rc -1 -1
+
+        ( from2, maybeOverString ) =
+            case String.split "/" from of
+                [ from3 ] ->
+                    ( from3, Nothing )
+
+                [ from3, overString ] ->
+                    ( from3, Just overString )
+
+                _ ->
+                    ( "", Nothing )
+
+        from4 =
+            NewBoard.stringToRowCol from2
+
+        over =
+            case maybeOverString of
+                Just s ->
+                    NewBoard.stringToRowCol s
+
+                Nothing ->
+                    case locBetween from4 to3 of
+                        Nothing ->
+                            NewBoard.illegalRowCol
+
+                        Just over2 ->
+                            over2
+
+        isOverLegal =
+            not <| NewBoard.isRowColLegal over
+    in
     Nothing
 
 

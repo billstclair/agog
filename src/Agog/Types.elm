@@ -25,6 +25,7 @@ module Agog.Types exposing
     , OneJump
     , OneMove
     , OneMoveSequence(..)
+    , OneSlideRecord
     , Page(..)
     , Piece
     , PieceSelected
@@ -341,8 +342,12 @@ type alias OneCorruptibleJump =
     }
 
 
+type alias OneSlideRecord =
+    { from : RowCol, to : RowCol, makeHulk : Maybe RowCol }
+
+
 type OneMoveSequence
-    = OneSlide { from : RowCol, to : RowCol, makeHulk : Maybe RowCol }
+    = OneSlide OneSlideRecord
     | OneJumpSequence (List OneCorruptibleJump)
 
 

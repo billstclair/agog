@@ -22,7 +22,9 @@ module Agog.NewBoard exposing
     , findSquareSatisfying
     , get
     , getSizer
+    , illegalRowCol
     , initial
+    , isRowColLegal
     , mapWholeBoard
     , mapWholeBoardWithExit
     , playerSanctum
@@ -1176,10 +1178,20 @@ rowColToString { row, col } =
     colToString col ++ rowToString row
 
 
+illegalRowCol : RowCol
+illegalRowCol =
+    rc -1 -1
+
+
+isRowColLegal : RowCol -> Bool
+isRowColLegal { row, col } =
+    row >= 0 && row < 8 && col >= 0 && col < 8
+
+
 stringToRowCol : String -> RowCol
 stringToRowCol rowCol =
     if 2 /= String.length rowCol then
-        rc -1 -1
+        illegalRowCol
 
     else
         rc (stringToRow <| String.left 1 rowCol)
