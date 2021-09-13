@@ -19,6 +19,7 @@ module Agog.NewBoard exposing
     , count
     , countColor
     , empty
+    , findSquareSatisfying
     , get
     , getSizer
     , initial
@@ -1228,6 +1229,29 @@ mapWholeBoardWithExit mapper board res =
     in
     List.foldr mapcols ( res, False ) indices
         |> Tuple.first
+
+
+findSquareSatisfying : (RowCol -> Piece -> Bool) -> NewBoard -> Maybe ( RowCol, Piece )
+findSquareSatisfying predicate board =
+    let
+        illegalRc =
+            rc -1 -1
+
+        mapper rowCol piece res =
+            if predicate rowCol piece then
+                ( ( rowCol, piece ), True )
+
+            else
+                ( res, False )
+
+        ( res2, piece2 ) =
+            mapWholeBoardWithExit mapper board ( illegalRc, Types.emptyPiece )
+    in
+    if res2 == illegalRc then
+        Nothing
+
+    else
+        Just ( res2, piece2 )
 
 
 isValidRowCol : RowCol -> Bool
