@@ -23,6 +23,7 @@ module Agog.NewBoard exposing
     , getSizer
     , initial
     , mapWholeBoard
+    , mapWholeBoardWithExit
     , playerSanctum
     , populateLegalMoves
     , rc
@@ -1194,6 +1195,39 @@ mapWholeBoard mapper board res =
             List.foldr (mapone row) res2 indices
     in
     List.foldr mapcols res indices
+
+
+mapWholeBoardWithExit : (RowCol -> Piece -> a -> ( a, Bool )) -> NewBoard -> a -> a
+mapWholeBoardWithExit mapper board res =
+    let
+        mapone : Int -> Int -> a -> ( a, Bool )
+        mapone row2 col2 res2 =
+            let
+                rowCol =
+                    rc row2 col2
+
+                piece =
+                    get rowCol board
+            in
+            mapper rowCol piece res2
+
+        mapcols row3 ( res3, done3 ) =
+            if done3 then
+                ( res3, True )
+
+            else
+                let
+                    maybeMapOne row4 col4 ( res4, done4 ) =
+                        if done4 then
+                            ( res4, True )
+
+                        else
+                            mapone row4 col4 res4
+                in
+                List.foldr (maybeMapOne row3) ( res3, False ) indices
+    in
+    List.foldr mapcols ( res, False ) indices
+        |> Tuple.first
 
 
 isValidRowCol : RowCol -> Bool

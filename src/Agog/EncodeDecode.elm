@@ -773,6 +773,15 @@ oneMoveSequenceDecoder =
         ]
 
 
+{-| TODO
+
+This will get too long for sending back from the server.
+It needs to be encoded as nHa4b4 or ga4xa6 or ja4Xa6xc6,
+where the "n" means non-unique.
+
+Then a list of them can be encoded as a single, comma-delimited string.
+
+-}
 encodeOneMove : OneMove -> Value
 encodeOneMove { piece, isUnique, sequence } =
     JE.object
