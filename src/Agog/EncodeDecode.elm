@@ -44,6 +44,8 @@ import Agog.Types as Types
         , NewBoard
         , OneCorruptibleJump
         , OneJump
+        , OneMove
+        , OneMoveSequence(..)
         , Page(..)
         , Piece
         , PieceSelected
@@ -747,11 +749,52 @@ privateGameStateDecoder =
         |> optional "subscribers" subscribersDecoder Set.empty
 
 
+encodeOneMoveSequence : OneMoveSequence -> Value
+encodeOneMoveSequence oneMoveSequence =
+    case oneMoveSequence of
+        OneSlide from to ->
+            JE.object
+                [ ( "from", encodeRowCol from )
+                , ( "to", encodeRowCol to )
+                ]
+
+        OneJumpSequence jumps ->
+            JE.list encodeOneCorruptibleJump jumps
+
+
+oneMoveSequenceDecoder : Decoder OneMoveSequence
+oneMoveSequenceDecoder =
+    JD.oneOf
+        [ JD.succeed OneSlide
+            |> required "from" rowColDecoder
+            |> required "to" rowColDecoder
+        , JD.list oneCorruptibleJumpDecoder
+            |> JD.andThen (OneJumpSequence >> JD.succeed)
+        ]
+
+
+encodeOneMove : OneMove -> Value
+encodeOneMove { piece, isUnique, sequence } =
+    JE.object
+        [ ( "piece", encodePiece piece )
+        , ( "isUnique", JE.bool isUnique )
+        , ( "sequence", encodeOneMoveSequence sequence )
+        ]
+
+
+oneMoveDecoder : Decoder OneMove
+oneMoveDecoder =
+    JD.succeed OneMove
+        |> required "piece" pieceDecoder
+        |> required "isUnique" JD.bool
+        |> required "sequence" oneMoveSequenceDecoder
+
+
 encodeUndoState : UndoState -> Value
 encodeUndoState { board, moves, selected, legalMoves } =
     JE.object
         [ ( "board", encodeNewBoard board )
-        , ( "moves", JE.list JE.string moves )
+        , ( "moves", JE.list encodeOneMove moves )
         , ( "selected", encodeMaybe encodeRowCol selected )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
         ]
@@ -761,7 +804,7 @@ undoStateDecoder : Decoder UndoState
 undoStateDecoder =
     JD.succeed UndoState
         |> required "board" newBoardDecoder
-        |> required "moves" (JD.list JD.string)
+        |> required "moves" (JD.list oneMoveDecoder)
         |> required "selected" (JD.nullable rowColDecoder)
         |> required "legalMoves" movesOrJumpsDecoder
 
@@ -781,7 +824,7 @@ encodeGameState includePrivate gameState =
     in
     JE.object
         [ ( "newBoard", encodeNewBoard newBoard )
-        , ( "moves", encodeMoves moves )
+        , ( "moves", JE.list encodeOneMove moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
         , ( "selected", encodeMaybe encodeRowCol selected )
@@ -801,7 +844,7 @@ gameStateDecoder : Decoder GameState
 gameStateDecoder =
     JD.succeed GameState
         |> required "newBoard" newBoardDecoder
-        |> required "moves" movesDecoder
+        |> required "moves" (JD.list oneMoveDecoder)
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder
         |> required "selected" (JD.nullable rowColDecoder)
@@ -877,9 +920,10 @@ oneJumpDecoder =
 
 
 encodeOneCorruptibleJump : OneCorruptibleJump -> Value
-encodeOneCorruptibleJump { over, to, corrupted } =
+encodeOneCorruptibleJump { from, over, to, corrupted } =
     JE.object
-        [ ( "over", encodeRowCol over )
+        [ ( "from", encodeRowCol from )
+        , ( "over", encodeRowCol over )
         , ( "to", encodeRowCol to )
         , ( "corrupted", JE.bool corrupted )
         ]
@@ -888,6 +932,7 @@ encodeOneCorruptibleJump { over, to, corrupted } =
 oneCorruptibleJumpDecoder : Decoder OneCorruptibleJump
 oneCorruptibleJumpDecoder =
     JD.succeed OneCorruptibleJump
+        |> required "from" rowColDecoder
         |> required "over" rowColDecoder
         |> required "to" rowColDecoder
         |> required "corrupted" JD.bool

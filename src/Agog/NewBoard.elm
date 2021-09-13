@@ -27,6 +27,7 @@ module Agog.NewBoard exposing
     , populateLegalMoves
     , rc
     , render
+    , rowColToString
     , rowToString
     , score
     , set
@@ -1093,33 +1094,39 @@ pathColor style =
     style.pathColor
 
 
-rowNameDict : Dict Int String
-rowNameDict =
-    Dict.fromList
-        [ ( 0, "a" )
-        , ( 1, "b" )
-        , ( 2, "c" )
-        , ( 3, "d" )
-        , ( 4, "e" )
-        , ( 5, "f" )
-        , ( 6, "g" )
-        , ( 7, "h" )
-        ]
-
-
-colToString : Int -> String
-colToString y =
-    case Dict.get y rowNameDict of
-        Nothing ->
-            String.fromInt y
-
-        Just s ->
-            s
+rowLetters : Array String
+rowLetters =
+    "87654321" |> String.toList |> List.map String.fromChar |> Array.fromList
 
 
 rowToString : Int -> String
-rowToString x =
-    tos <| 8 - x
+rowToString row =
+    case Array.get row rowLetters of
+        Nothing ->
+            ""
+
+        Just letter ->
+            letter
+
+
+colLetters : Array String
+colLetters =
+    "abcdefgh" |> String.toList |> List.map String.fromChar |> Array.fromList
+
+
+colToString : Int -> String
+colToString col =
+    case Array.get col colLetters of
+        Nothing ->
+            ""
+
+        Just letter ->
+            letter
+
+
+rowColToString : RowCol -> String
+rowColToString { row, col } =
+    colToString col ++ rowToString row
 
 
 mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a

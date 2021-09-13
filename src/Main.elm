@@ -2552,10 +2552,12 @@ mainPage bsize model =
                             ]
                     ]
             ]
-        , p []
-            [ text "Moves: "
-            , text <| movesToString gameState.moves
-            ]
+
+        --TODO
+        --, p []
+        --    [ text "Moves: "
+        --    , text <| movesToString gameState.moves
+        --    ]
         , footerParagraph
         , p []
             [ button

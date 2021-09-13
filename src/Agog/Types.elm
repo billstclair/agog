@@ -23,6 +23,8 @@ module Agog.Types exposing
     , NewBoard
     , OneCorruptibleJump
     , OneJump
+    , OneMove
+    , OneMoveSequence(..)
     , Page(..)
     , Piece
     , PieceSelected
@@ -325,22 +327,35 @@ type alias JumpSequence =
     List OneJump
 
 
-type alias OneCorruptibleJump =
-    { over : RowCol
-    , to : RowCol
-    , corrupted : Bool
-    }
-
-
 type MovesOrJumps
     = NoMoves
     | Moves (List RowCol)
     | Jumps (List JumpSequence)
 
 
+type alias OneCorruptibleJump =
+    { from : RowCol
+    , over : RowCol
+    , to : RowCol
+    , corrupted : Bool
+    }
+
+
+type OneMoveSequence
+    = OneSlide RowCol RowCol
+    | OneJumpSequence (List OneCorruptibleJump)
+
+
+type alias OneMove =
+    { piece : Piece
+    , isUnique : Bool
+    , sequence : OneMoveSequence
+    }
+
+
 type alias UndoState =
     { board : NewBoard
-    , moves : List String
+    , moves : List OneMove
     , selected : Maybe RowCol
     , legalMoves : MovesOrJumps
     }
@@ -354,7 +369,7 @@ type alias TestMode =
 
 type alias GameState =
     { newBoard : NewBoard
-    , moves : List String
+    , moves : List OneMove
     , players : PlayerNames
     , whoseTurn : Player
     , selected : Maybe RowCol

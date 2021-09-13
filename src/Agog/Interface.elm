@@ -678,9 +678,10 @@ processChooseMoveOptions options moveTo lastMove whoseTurn jumpOver gameState =
     List.foldl processOption ( gameState, Nothing ) options
 
 
-toCorruptibleJump : OneJump -> OneCorruptibleJump
-toCorruptibleJump { over, to } =
-    { over = over
+toCorruptibleJump : RowCol -> OneJump -> OneCorruptibleJump
+toCorruptibleJump from { over, to } =
+    { from = from
+    , over = over
     , to = to
     , corrupted = False
     }
@@ -804,7 +805,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                     gameState.jumps
 
                                                 Just jump ->
-                                                    toCorruptibleJump jump :: gameState.jumps
+                                                    toCorruptibleJump selected jump :: gameState.jumps
 
                                         newBoard =
                                             List.foldr doJump board jumps
@@ -860,7 +861,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                         :: gameState.undoStates
                                                 , jumps =
                                                     (List.take 1 firstSequence
-                                                        |> List.map toCorruptibleJump
+                                                        |> List.map (toCorruptibleJump rowCol)
                                                     )
                                                         ++ gameState.jumps
                                             }
