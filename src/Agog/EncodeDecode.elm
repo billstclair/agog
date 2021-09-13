@@ -23,6 +23,8 @@ module Agog.EncodeDecode exposing
     , messageEncoderWithPrivate
     , movesDecoder
     , newBoardToString
+    , oneMoveToString
+    , oneMovesToString
     , pieceToString
     , publicGameToFramework
     , stringToBoard
@@ -30,6 +32,7 @@ module Agog.EncodeDecode exposing
     , stringToPiece
     )
 
+import Agog.NewBoard as NewBoard
 import Agog.Types as Types
     exposing
         ( Board
@@ -752,11 +755,18 @@ privateGameStateDecoder =
 encodeOneMoveSequence : OneMoveSequence -> Value
 encodeOneMoveSequence oneMoveSequence =
     case oneMoveSequence of
-        OneSlide from to ->
+        OneSlide { from, to, makeHulk } ->
             JE.object
-                [ ( "from", encodeRowCol from )
-                , ( "to", encodeRowCol to )
-                ]
+                ([ ( "from", encodeRowCol from )
+                 , ( "to", encodeRowCol to )
+                 ]
+                    ++ (if makeHulk == Nothing then
+                            []
+
+                        else
+                            [ ( "makeHulk", encodeMaybe encodeRowCol makeHulk ) ]
+                       )
+                )
 
         OneJumpSequence jumps ->
             JE.list encodeOneCorruptibleJump jumps
@@ -765,12 +775,130 @@ encodeOneMoveSequence oneMoveSequence =
 oneMoveSequenceDecoder : Decoder OneMoveSequence
 oneMoveSequenceDecoder =
     JD.oneOf
-        [ JD.succeed OneSlide
+        [ JD.succeed
+            (\from to makeHulk ->
+                OneSlide { from = from, to = to, makeHulk = makeHulk }
+            )
             |> required "from" rowColDecoder
             |> required "to" rowColDecoder
+            |> optional "makeHulk" (JD.nullable rowColDecoder) Nothing
         , JD.list oneCorruptibleJumpDecoder
             |> JD.andThen (OneJumpSequence >> JD.succeed)
         ]
+
+
+oneMovesToString : List OneMove -> String
+oneMovesToString moves =
+    List.map oneMoveToString moves
+        |> String.join ","
+
+
+oneMoveToString : OneMove -> String
+oneMoveToString { piece, isUnique, sequence } =
+    let
+        uniqueMarker =
+            if isUnique then
+                ""
+
+            else
+                "n"
+
+        pieceString =
+            pieceToString piece
+
+        sequenceString =
+            oneMoveSequenceToString sequence
+    in
+    uniqueMarker ++ pieceString ++ sequenceString
+
+
+oneMoveSequenceToString : OneMoveSequence -> String
+oneMoveSequenceToString sequence =
+    case sequence of
+        OneSlide { from, to, makeHulk } ->
+            NewBoard.rowColToString from
+                ++ "-"
+                ++ NewBoard.rowColToString to
+                ++ (case makeHulk of
+                        Nothing ->
+                            ""
+
+                        Just rc ->
+                            "=" ++ NewBoard.rowColToString rc
+                   )
+
+        OneJumpSequence jumps ->
+            case jumps of
+                [] ->
+                    ""
+
+                { from } :: _ ->
+                    let
+                        mapper list res =
+                            case list of
+                                [] ->
+                                    res
+
+                                head :: tail ->
+                                    let
+                                        { to, corrupted } =
+                                            head
+
+                                        x =
+                                            if corrupted then
+                                                "X"
+
+                                            else
+                                                "x"
+                                    in
+                                    mapper tail <| (x ++ NewBoard.rowColToString to) :: res
+                    in
+                    mapper jumps [ NewBoard.rowColToString from ]
+                        |> List.reverse
+                        |> String.concat
+
+
+stringToOneMove : String -> Maybe OneMove
+stringToOneMove string =
+    let
+        n =
+            String.left 1 string
+
+        ( isUnique, s, ps ) =
+            if n == "n" then
+                let
+                    s2 =
+                        String.dropLeft 1 string
+                in
+                ( False, String.dropLeft 1 s2, String.left 1 s2 )
+
+            else
+                ( True, String.dropLeft 1 string, String.left 1 string )
+
+        piece =
+            stringToPiece ps
+    in
+    case piece.pieceType of
+        NoPiece ->
+            Nothing
+
+        _ ->
+            case stringToOneMoveSequence s of
+                Nothing ->
+                    Nothing
+
+                Just sequence ->
+                    Just
+                        { piece = piece
+                        , isUnique = isUnique
+                        , sequence = sequence
+                        }
+
+
+stringToOneMoveSequence : String -> Maybe OneMoveSequence
+stringToOneMoveSequence string =
+    -- TODO
+    Nothing
 
 
 {-| TODO

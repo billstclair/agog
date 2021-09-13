@@ -342,7 +342,7 @@ type alias OneCorruptibleJump =
 
 
 type OneMoveSequence
-    = OneSlide RowCol RowCol
+    = OneSlide { from : RowCol, to : RowCol, makeHulk : Maybe RowCol }
     | OneJumpSequence (List OneCorruptibleJump)
 
 

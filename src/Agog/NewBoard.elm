@@ -33,6 +33,9 @@ module Agog.NewBoard exposing
     , rowToString
     , score
     , set
+    , stringToCol
+    , stringToRow
+    , stringToRowCol
     , whiteSanctum
     , winner
     )
@@ -1111,6 +1114,38 @@ rowToString row =
             letter
 
 
+findArrayIndex : a -> Array a -> Maybe Int
+findArrayIndex elt array =
+    let
+        len =
+            Array.length array
+
+        justElt =
+            Just elt
+
+        mapper idx =
+            if idx >= len then
+                Nothing
+
+            else if justElt == Array.get idx array then
+                Just idx
+
+            else
+                mapper <| idx + 1
+    in
+    mapper 0
+
+
+stringToRow : String -> Int
+stringToRow row =
+    case findArrayIndex row rowLetters of
+        Just idx ->
+            idx
+
+        Nothing ->
+            -1
+
+
 colLetters : Array String
 colLetters =
     "abcdefgh" |> String.toList |> List.map String.fromChar |> Array.fromList
@@ -1126,9 +1161,29 @@ colToString col =
             letter
 
 
+stringToCol : String -> Int
+stringToCol col =
+    case findArrayIndex col colLetters of
+        Just idx ->
+            idx
+
+        Nothing ->
+            -1
+
+
 rowColToString : RowCol -> String
 rowColToString { row, col } =
     colToString col ++ rowToString row
+
+
+stringToRowCol : String -> RowCol
+stringToRowCol rowCol =
+    if 2 /= String.length rowCol then
+        rc -1 -1
+
+    else
+        rc (stringToRow <| String.left 1 rowCol)
+            (stringToCol <| String.dropLeft 1 rowCol)
 
 
 mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
