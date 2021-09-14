@@ -1194,8 +1194,8 @@ stringToRowCol rowCol =
         illegalRowCol
 
     else
-        rc (stringToRow <| String.left 1 rowCol)
-            (stringToCol <| String.dropLeft 1 rowCol)
+        rc (stringToRow <| String.dropLeft 1 rowCol)
+            (stringToCol <| String.left 1 rowCol)
 
 
 mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
