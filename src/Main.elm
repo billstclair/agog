@@ -2712,7 +2712,7 @@ rulesPage bsize model =
         , playButton
         , rulesDiv False
             [ h2 [ align "center" ]
-                [ text "Story" ]
+                [ text "STORY" ]
             , Markdown.toHtml [] """ 
 _In a secret complex deep in the mountains, the Ancient Guild of Golemancy plies its trade, creating life where before was only base matter. Two journeyman golemancers feverishly prepare their master works, for there is but one position available among the Golemancery Elect. Both know that if they could but obtain their rival’s research, they would surely be able to create the greater work. The night before their creations are to be judged, each plots to infiltrate the other’s sanctum of knowledge, using their legion of early prototypes to subtly outmaneuver the other._
 
