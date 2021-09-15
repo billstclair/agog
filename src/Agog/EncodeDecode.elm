@@ -13,8 +13,10 @@
 module Agog.EncodeDecode exposing
     ( boardToString
     , decodeSavedModel
+    , defaultOneMove
     , encodeGameState
     , encodeMoves
+    , encodeOneMove
     , encodeSavedModel
     , frameworkToPublicGame
     , gameStateDecoder
@@ -24,6 +26,7 @@ module Agog.EncodeDecode exposing
     , messageEncoderWithPrivate
     , movesDecoder
     , newBoardToString
+    , oneMoveDecoder
     , oneMoveToString
     , oneMovesToString
     , pieceToString
@@ -1043,14 +1046,42 @@ stringToOneSlideRecord string =
 
 type alias ConcatibleJumps =
     { jumps : List OneCorruptibleJump
+    , firstFrom : RowCol
+    , lastTo : RowCol
     , nextOver : Maybe RowCol
     }
 
 
+elideNothings : List (Maybe a) -> Maybe (List a)
+elideNothings list =
+    let
+        mapper l res =
+            case l of
+                [] ->
+                    Just <| List.reverse res
+
+                me :: tail ->
+                    case me of
+                        Nothing ->
+                            Nothing
+
+                        Just e ->
+                            mapper tail <| e :: res
+    in
+    mapper list []
+
+
 listOfStringListsToOneJumpSequence : List (List String) -> Maybe (List OneCorruptibleJump)
 listOfStringListsToOneJumpSequence listOfStringLists =
-    List.map (listOfStringsToConcatibleJumps True) listOfStringLists
-        |> concatConcatibleJumps False
+    case
+        List.map (listOfStringsToConcatibleJumps True) listOfStringLists
+            |> elideNothings
+    of
+        Nothing ->
+            Nothing
+
+        Just jumps ->
+            concatConcatibleJumps False jumps
 
 
 type alias FromSlashOver =
@@ -1059,204 +1090,161 @@ type alias FromSlashOver =
     }
 
 
+defaultOver : RowCol -> Maybe RowCol -> RowCol -> Maybe RowCol
+defaultOver from maybeOver to =
+    case maybeOver of
+        Just o ->
+            Just o
+
+        Nothing ->
+            case locBetween from to of
+                Nothing ->
+                    Nothing
+
+                Just loc ->
+                    Just loc
+
+
 listOfStringsToConcatibleJumps : Bool -> List String -> Maybe ConcatibleJumps
 listOfStringsToConcatibleJumps isCorrupted stringList =
     -- TODO
     let
         stringToFromSlashOver : String -> Maybe FromSlashOver
         stringToFromSlashOver string =
-            let
-                res =
-                    case String.split "/" string of
-                        [ from ] ->
+            case String.split "/" string of
+                [ from ] ->
+                    Just
+                        { from = torc from
+                        , maybeOver = Nothing
+                        }
+
+                [ from, over ] ->
+                    let
+                        o =
+                            torc over
+                    in
+                    if not <| NewBoard.isRowColLegal o then
+                        Nothing
+
+                    else
+                        Just
                             { from = torc from
-                            , maybeOver = Nothing
+                            , maybeOver = Just o
                             }
 
-                        [ from, over ] ->
-                            { from = torc from
-                            , maybeOver = Just <| torc over
-                            }
+                _ ->
+                    Nothing
 
-                        _ ->
-                            { from = NewBoard.illegalRowCol
-                            , maybeOver = Nothing
-                            }
-            in
-            if not <| NewBoard.isRowColLegal res.from then
-                Nothing
-
-            else
-                case res.maybeOver of
-                    Nothing ->
-                        Just res
-
-                    Just over ->
-                        if NewBoard.isRowColLegal over then
-                            Just res
-
-                        else
-                            Nothing
-
-        slashOverMapper res fromSlashOvers =
-            case fromSlashOvers of
-                [] ->
-                    Just <| List.reverse res
-
-                fromSlashOver :: tail ->
-                    case fromSlashOver of
-                        Nothing ->
-                            Nothing
-
-                        Just fso ->
-                            slashOverMapper (fso :: res) tail
-
-        mapper : FromSlashOver -> List FromSlashOver -> List OneCorruptibleJump -> Maybe ConcatibleJumps
-        mapper { from, maybeOver } fromSlashOvers res =
+        mapper : FromSlashOver -> FromSlashOver -> List FromSlashOver -> List OneCorruptibleJump -> Maybe ConcatibleJumps
+        mapper firstSlashOver prevSlashOver fromSlashOvers res =
             case fromSlashOvers of
                 [] ->
                     Just <|
                         { jumps = List.reverse res
-                        , nextOver = maybeOver
+                        , firstFrom = firstSlashOver.from
+                        , lastTo = prevSlashOver.from
+                        , nextOver = prevSlashOver.maybeOver
                         }
 
                 nextFromSlashOver :: tail ->
                     let
+                        from =
+                            prevSlashOver.from
+
                         to =
                             nextFromSlashOver.from
 
-                        over =
-                            case maybeOver of
-                                Just o ->
-                                    o
-
-                                Nothing ->
-                                    case locBetween from to of
-                                        Nothing ->
-                                            NewBoard.illegalRowCol
-
-                                        Just loc ->
-                                            loc
+                        maybeOver =
+                            defaultOver from prevSlashOver.maybeOver to
                     in
-                    if not <| NewBoard.isRowColLegal over then
-                        Nothing
+                    case maybeOver of
+                        Nothing ->
+                            Nothing
 
-                    else
-                        mapper nextFromSlashOver tail <|
-                            { from = from
-                            , over = over
-                            , to = to
-                            , corrupted = isCorrupted
-                            }
-                                :: res
+                        Just over ->
+                            mapper firstSlashOver nextFromSlashOver tail <|
+                                { from = from
+                                , over = over
+                                , to = to
+                                , corrupted = isCorrupted
+                                }
+                                    :: res
     in
-    case List.map stringToFromSlashOver stringList |> slashOverMapper [] of
+    case List.map stringToFromSlashOver stringList |> elideNothings of
         Nothing ->
             Nothing
 
         Just slashOvers ->
             case slashOvers of
                 [] ->
-                    Just
-                        { jumps = []
-                        , nextOver = Nothing
-                        }
+                    Nothing
 
                 slashOver :: tail ->
-                    mapper slashOver tail []
+                    mapper slashOver slashOver tail []
 
 
-concatConcatibleJumps : Bool -> List (Maybe ConcatibleJumps) -> Maybe (List OneCorruptibleJump)
+concatConcatibleJumps : Bool -> List ConcatibleJumps -> Maybe (List OneCorruptibleJump)
 concatConcatibleJumps isCorrupted maybeJumpss =
     let
-        mapper : RowCol -> Maybe RowCol -> List (Maybe ConcatibleJumps) -> List OneCorruptibleJump -> Maybe (List OneCorruptibleJump)
-        mapper lastTo maybeOver jumpss res =
+        mapper : RowCol -> Maybe RowCol -> List ConcatibleJumps -> List OneCorruptibleJump -> Maybe (List OneCorruptibleJump)
+        mapper prevTo maybeOver jumpss res =
             case jumpss of
                 [] ->
                     Just <| List.reverse res
 
-                Nothing :: _ ->
-                    Nothing
-
-                (Just { jumps, nextOver }) :: rest ->
-                    case List.head jumps of
+                { jumps, firstFrom, lastTo, nextOver } :: rest ->
+                    let
+                        maybePrevOver =
+                            defaultOver prevTo maybeOver firstFrom
+                    in
+                    case maybePrevOver of
                         Nothing ->
                             Nothing
 
-                        Just { from } ->
-                            case List.head <| List.reverse jumps of
-                                Nothing ->
-                                    Nothing
-
-                                Just { to } ->
-                                    let
-                                        over =
-                                            case maybeOver of
-                                                Just o ->
-                                                    o
-
-                                                Nothing ->
-                                                    case locBetween lastTo from of
-                                                        Nothing ->
-                                                            NewBoard.illegalRowCol
-
-                                                        Just o ->
-                                                            o
-                                    in
-                                    if not <| NewBoard.isRowColLegal over then
-                                        Nothing
-
-                                    else
-                                        mapper to nextOver rest <|
-                                            { from = lastTo
-                                            , over = over
-                                            , to = from
-                                            , corrupted = isCorrupted
-                                            }
-                                                :: (jumps ++ res)
+                        Just prevOver ->
+                            mapper lastTo nextOver rest <|
+                                List.reverse jumps
+                                    ++ ({ from = prevTo
+                                        , over = prevOver
+                                        , to = firstFrom
+                                        , corrupted = isCorrupted
+                                        }
+                                            :: res
+                                       )
     in
     case maybeJumpss of
         [] ->
             Just []
 
-        maybeJumps :: rest ->
-            case maybeJumps of
-                Nothing ->
-                    Nothing
-
-                Just { jumps, nextOver } ->
-                    case List.head <| List.reverse jumps of
-                        Nothing ->
-                            Nothing
-
-                        Just { to } ->
-                            mapper to nextOver rest jumps
+        { jumps, lastTo, nextOver } :: rest ->
+            mapper lastTo nextOver rest <| List.reverse jumps
 
 
-{-| TODO
+defaultOneMove : OneMove
+defaultOneMove =
+    { piece = Types.emptyPiece
+    , isUnique = True
+    , sequence = OneSlide { from = torc "a1", to = torc "a2", makeHulk = Nothing }
+    }
 
-This will get too long for sending back from the server.
-It needs to be encoded as nHa4b4 or ga4xa6 or ja4Xa6xc6,
-where the "n" means non-unique.
 
-Then a list of them can be encoded as a single, comma-delimited string.
-
--}
 encodeOneMove : OneMove -> Value
-encodeOneMove { piece, isUnique, sequence } =
-    JE.object
-        [ ( "piece", encodePiece piece )
-        , ( "isUnique", JE.bool isUnique )
-        , ( "sequence", encodeOneMoveSequence sequence )
-        ]
+encodeOneMove oneMove =
+    oneMoveToString oneMove |> JE.string
 
 
 oneMoveDecoder : Decoder OneMove
 oneMoveDecoder =
-    JD.succeed OneMove
-        |> required "piece" pieceDecoder
-        |> required "isUnique" JD.bool
-        |> required "sequence" oneMoveSequenceDecoder
+    JD.string
+        |> JD.andThen
+            (\s ->
+                case stringToOneMove s of
+                    Nothing ->
+                        JD.fail <| "Not a legal oneMove string: " ++ s
+
+                    Just oneMove ->
+                        JD.succeed oneMove
+            )
 
 
 encodeUndoState : UndoState -> Value
