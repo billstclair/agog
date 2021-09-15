@@ -305,7 +305,9 @@ messageProcessor state message =
                     Ok ( gameid, _, _ ) ->
                         let
                             gs =
-                                NewBoard.populateLegalMoves gameState
+                                gameState
+                                    |> updateJumperLocations
+                                    |> NewBoard.populateLegalMoves
                                     |> populateWinner
                         in
                         ( ServerInterface.updateGame gameid gs state
@@ -553,6 +555,17 @@ messageProcessor state message =
             errorRes message state "Received a non-request."
 
 
+updateJumperLocations : GameState -> GameState
+updateJumperLocations gameState =
+    let
+        jumperLocations =
+            NewBoard.computeJumperLocations
+                (Types.playerColor gameState.whoseTurn)
+                gameState.newBoard
+    in
+    { gameState | jumperLocations = jumperLocations }
+
+
 processChooseMoveOptions : List ChooseMoveOption -> RowCol -> Bool -> Player -> Maybe ( RowCol, Piece ) -> GameState -> ( GameState, Maybe String )
 processChooseMoveOptions options moveTo lastMove whoseTurn jumpOver gameState =
     let
@@ -745,7 +758,9 @@ chooseMove state message gameid gameState player rowCol options =
                             Nothing ->
                                 let
                                     gs3 =
-                                        populateWinner gs2
+                                        gs2
+                                            |> updateJumperLocations
+                                            |> populateWinner
                                 in
                                 ( ServerInterface.updateGame gameid gs3 state
                                 , Just <|
@@ -836,7 +851,9 @@ chooseMove state message gameid gameState player rowCol options =
                                         Nothing ->
                                             let
                                                 gs3 =
-                                                    populateWinner gs2
+                                                    gs2
+                                                        |> updateJumperLocations
+                                                        |> populateWinner
                                             in
                                             ( ServerInterface.updateGame gameid gs3 state
                                             , Just <|
@@ -899,9 +916,6 @@ endOfTurn selected moved piece options gameState =
         whoseTurn =
             Types.otherPlayer gameState.whoseTurn
 
-        whoseTurnColor =
-            Types.playerColor whoseTurn
-
         isMakeHulk chooseMoveOption =
             case chooseMoveOption of
                 MakeHulk _ ->
@@ -924,14 +938,10 @@ endOfTurn selected moved piece options gameState =
         newBoard =
             NewBoard.clear selected gameState.newBoard
                 |> NewBoard.set moved setPiece
-
-        jumperLocations =
-            NewBoard.computeJumperLocations whoseTurnColor newBoard
     in
     { gameState
         | newBoard = newBoard
         , selected = Nothing
-        , jumperLocations = jumperLocations
         , legalMoves = NoMoves
         , whoseTurn = whoseTurn
         , undoStates = []
