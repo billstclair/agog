@@ -3,18 +3,12 @@
 -- Interface.elm
 -- AGOG server interface.
 -- Runs on local machine for local play, and server for networked play.
--- Copyright (c) 2019-2021x Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE.txt
 --
 ----------------------------------------------------------------------
---
--- TODO
--- If a piece moves to the opposing sanctum with no option to makeHulk,
--- remove it from play.
--- Make the UI do this if the user clicks on an empty square (or maybe only
--- if she clicks on the sanctum again).
 
 
 module Agog.Interface exposing
@@ -612,7 +606,7 @@ processChooseMoveOptions options moveTo lastMove whoseTurn jumpOver gameState =
                                     then
                                         -- This can happen, but I'll bet it won't.
                                         -- Sorta like the two-move mate.
-                                        ( gameState, Just "There are no pieces to use to make a corrupted hulk." )
+                                        ( gameState, Just "There are no units to use to make a corrupted hulk." )
 
                                     else
                                         let

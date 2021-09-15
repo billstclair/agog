@@ -25,6 +25,7 @@ module Agog.NewBoard exposing
     , illegalRowCol
     , initial
     , isRowColLegal
+    , isUniqueMoveTo
     , mapWholeBoard
     , mapWholeBoardWithExit
     , playerSanctum
@@ -344,6 +345,56 @@ winner whoseTurn board =
 
         else
             NoWinner
+
+
+isUniqueMoveTo : RowCol -> RowCol -> MovesOrJumps -> NewBoard -> Bool
+isUniqueMoveTo from to legalMoves board =
+    let
+        isJump =
+            case legalMoves of
+                Jumps _ ->
+                    True
+
+                _ ->
+                    False
+
+        mapper : RowCol -> Piece -> Bool -> ( Bool, Bool )
+        mapper loc piece _ =
+            if from == loc then
+                ( False, False )
+
+            else
+                case computeLegalMoves board <| Just loc of
+                    NoMoves ->
+                        ( False, False )
+
+                    Moves slides ->
+                        if not isJump && List.any ((==) to) slides then
+                            ( True, True )
+
+                        else
+                            ( False, False )
+
+                    Jumps sequences ->
+                        if
+                            isJump
+                                && List.any
+                                    (\seq ->
+                                        case List.head seq of
+                                            Nothing ->
+                                                False
+
+                                            Just oneJump ->
+                                                oneJump.to == to
+                                    )
+                                    sequences
+                        then
+                            ( True, True )
+
+                        else
+                            ( False, False )
+    in
+    mapWholeBoardWithExit mapper board False
 
 
 
