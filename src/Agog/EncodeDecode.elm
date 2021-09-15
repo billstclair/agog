@@ -865,7 +865,7 @@ oneMoveSequenceToString sequence =
 
                                         x =
                                             if corrupted then
-                                                "X"
+                                                "+"
 
                                             else
                                                 "x"
@@ -963,7 +963,7 @@ stringToOneMoveSequence string =
             String.split "x" string
 
         corruptingJumps =
-            List.map (String.split "X") jumps
+            List.map (String.split "+") jumps
     in
     if
         (List.head jumps == Just string)
@@ -1052,8 +1052,8 @@ type alias ConcatibleJumps =
     }
 
 
-elideNothings : List (Maybe a) -> Maybe (List a)
-elideNothings list =
+raiseNothings : List (Maybe a) -> Maybe (List a)
+raiseNothings list =
     let
         mapper l res =
             case l of
@@ -1075,7 +1075,7 @@ listOfStringListsToOneJumpSequence : List (List String) -> Maybe (List OneCorrup
 listOfStringListsToOneJumpSequence listOfStringLists =
     case
         List.map (listOfStringsToConcatibleJumps True) listOfStringLists
-            |> elideNothings
+            |> raiseNothings
     of
         Nothing ->
             Nothing
@@ -1170,7 +1170,7 @@ listOfStringsToConcatibleJumps isCorrupted stringList =
                                 }
                                     :: res
     in
-    case List.map stringToFromSlashOver stringList |> elideNothings of
+    case List.map stringToFromSlashOver stringList |> raiseNothings of
         Nothing ->
             Nothing
 

@@ -646,8 +646,12 @@ processChooseMoveOptions options moveTo lastMove whoseTurn jumpOver gameState =
                             then
                                 ( gameState, Just "Can't make a hulk except by landing on the other player's sanctum." )
 
-                            else if selectedType /= Golem && selectedType /= Hulk then
-                                ( gameState, Just "Can't make a Hulk from a Journeyman or Corrupted Hulk." )
+                            else if
+                                (selectedType /= Golem)
+                                    && (selectedType /= Hulk)
+                                    && (selectedType /= CorruptedHulk)
+                            then
+                                ( gameState, Just "Can't make a Hulk from a Journeyman" )
 
                             else if hulkPiece.pieceType /= Golem then
                                 ( gameState, Just "Can only convert a Golem to a hulk." )
