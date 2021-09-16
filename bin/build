@@ -1,6 +1,6 @@
 #!/bin/bash
 
-which='local'  # $1  [temporary]
+which=$1  [temporary]
 if [[ -z $which ]]; then which='local';fi
 cp src/Agog/WhichServer.elm.$which src/Agog/WhichServer.elm
 

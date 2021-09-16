@@ -316,7 +316,9 @@ type alias PrivateGameState =
 
 emptyPrivateGameState : PrivateGameState
 emptyPrivateGameState =
-    PrivateGameState NoDecoration Set.empty
+    { decoration = NoDecoration
+    , subscribers = Set.empty
+    }
 
 
 type alias OneJump =

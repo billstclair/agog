@@ -168,22 +168,6 @@ import WebSocketFramework.Types
         )
 
 
-type alias SimulatorState =
-    { gameCount : Int
-    , gameCountString : String
-    , gamesLeft : Int
-    , simulatorResult : SimulatorResult
-    }
-
-
-type alias SimulatorResult =
-    { horizontalWins : Int
-    , verticalWins : Int
-    , horizontalScore : Int
-    , verticalScore : Int
-    }
-
-
 type alias ServerInterface =
     WebSocketFramework.Types.ServerInterface GameState Player Message Msg
 
@@ -228,8 +212,6 @@ type alias Model =
     , key : Key
     , windowSize : ( Int, Int )
     , started : Bool --True when persistent storage is available
-    , simulatorState : SimulatorState --for the "Aux"  page
-    , seed : Seed
     , error : Maybe String
     , chatSettings : ChatSettings
     , publicGames : List PublicGame
@@ -301,8 +283,6 @@ type Msg
     | ChatClear
     | DelayedAction (Model -> ( Model, Cmd Msg )) Posix
     | SetZone Zone
-    | SetGameCount String
-    | InitializeSeed Posix
     | WindowResize Int Int
     | HandleUrlRequest UrlRequest
     | HandleUrlChange Url
@@ -349,7 +329,7 @@ errorMessageEncoder error =
 
 fullProcessor : ServerMessageProcessor GameState Player Message
 fullProcessor =
-    ServerInterface.fullMessageProcessor encodeDecode Interface.messageProcessor
+    ServerInterface.fullMessageProcessor encodeDecode Interface.proxyMessageProcessor
 
 
 proxyServer : ServerInterface
@@ -403,13 +383,6 @@ init flags url key =
             , key = key
             , windowSize = ( 0, 0 )
             , started = False
-            , simulatorState =
-                { gameCount = 1000
-                , gameCountString = "1000"
-                , gamesLeft = 0
-                , simulatorResult = SimulatorResult 0 0 0 0
-                }
-            , seed = Random.initialSeed 0 --get time for this
             , error = Nothing
             , chatSettings = initialChatSettings (Types.typeToStyle LightStyle)
             , publicGames = []
@@ -428,7 +401,7 @@ init flags url key =
             , chooseFirst = WhitePlayer
             , player = WhitePlayer
             , gameState = Interface.emptyGameState (PlayerNames "" "")
-            , isLocal = True
+            , isLocal = False
             , gameid = ""
             , playerid = ""
             , isLive = False
@@ -438,7 +411,6 @@ init flags url key =
     model
         |> withCmds
             [ Task.perform getViewport Dom.getViewport
-            , Task.perform InitializeSeed Time.now
             , Task.perform SetZone Time.here
             ]
 
@@ -846,39 +818,8 @@ incomingMessage interface message mdl =
                 |> withNoCmd
 
         ErrorRsp { request, text } ->
-            let
-                model2 =
-                    { model
-                        | error = Just text
-                        , connectionReason = NoConnection
-                        , publicGames = []
-                    }
-
-                model3 =
-                    if model.isLocal then
-                        model2
-
-                    else
-                        { model2
-                            | isLive = False
-                            , playerid = ""
-                            , gameid = ""
-                        }
-            in
-            model3
-                |> withCmds
-                    [ setPage MainPage
-                    , if
-                        not model2.isLocal
-                            && (model.connectionReason /= NoConnection)
-                      then
-                        Cmd.none
-                        --WebSocket.makeClose model2.serverUrl
-                        --  |> webSocketSend
-
-                      else
-                        Cmd.none
-                    ]
+            { model | error = Just text }
+                |> withNoCmd
 
         ChatRsp { gameid, name, text } ->
             let
@@ -886,8 +827,7 @@ incomingMessage interface message mdl =
                     ElmChat.addLineSpec model.chatSettings <|
                         ElmChat.makeLineSpec text
                             (Just name)
-                            --(Just model.time)
-                            Nothing
+                            (Just model.time)
             in
             { model | chatSettings = chatSettings }
                 |> withCmds
@@ -1520,27 +1460,6 @@ updateInternal msg model =
             { model | chatSettings = { chatSettings | zone = zone } }
                 |> withNoCmd
 
-        SetGameCount string ->
-            let
-                simulatorState =
-                    model.simulatorState
-            in
-            { model
-                | simulatorState =
-                    { simulatorState
-                        | gameCount =
-                            String.toInt string
-                                |> Maybe.withDefault simulatorState.gameCount
-                    }
-            }
-                |> withNoCmd
-
-        InitializeSeed posix ->
-            { model
-                | seed = Random.initialSeed <| Time.posixToMillis posix
-            }
-                |> withNoCmd
-
         WindowResize w h ->
             { model | windowSize = ( w, h ) }
                 |> withNoCmd
@@ -2122,12 +2041,31 @@ mainPage bsize model =
 
                     NoWinner ->
                         let
-                            action =
+                            ( prefixp, action ) =
                                 if corruptJumped == AskAsk || makeHulk == AskAsk then
-                                    "follow the instructions in the orange-outlined box below"
+                                    ( True
+                                    , "follow the instructions in the orange-outlined box below"
+                                    )
+
+                                else if
+                                    not model.isLocal
+                                        && (gameState.whoseTurn /= model.player)
+                                then
+                                    let
+                                        otherName =
+                                            if currentPlayer == Just BlackPlayer then
+                                                white
+
+                                            else
+                                                black
+                                    in
+                                    ( False
+                                    , "Waiting for " ++ otherName ++ " to move"
+                                    )
 
                                 else
-                                    case gameState.selected of
+                                    ( True
+                                    , case gameState.selected of
                                         Nothing ->
                                             if gameState.jumperLocations == [] then
                                                 "choose a piece to move"
@@ -2145,15 +2083,24 @@ mainPage bsize model =
 
                                                 Jumps _ ->
                                                     "click on a highlighted square to jump"
+                                    )
 
-                            name =
-                                if currentPlayer == Just WhitePlayer then
-                                    white
+                            prefix =
+                                if prefixp then
+                                    let
+                                        name =
+                                            if currentPlayer == Just WhitePlayer then
+                                                white
+
+                                            else
+                                                black
+                                    in
+                                    name ++ ", "
 
                                 else
-                                    black
+                                    ""
                         in
-                        name ++ ", " ++ action ++ "."
+                        prefix ++ action ++ "."
                 )
 
         theStyle =
@@ -2221,13 +2168,26 @@ mainPage bsize model =
               else
                 span []
                     [ b "Whose turn: "
-                    , text <|
-                        case gameState.whoseTurn of
-                            WhitePlayer ->
-                                gameState.players.white
+                    , let
+                        ( name, color ) =
+                            case gameState.whoseTurn of
+                                WhitePlayer ->
+                                    ( gameState.players.white, "white" )
 
-                            BlackPlayer ->
-                                gameState.players.black
+                                BlackPlayer ->
+                                    ( gameState.players.black, "black" )
+
+                        label =
+                            if model.isLocal then
+                                name
+
+                            else if model.player == gameState.whoseTurn then
+                                "You (" ++ name ++ ")"
+
+                            else
+                                name
+                      in
+                      text <| label ++ ", " ++ color
                     , br
                     ]
             , if corruptJumped == AskAsk || makeHulk == AskAsk then
@@ -2387,7 +2347,7 @@ mainPage bsize model =
                 [ type_ "checkbox"
                 , checked model.isLocal
                 , onCheck SetIsLocal
-                , disabled True -- <| not model.isLocal && model.isLive
+                , disabled <| not model.isLocal && model.isLive
                 ]
                 []
             , text " "

@@ -16,6 +16,7 @@ module Agog.Interface exposing
     , forNameMatches
     , isFirstJumpTo
     , messageProcessor
+    , proxyMessageProcessor
     )
 
 import Agog.EncodeDecode as ED
@@ -121,7 +122,17 @@ lookupGame message playerid state =
 
 
 messageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
-messageProcessor state message =
+messageProcessor =
+    generalMessageProcessor False
+
+
+proxyMessageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
+proxyMessageProcessor =
+    generalMessageProcessor True
+
+
+generalMessageProcessor : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
+generalMessageProcessor isProxyServer state message =
     case message of
         NewReq { name, player, publicType, restoreState } ->
             if name == "" then
@@ -289,7 +300,7 @@ messageProcessor state message =
                     )
 
         SetGameStateReq { playerid, gameState } ->
-            if not WhichServer.allowSetGameState then
+            if not isProxyServer then
                 errorRes message state "SetGameStateReq is disabled."
 
             else
@@ -333,156 +344,160 @@ messageProcessor state message =
                     Debug.log "PlayReq Err" res
 
                 Ok ( gameid, gameState, player ) ->
-                    case placement of
-                        ChooseNew newPlayer ->
-                            case gameState.winner of
-                                NoWinner ->
-                                    errorRes message state "Game not over"
+                    if not isProxyServer && gameState.winner == NoWinner && gameState.whoseTurn /= player then
+                        errorRes message state "It's not your turn."
 
-                                _ ->
-                                    let
-                                        players =
-                                            if player == newPlayer then
-                                                gameState.players
+                    else
+                        case placement of
+                            ChooseNew newPlayer ->
+                                case gameState.winner of
+                                    NoWinner ->
+                                        errorRes message state "Game not over"
 
-                                            else
-                                                let
-                                                    { white, black } =
-                                                        gameState.players
-                                                in
-                                                { white = black
-                                                , black = white
-                                                }
+                                    _ ->
+                                        let
+                                            players =
+                                                if player == newPlayer then
+                                                    gameState.players
 
-                                        gs =
-                                            emptyGameState players
+                                                else
+                                                    let
+                                                        { white, black } =
+                                                            gameState.players
+                                                    in
+                                                    { white = black
+                                                    , black = white
+                                                    }
 
-                                        gs2 =
-                                            { gs | score = gameState.score }
+                                            gs =
+                                                emptyGameState players
 
-                                        state2 =
-                                            if player == newPlayer then
-                                                state
+                                            gs2 =
+                                                { gs | score = gameState.score }
 
-                                            else
-                                                let
-                                                    playerids =
-                                                        ServerInterface.getGamePlayers
-                                                            gameid
-                                                            state
+                                            state2 =
+                                                if player == newPlayer then
+                                                    state
 
-                                                    loop : PlayerId -> Types.ServerState -> Types.ServerState
-                                                    loop id st =
-                                                        let
-                                                            pl =
-                                                                if id == playerid then
-                                                                    newPlayer
+                                                else
+                                                    let
+                                                        playerids =
+                                                            ServerInterface.getGamePlayers
+                                                                gameid
+                                                                state
 
-                                                                else
-                                                                    Types.otherPlayer
+                                                        loop : PlayerId -> Types.ServerState -> Types.ServerState
+                                                        loop id st =
+                                                            let
+                                                                pl =
+                                                                    if id == playerid then
                                                                         newPlayer
-                                                        in
-                                                        ServerInterface.updatePlayer
-                                                            id
-                                                            { gameid = gameid
-                                                            , player = pl
-                                                            }
-                                                            st
-                                                in
-                                                List.foldl loop state playerids
-                                    in
-                                    ( ServerInterface.updateGame gameid gs2 state2
-                                    , Just <|
-                                        AnotherGameRsp
-                                            { gameid = gameid
-                                            , gameState = gs2
-                                            , player = newPlayer
-                                            }
-                                    )
 
-                        ChooseResign _ ->
-                            case gameState.winner of
-                                NoWinner ->
-                                    let
-                                        winner =
-                                            case player of
-                                                WhitePlayer ->
-                                                    BlackWinner WinByResignation
+                                                                    else
+                                                                        Types.otherPlayer
+                                                                            newPlayer
+                                                            in
+                                                            ServerInterface.updatePlayer
+                                                                id
+                                                                { gameid = gameid
+                                                                , player = pl
+                                                                }
+                                                                st
+                                                    in
+                                                    List.foldl loop state playerids
+                                        in
+                                        ( ServerInterface.updateGame gameid gs2 state2
+                                        , Just <|
+                                            AnotherGameRsp
+                                                { gameid = gameid
+                                                , gameState = gs2
+                                                , player = newPlayer
+                                                }
+                                        )
 
-                                                BlackPlayer ->
-                                                    WhiteWinner WinByResignation
+                            ChooseResign _ ->
+                                case gameState.winner of
+                                    NoWinner ->
+                                        let
+                                            winner =
+                                                case player of
+                                                    WhitePlayer ->
+                                                        BlackWinner WinByResignation
 
-                                        gs =
-                                            { gameState | winner = winner }
-                                                |> updateScore
-                                    in
-                                    ( ServerInterface.updateGame gameid gs state
-                                    , Just <|
-                                        ResignRsp
-                                            { gameid = gameid
-                                            , gameState = gs
-                                            , player = player
-                                            }
-                                    )
+                                                    BlackPlayer ->
+                                                        WhiteWinner WinByResignation
 
-                                _ ->
-                                    errorRes message state "Game already over"
+                                            gs =
+                                                { gameState | winner = winner }
+                                                    |> updateScore
+                                        in
+                                        ( ServerInterface.updateGame gameid gs state
+                                        , Just <|
+                                            ResignRsp
+                                                { gameid = gameid
+                                                , gameState = gs
+                                                , player = player
+                                                }
+                                        )
 
-                        ChoosePiece rowCol ->
-                            let
-                                board =
-                                    gameState.newBoard
+                                    _ ->
+                                        errorRes message state "Game already over"
 
-                                jumperLocations =
-                                    gameState.jumperLocations
-                            in
-                            if gameState.undoStates /= [] then
-                                errorRes message state "A jump sequence is in progress."
-
-                            else
+                            ChoosePiece rowCol ->
                                 let
-                                    piece =
-                                        NewBoard.get rowCol board
+                                    board =
+                                        gameState.newBoard
+
+                                    jumperLocations =
+                                        gameState.jumperLocations
                                 in
-                                if piece.pieceType == NoPiece then
-                                    errorRes message state "No piece at chosen location."
-
-                                else if not <| colorMatchesPlayer piece.color gameState.whoseTurn then
-                                    errorRes message state "Chosen piece not of player's color."
-
-                                else if
-                                    (jumperLocations /= [])
-                                        && (not <| List.member rowCol jumperLocations)
-                                then
-                                    errorRes message state "You must select a piece with a maximal jump sequence."
+                                if gameState.undoStates /= [] then
+                                    errorRes message state "A jump sequence is in progress."
 
                                 else
                                     let
-                                        gs =
-                                            { gameState
-                                                | selected =
-                                                    if gameState.selected == Just rowCol then
-                                                        Nothing
-
-                                                    else
-                                                        Just rowCol
-                                            }
-                                                |> NewBoard.populateLegalMoves
+                                        piece =
+                                            NewBoard.get rowCol board
                                     in
-                                    ( ServerInterface.updateGame gameid gs state
-                                    , Just <|
-                                        PlayRsp
-                                            { gameid = gameid
-                                            , gameState = gs
-                                            , decoration = NoDecoration
-                                            }
-                                    )
+                                    if piece.pieceType == NoPiece then
+                                        errorRes message state "No piece at chosen location."
 
-                        ChooseMove rowCol options ->
-                            chooseMove state message gameid gameState player rowCol options
+                                    else if not <| colorMatchesPlayer piece.color gameState.whoseTurn then
+                                        errorRes message state "Chosen piece not of player's color."
 
-                        ChooseUndoJump undoWhichJumps ->
-                            chooseUndoJump state message gameid gameState undoWhichJumps
+                                    else if
+                                        (jumperLocations /= [])
+                                            && (not <| List.member rowCol jumperLocations)
+                                    then
+                                        errorRes message state "You must select a piece with a maximal jump sequence."
+
+                                    else
+                                        let
+                                            gs =
+                                                { gameState
+                                                    | selected =
+                                                        if gameState.selected == Just rowCol then
+                                                            Nothing
+
+                                                        else
+                                                            Just rowCol
+                                                }
+                                                    |> NewBoard.populateLegalMoves
+                                        in
+                                        ( ServerInterface.updateGame gameid gs state
+                                        , Just <|
+                                            PlayRsp
+                                                { gameid = gameid
+                                                , gameState = gs
+                                                , decoration = NoDecoration
+                                                }
+                                        )
+
+                            ChooseMove rowCol options ->
+                                chooseMove state message gameid gameState player rowCol options
+
+                            ChooseUndoJump undoWhichJumps ->
+                                chooseUndoJump state message gameid gameState undoWhichJumps
 
         PublicGamesReq { subscribe, forName, gameid } ->
             -- subscribe is processed by the server code only
