@@ -15,6 +15,7 @@ module Agog.EncodeDecode exposing
     , decodeSavedModel
     , defaultOneMove
     , encodeGameState
+    , encodeMessageForLog
     , encodeMoves
     , encodeOneMove
     , encodeSavedModel
@@ -1022,7 +1023,7 @@ stringToOneSlideRecord string =
                                     True
 
                                 Just hl ->
-                                    not <| NewBoard.isRowColLegal hl
+                                    NewBoard.isRowColLegal hl
 
                         from2 =
                             torc from
@@ -1633,6 +1634,15 @@ publicTypeDecoder =
         , JD.field "publicFor" JD.string
             |> JD.andThen (PublicFor >> JD.succeed)
         ]
+
+
+encodeMessageForLog : Message -> ( ReqRsp, List ( String, String ) )
+encodeMessageForLog message =
+    let
+        ( reqRsp, plist ) =
+            messageEncoder message
+    in
+    ( reqRsp, List.map (\( k, v ) -> ( k, JE.encode 0 v )) plist )
 
 
 messageEncoder : Message -> ( ReqRsp, Plist )

@@ -35,6 +35,7 @@ import Agog.Types as Types
         , Message(..)
         , MovesOrJumps(..)
         , NewBoard
+        , OneMove
         , Page(..)
         , PieceType(..)
         , Player(..)
@@ -323,8 +324,27 @@ encodeDecode : EncodeDecode Message
 encodeDecode =
     { encoder = ED.messageEncoderWithPrivate
     , decoder = ED.messageDecoder
-    , errorWrapper = Nothing
+    , errorWrapper = Just errorMessageEncoder
     }
+
+
+errorMessageEncoder : WebSocketFramework.Types.Error Message -> Message
+errorMessageEncoder error =
+    ErrorRsp
+        { request = "Unknown"
+        , text =
+            Debug.toString error.kind
+                ++ ":"
+                ++ error.description
+                ++ " / "
+                ++ (case error.message of
+                        Ok message ->
+                            Debug.toString message
+
+                        Err err ->
+                            err
+                   )
+        }
 
 
 fullProcessor : ServerMessageProcessor GameState Player Message
@@ -609,8 +629,11 @@ incomingMessage interface message mdl =
     let
         model =
             { mdl | interface = interface }
+
+        msgString =
+            Debug.log "incomingMessage" <| ED.encodeMessageForLog message
     in
-    case Debug.log "incomingMessage" message of
+    case message of
         NewRsp { gameid, playerid, player, name, gameState } ->
             { model
                 | gameid = gameid
@@ -2555,12 +2578,10 @@ mainPage bsize model =
                             ]
                     ]
             ]
-
-        --TODO
-        --, p []
-        --    [ text "Moves: "
-        --    , text <| movesToString gameState.moves
-        --    ]
+        , p []
+            [ text "Moves: "
+            , text <| moveString gameState.moves
+            ]
         , footerParagraph
         , p []
             [ button
@@ -2570,6 +2591,25 @@ mainPage bsize model =
                 [ text <| "Clear!" ]
             ]
         ]
+
+
+moveString : List OneMove -> String
+moveString moves =
+    let
+        len =
+            4
+
+        ellipsis =
+            if List.length moves > len then
+                ", ..."
+
+            else
+                ""
+
+        head =
+            List.take 4 moves
+    in
+    movesToString head ++ ellipsis
 
 
 footerParagraph : Html Msg
@@ -2624,12 +2664,10 @@ pairup strings =
     loop strings []
 
 
-movesToString : List String -> String
+movesToString : List OneMove -> String
 movesToString moves =
-    pairup moves
-        |> List.map pairToString
-        |> List.intersperse ", "
-        |> String.concat
+    List.map ED.oneMoveToString moves
+        |> String.join ", "
 
 
 pairToString : ( String, String ) -> String

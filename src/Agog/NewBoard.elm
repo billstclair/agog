@@ -12,6 +12,7 @@
 
 module Agog.NewBoard exposing
     ( SizerKind(..)
+    , areMovesAJump
     , blackSanctum
     , clear
     , colToString
@@ -347,33 +348,46 @@ winner whoseTurn board =
             NoWinner
 
 
-isUniqueMoveTo : RowCol -> RowCol -> MovesOrJumps -> NewBoard -> Bool
-isUniqueMoveTo from to legalMoves board =
-    let
-        isJump =
-            case legalMoves of
-                Jumps _ ->
-                    True
+areMovesAJump : MovesOrJumps -> Bool
+areMovesAJump legalMoves =
+    case legalMoves of
+        Jumps _ ->
+            True
 
-                _ ->
-                    False
+        _ ->
+            False
+
+
+isUniqueMoveTo : RowCol -> RowCol -> Maybe Piece -> Bool -> NewBoard -> Bool
+isUniqueMoveTo from to maybePiece isJump board =
+    let
+        movingPiece =
+            case maybePiece of
+                Just p ->
+                    p
+
+                Nothing ->
+                    get from board
 
         mapper : RowCol -> Piece -> Bool -> ( Bool, Bool )
-        mapper loc piece _ =
+        mapper loc piece res =
             if from == loc then
-                ( False, False )
+                ( res, False )
+
+            else if piece /= movingPiece then
+                ( res, False )
 
             else
                 case computeLegalMoves board <| Just loc of
                     NoMoves ->
-                        ( False, False )
+                        ( res, False )
 
                     Moves slides ->
                         if not isJump && List.any ((==) to) slides then
-                            ( True, True )
+                            ( False, True )
 
                         else
-                            ( False, False )
+                            ( res, False )
 
                     Jumps sequences ->
                         if
@@ -389,12 +403,12 @@ isUniqueMoveTo from to legalMoves board =
                                     )
                                     sequences
                         then
-                            ( True, True )
+                            ( False, True )
 
                         else
-                            ( False, False )
+                            ( res, False )
     in
-    mapWholeBoardWithExit mapper board False
+    mapWholeBoardWithExit mapper board True
 
 
 

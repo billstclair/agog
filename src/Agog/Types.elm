@@ -54,6 +54,7 @@ module Agog.Types exposing
     , emptyPrivateGameState
     , emptySettings
     , lightStyle
+    , maybeMakeHulkOption
     , messageToGameid
     , messageToPlayer
     , messageToPlayerid
@@ -360,7 +361,7 @@ type alias OneMove =
 
 type alias UndoState =
     { board : NewBoard
-    , moves : List OneMove
+    , moves : List OneMove -- in reverse order
     , selected : Maybe RowCol
     , legalMoves : MovesOrJumps
     }
@@ -410,6 +411,16 @@ type UndoWhichJumps
 type ChooseMoveOption
     = CorruptJumped
     | MakeHulk RowCol
+
+
+maybeMakeHulkOption : ChooseMoveOption -> Maybe RowCol
+maybeMakeHulkOption option =
+    case option of
+        MakeHulk rc ->
+            Just rc
+
+        _ ->
+            Nothing
 
 
 type Choice

@@ -34,6 +34,7 @@ import Agog.Types as Types
         , NewBoard
         , OneCorruptibleJump
         , OneJump
+        , OneMoveSequence(..)
         , Piece
         , PieceType(..)
         , Player(..)
@@ -689,12 +690,12 @@ processChooseMoveOptions options moveTo lastMove whoseTurn jumpOver gameState =
     List.foldl processOption ( gameState, Nothing ) options
 
 
-toCorruptibleJump : RowCol -> OneJump -> OneCorruptibleJump
-toCorruptibleJump from { over, to } =
+toCorruptibleJump : RowCol -> List ChooseMoveOption -> OneJump -> OneCorruptibleJump
+toCorruptibleJump from options { over, to } =
     { from = from
     , over = over
     , to = to
-    , corrupted = False
+    , corrupted = List.member CorruptJumped options
     }
 
 
@@ -739,8 +740,31 @@ chooseMove state message gameid gameState player rowCol options =
 
                     else
                         let
+                            isUnique =
+                                NewBoard.isUniqueMoveTo selected
+                                    rowCol
+                                    (Just piece)
+                                    False
+                                    board
+
+                            move =
+                                { piece = piece
+                                , isUnique = isUnique
+                                , sequence =
+                                    OneSlide
+                                        { from = selected
+                                        , to = rowCol
+                                        , makeHulk =
+                                            LE.findMap Types.maybeMakeHulkOption
+                                                options
+                                        }
+                                }
+
                             gs =
-                                endOfTurn selected rowCol piece options gameState
+                                { gameState
+                                    | moves = move :: gameState.moves
+                                }
+                                    |> endOfTurn selected rowCol piece options
 
                             ( gs2, maybeError ) =
                                 processChooseMoveOptions options rowCol True gameState.whoseTurn Nothing gs
@@ -790,6 +814,58 @@ chooseMove state message gameid gameState player rowCol options =
 
                                 jumpOver =
                                     Just ( firstOver, NewBoard.get firstOver board )
+
+                                newMove =
+                                    { from = selected
+                                    , over = firstOver
+                                    , to = rowCol
+                                    , corrupted =
+                                        List.member CorruptJumped options
+                                    }
+
+                                moves =
+                                    case gameState.jumps of
+                                        _ :: _ ->
+                                            case gameState.moves of
+                                                [] ->
+                                                    -- Can't happen
+                                                    []
+
+                                                move :: otherMoves ->
+                                                    case move.sequence of
+                                                        OneSlide _ ->
+                                                            -- Can't happen
+                                                            []
+
+                                                        OneJumpSequence jumps ->
+                                                            let
+                                                                sequence =
+                                                                    OneJumpSequence <|
+                                                                        jumps
+                                                                            ++ [ newMove ]
+                                                            in
+                                                            { move
+                                                                | sequence =
+                                                                    sequence
+                                                            }
+                                                                :: otherMoves
+
+                                        _ ->
+                                            -- First jump
+                                            let
+                                                isUnique =
+                                                    NewBoard.isUniqueMoveTo selected
+                                                        rowCol
+                                                        (Just piece)
+                                                        True
+                                                        board
+                                            in
+                                            { piece = piece
+                                            , isUnique = isUnique
+                                            , sequence =
+                                                OneJumpSequence [ newMove ]
+                                            }
+                                                :: gameState.moves
                             in
                             case List.head newSequences of
                                 Nothing ->
@@ -818,25 +894,27 @@ chooseMove state message gameid gameState player rowCol options =
                                                     gameState.jumps
 
                                                 Just jump ->
-                                                    toCorruptibleJump selected jump :: gameState.jumps
+                                                    toCorruptibleJump selected options jump :: gameState.jumps
 
                                         newBoard =
                                             List.foldr doJump board jumps
 
                                         gs =
-                                            endOfTurn selected
-                                                rowCol
-                                                piece
-                                                options
-                                                { gameState | newBoard = newBoard }
+                                            { gameState
+                                                | newBoard = newBoard
+                                                , moves = moves
+                                            }
 
-                                        ( gs2, maybeError ) =
+                                        gs2 =
+                                            endOfTurn selected rowCol piece options gs
+
+                                        ( gs3, maybeError ) =
                                             processChooseMoveOptions options
                                                 rowCol
                                                 True
                                                 gameState.whoseTurn
                                                 jumpOver
-                                                gs
+                                                gs2
                                     in
                                     case maybeError of
                                         Just err ->
@@ -844,16 +922,16 @@ chooseMove state message gameid gameState player rowCol options =
 
                                         Nothing ->
                                             let
-                                                gs3 =
-                                                    gs2
+                                                gs4 =
+                                                    gs3
                                                         |> updateJumperLocations
                                                         |> populateWinner
                                             in
-                                            ( ServerInterface.updateGame gameid gs3 state
+                                            ( ServerInterface.updateGame gameid gs4 state
                                             , Just <|
                                                 PlayRsp
                                                     { gameid = gameid
-                                                    , gameState = gs3
+                                                    , gameState = gs4
                                                     , decoration = NoDecoration
                                                     }
                                             )
@@ -865,6 +943,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                 | newBoard =
                                                     NewBoard.set selected Types.emptyPiece board
                                                         |> NewBoard.set rowCol piece
+                                                , moves = moves
                                                 , selected = Just rowCol
                                                 , legalMoves = Jumps newSequences
                                                 , undoStates =
@@ -876,7 +955,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                         :: gameState.undoStates
                                                 , jumps =
                                                     (List.take 1 firstSequence
-                                                        |> List.map (toCorruptibleJump rowCol)
+                                                        |> List.map (toCorruptibleJump rowCol options)
                                                     )
                                                         ++ gameState.jumps
                                             }
@@ -940,10 +1019,6 @@ endOfTurn selected moved piece options gameState =
         , whoseTurn = whoseTurn
         , undoStates = []
         , jumps = []
-
-        -- TODO
-        , moves = gameState.moves
-        , winner = NoWinner
     }
         |> updateScore
 
