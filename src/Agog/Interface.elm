@@ -429,6 +429,7 @@ generalMessageProcessor isProxyServer state message =
 
                                             gs =
                                                 { gameState | winner = winner }
+                                                    |> populateWinnerInFirstMove
                                                     |> updateScore
                                         in
                                         ( ServerInterface.updateGame gameid gs state
@@ -721,7 +722,22 @@ populateWinner gameState =
             let
                 winner =
                     NewBoard.winner gameState.whoseTurn gameState.newBoard
+            in
+            { gameState | winner = winner }
+                |> populateWinnerInFirstMove
 
+        _ ->
+            gameState
+
+
+populateWinnerInFirstMove : GameState -> GameState
+populateWinnerInFirstMove gameState =
+    case gameState.winner of
+        NoWinner ->
+            gameState
+
+        winner ->
+            let
                 moves =
                     if winner == NoWinner then
                         gameState.moves
@@ -734,10 +750,7 @@ populateWinner gameState =
                             ms ->
                                 ms
             in
-            { gameState | moves = moves, winner = winner }
-
-        _ ->
-            gameState
+            { gameState | moves = moves }
 
 
 chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> List ChooseMoveOption -> ( Types.ServerState, Maybe Message )
