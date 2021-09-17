@@ -1125,6 +1125,9 @@ updateInternal msg model =
         SetPage page ->
             let
                 unsubscribe =
+                    -- This doesn't work if you change || to &&.
+                    -- You get "unknown playerid" errors.
+                    -- I dont understand it.
                     if page /= PublicPage || model.page == PublicPage then
                         send model <|
                             PublicGamesReq
@@ -1538,7 +1541,7 @@ webSocketConnect reason model =
     else
         { model
             | interface = makeWebSocketServer model
-            , connectionReason = reason
+            , connectionReason = Debug.log "webSocketConnect" reason
         }
             |> withCmd
                 (WebSocket.makeOpen model.serverUrl
@@ -2362,7 +2365,10 @@ mainPage bsize model =
                     else
                         "New Game"
                 ]
-            , if model.isLocal then
+            , if not (model.isLocal || WhichServer.isLocal) then
+                text ""
+
+              else
                 div [ align "center" ]
                     [ text "Test Mode: "
                     , input
@@ -2448,6 +2454,8 @@ mainPage bsize model =
                                         ]
                                 ]
                     ]
+            , if model.isLocal then
+                text ""
 
               else
                 div [ align "center" ]

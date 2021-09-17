@@ -358,6 +358,7 @@ type alias OneMove =
     { piece : Piece
     , isUnique : Bool
     , sequence : OneMoveSequence
+    , winner : Winner
     }
 
 

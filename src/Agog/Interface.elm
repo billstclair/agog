@@ -300,7 +300,7 @@ generalMessageProcessor isProxyServer state message =
                     )
 
         SetGameStateReq { playerid, gameState } ->
-            if not isProxyServer then
+            if not isProxyServer && not WhichServer.isLocal then
                 errorRes message state "SetGameStateReq is disabled."
 
             else
@@ -718,10 +718,23 @@ populateWinner : GameState -> GameState
 populateWinner gameState =
     case gameState.winner of
         NoWinner ->
-            { gameState
-                | winner =
+            let
+                winner =
                     NewBoard.winner gameState.whoseTurn gameState.newBoard
-            }
+
+                moves =
+                    if winner == NoWinner then
+                        gameState.moves
+
+                    else
+                        case gameState.moves of
+                            move :: otherMoves ->
+                                { move | winner = winner } :: otherMoves
+
+                            ms ->
+                                ms
+            in
+            { gameState | moves = moves, winner = winner }
 
         _ ->
             gameState
@@ -773,6 +786,7 @@ chooseMove state message gameid gameState player rowCol options =
                                             LE.findMap Types.maybeMakeHulkOption
                                                 options
                                         }
+                                , winner = NoWinner
                                 }
 
                             gs =
@@ -879,6 +893,7 @@ chooseMove state message gameid gameState player rowCol options =
                                             , isUnique = isUnique
                                             , sequence =
                                                 OneJumpSequence [ newMove ]
+                                            , winner = NoWinner
                                             }
                                                 :: gameState.moves
                             in

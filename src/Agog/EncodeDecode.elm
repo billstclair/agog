@@ -295,21 +295,44 @@ playerDecoder =
             )
 
 
+winReasonToString : WinReason -> String
+winReasonToString reason =
+    case reason of
+        WinByCapture ->
+            "C"
+
+        WinBySanctum ->
+            "S"
+
+        WinByImmobilization ->
+            "I"
+
+        WinByResignation ->
+            "R"
+
+
+stringToWinReason : String -> Maybe WinReason
+stringToWinReason string =
+    case string of
+        "C" ->
+            Just WinByCapture
+
+        "S" ->
+            Just WinBySanctum
+
+        "I" ->
+            Just WinByImmobilization
+
+        "R" ->
+            Just WinByResignation
+
+        _ ->
+            Nothing
+
+
 encodeWinReason : WinReason -> Value
 encodeWinReason reason =
-    JE.string <|
-        case reason of
-            WinByCapture ->
-                "WinByCapture"
-
-            WinBySanctum ->
-                "WinBySanctum"
-
-            WinByImmobilization ->
-                "WinByImmobilization"
-
-            WinByResignation ->
-                "WinByResignation"
+    JE.string <| winReasonToString reason
 
 
 winReasonDecoder : Decoder WinReason
@@ -317,41 +340,74 @@ winReasonDecoder =
     JD.string
         |> JD.andThen
             (\s ->
-                case s of
-                    "WinByCapture" ->
-                        JD.succeed WinByCapture
+                case stringToWinReason s of
+                    Nothing ->
+                        JD.fail <| "Unknown WinReason string: " ++ s
 
-                    "WinBySanctum" ->
-                        JD.succeed WinBySanctum
+                    Just reason ->
+                        JD.succeed reason
+            )
 
-                    "WinByImmobilization" ->
-                        JD.succeed WinByImmobilization
 
-                    "WinByResignation" ->
-                        JD.succeed WinByResignation
+winnerToString : Winner -> String
+winnerToString winner =
+    case winner of
+        NoWinner ->
+            "N"
+
+        WhiteWinner reason ->
+            "W" ++ winReasonToString reason
+
+        BlackWinner reason ->
+            "B" ++ winReasonToString reason
+
+
+stringToWinner : String -> Maybe Winner
+stringToWinner string =
+    if string == "N" then
+        Just NoWinner
+
+    else
+        case String.dropLeft 1 string |> stringToWinReason of
+            Nothing ->
+                Nothing
+
+            Just reason ->
+                case String.left 1 string of
+                    "W" ->
+                        Just <| WhiteWinner reason
+
+                    "B" ->
+                        Just <| BlackWinner reason
 
                     _ ->
-                        JD.fail <| "Unknown win reason: " ++ s
-            )
+                        Nothing
 
 
 encodeWinner : Winner -> Value
 encodeWinner winner =
-    case winner of
-        NoWinner ->
-            JE.string "NoWinner"
-
-        WhiteWinner reason ->
-            JE.object
-                [ ( "WhiteWinner", encodeWinReason reason ) ]
-
-        BlackWinner reason ->
-            JE.object
-                [ ( "BlackWinner", encodeWinReason reason ) ]
+    winnerToString winner |> JE.string
 
 
 winnerDecoder : Decoder Winner
 winnerDecoder =
+    JD.oneOf
+        [ JD.string
+            |> JD.andThen
+                (\s ->
+                    case stringToWinner s of
+                        Nothing ->
+                            JD.fail <| "Not a winner string: " ++ s
+
+                        Just winner ->
+                            JD.succeed winner
+                )
+        , oldWinnerDecoder
+        ]
+
+
+oldWinnerDecoder : Decoder Winner
+oldWinnerDecoder =
     JD.oneOf
         [ JD.string
             |> JD.andThen
@@ -811,7 +867,7 @@ maybeOneMoveToString maybeMove =
 
 
 oneMoveToString : OneMove -> String
-oneMoveToString { piece, isUnique, sequence } =
+oneMoveToString { piece, isUnique, sequence, winner } =
     let
         uniqueMarker =
             if isUnique then
@@ -825,8 +881,16 @@ oneMoveToString { piece, isUnique, sequence } =
 
         sequenceString =
             oneMoveSequenceToString sequence
+
+        winString =
+            case winner of
+                NoWinner ->
+                    ""
+
+                _ ->
+                    "%" ++ winnerToString winner
     in
-    uniqueMarker ++ pieceString ++ sequenceString
+    uniqueMarker ++ pieceString ++ sequenceString ++ winString
 
 
 oneMoveSequenceToString : OneMoveSequence -> String
@@ -912,16 +976,34 @@ stringToOneMove string =
             Nothing
 
         _ ->
-            case stringToOneMoveSequence s of
-                Nothing ->
-                    Nothing
+            let
+                computeSequence ss winner =
+                    case stringToOneMoveSequence ss of
+                        Nothing ->
+                            Nothing
 
-                Just sequence ->
-                    Just
-                        { piece = piece
-                        , isUnique = isUnique
-                        , sequence = sequence
-                        }
+                        Just sequence ->
+                            Just
+                                { piece = piece
+                                , isUnique = isUnique
+                                , sequence = sequence
+                                , winner = winner
+                                }
+            in
+            case String.split "%" s of
+                [ ss ] ->
+                    computeSequence ss NoWinner
+
+                [ ss, winString ] ->
+                    case stringToWinner winString of
+                        Nothing ->
+                            Nothing
+
+                        Just winner ->
+                            computeSequence ss winner
+
+                _ ->
+                    Nothing
 
 
 locBetween : RowCol -> RowCol -> Maybe RowCol
@@ -1226,6 +1308,7 @@ defaultOneMove =
     { piece = Types.emptyPiece
     , isUnique = True
     , sequence = OneSlide { from = torc "a1", to = torc "a2", makeHulk = Nothing }
+    , winner = NoWinner
     }
 
 
