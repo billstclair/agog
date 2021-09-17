@@ -192,6 +192,7 @@ Your game state is remembered in your browser's "Local Storage" database. If you
 Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear!" button, and hopefully you'll be back in business (after unchecking "Local").
 """
                 ]
+            , playButton
             , rulesDiv False
                 [ h3 [ align "center" ]
                     [ text "SERVER CONNECTION" ]
@@ -205,7 +206,49 @@ Alternatively, the initiating player can check the "Public" box before clicking 
 To join a public game, enter "Your Name", go to the "Public" page, and click on the underlined GameId.
 """
                 ]
+            , playButton
+            , rulesDiv False
+                [ h3 [ align "center" ]
+                    [ text "GAME PLAY" ]
+                , Markdown.toHtml [] """
+When it's your turn, click on the piece you want to move, then click on the empty square you want to move it to. When you have pieces that can jump, they will be highlighted, and you will only be able to move one of them. When you have jumps, the jump destinations will be highlighted, until you've made all the jumps you can.
+
+If you move a golem, hulk, or corrupted hulk into the other player's sanctum, you will be asked whether you want to convert it to a hulk. You may do that by clicking on one of your golems. You may skip the conversion by clicking on an empty square.
+
+If your journeyman jumps a golem or hulk, you will be asked whether to "Corrupt Jumped Piece". Click the "Yes" button to do that or the "No" button to remove the jumped piece from play.
+
+You may resign on your turn by clicking the "Resign" button.
+
+When the game is over, either player may click the "New Game" button to start another game, with the white/black assignments reversed.
+"""
+                ]
+            , playButton
+            , rulesDiv False
+                [ h3 [ align "center" ]
+                    [ text "MOVE RECORDING" ]
+                , Markdown.toHtml [] """
+The previous four moves will be shown in the "Moves" line. They are encoded with ALL the information, more verbose than the standard move encoding described in the "SCOREKEEPING" section of the "Rules" page. If the move begins with an "n", then it is NOT unique, meaning that another piece could have moved to the same destination.
+
+A move is encoded with a letter for the piece, the from location, a dash, and the to location. White pieces get upper-case letters and black pieces get lower-case letters. For example, an opening move of a white golem from d3 to d4 is encoded as nGd3-d4.
+
+A jump is encoded with a letter for the piece, a from location, an x or +, for jump and remove or jump and convert to corrupted hulk, and a to location. Multiple jumps are denoted by more pairs of x or + and destionation location. For example, if the black journeyman on e6 jumps white golems on e5, e3, d2, and b2, converting the one on e5 to a corrupted hulk, the move will be represented as je6+e4xe2xc2xa2.
+
+The final move of the game ends with a win indicator, this is the "%" character, followed by W or B for white or black winning, followed by C, S, I, or R, for win by Capture, Sanctum, Immobilization, or Resignation.
+
+Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format (this does not yet work).
+"""
+                ]
+            , playButton
+            , rulesDiv False
+                [ h3 [ align "center" ]
+                    [ text "LOCAL MODE" ]
+                , Markdown.toHtml [] """
+Sometimes you want to play a game locally, without going through the server (except to fetch the HTML and JavaScript for the game itself). You may do this by checking the "Local" checkbox between games. You will then control both players.
+
+Local mode has another feature, "Test Mode". Enable that by checking the "Test Mode" check box. This provides "Erase Board!" and "Initial Setup" buttons, a "Remove clicked" checkbox, which, when checked, causes a click on a piece to remove it from the board, a "Test piece" popup, which allows you to choose a piece type, and "White" & "Black" radio buttons, which choose the piece color. When you click on an empty square on the board, that piece will appear there. Unchecking "Test mode" returns to game play.
+"""
+                ]
+            , playButton
             ]
-        , playButton
         , maybeFooterParagraph maybeFooter
         ]

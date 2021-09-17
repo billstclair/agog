@@ -2371,7 +2371,7 @@ mainPage bsize model =
 
               else
                 div [ align "center" ]
-                    [ text "Test Mode: "
+                    [ b "Test Mode: "
                     , input
                         [ type_ "checkbox"
                         , checked <| gameState.testMode /= Nothing
@@ -2404,7 +2404,7 @@ mainPage bsize model =
                                 , button [ onClick InitialBoard ]
                                     [ text "Initial Setup" ]
                                 , br
-                                , text "Remove clicked: "
+                                , b "Remove clicked: "
                                 , input
                                     [ type_ "checkbox"
                                     , checked <| testMode.clear
@@ -2417,7 +2417,7 @@ mainPage bsize model =
                                   else
                                     span []
                                         [ br
-                                        , text "Test piece: "
+                                        , b "Test piece: "
                                         , select [ onInput SetTestPieceType ]
                                             [ option
                                                 [ value "G"
@@ -2548,7 +2548,7 @@ mainPage bsize model =
                     ]
             ]
         , p []
-            [ text "Moves: "
+            [ b "Moves: "
             , text <| moveString gameState.moves
             ]
         , footerParagraph
@@ -2786,6 +2786,7 @@ renderPublicGameRow myGameid name playing { gameid, creator, player, forName } =
                 input
                     [ type_ "checkbox"
                     , checked <| name /= "" && Interface.forNameMatches name forName
+                    , disabled True
                     ]
                     []
             ]
