@@ -191,7 +191,7 @@ You may choose to rotate the board by 180 degrees, if you're playing black, (or 
 
 Your game state is remembered in your browser's "Local Storage" database. If you refresh the screen with a game in progress, it will attempt to reconnect to the server and resume the game.
 
-Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear!" button, and hopefully you'll be back in business (after unchecking "Local").
+Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local").
 """
                 ]
             , playButton
