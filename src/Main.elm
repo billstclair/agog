@@ -2557,7 +2557,8 @@ mainPage bsize model =
                 [ href "#"
                 , onClick <| SetPage MovesPage
                 ]
-                [ b "Moves: " ]
+                [ b "Moves" ]
+            , b ": "
             , text <| moveString gameState.moves
             ]
         , footerParagraph
@@ -2849,10 +2850,10 @@ movesPage bsize model =
                 ]
                     ++ List.indexedMap movesRow (List.reverse moves)
                     ++ (let
-                            winString =
+                            ( winString, isResign ) =
                                 case List.head moves of
                                     Nothing ->
-                                        ""
+                                        ( "", False )
 
                                     Just { winner } ->
                                         let
@@ -2862,19 +2863,48 @@ movesPage bsize model =
                                         in
                                         case winner of
                                             NoWinner ->
-                                                ""
+                                                ( "", False )
 
                                             WhiteWinner reason ->
-                                                winDescription "White" reason
+                                                ( winDescription "White" reason
+                                                , reason == WinByResignation
+                                                )
 
                                             BlackWinner reason ->
-                                                winDescription "Black" reason
+                                                ( winDescription "Black" reason
+                                                , reason == WinByResignation
+                                                )
                         in
                         if winString == "" then
                             [ text "" ]
 
                         else
-                            [ tr []
+                            [ if isResign then
+                                let
+                                    index =
+                                        List.length moves + 1
+                                in
+                                tr []
+                                    [ td [] [ text <| String.fromInt index ]
+                                    , td [ style "text-align" "center" ]
+                                        [ if isEven index then
+                                            text chars.nbsp
+
+                                          else
+                                            text "Resign"
+                                        ]
+                                    , td [ style "text-align" "center" ]
+                                        [ if isEven index then
+                                            text "Resign"
+
+                                          else
+                                            text chars.nbsp
+                                        ]
+                                    ]
+
+                              else
+                                text ""
+                            , tr []
                                 [ td
                                     [ colspan 3
                                     , style "text-align" "center"
