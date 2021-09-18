@@ -235,7 +235,7 @@ A jump is encoded with a letter for the piece, a from location, an x or +, for j
 
 The final move of the game ends with a win indicator, this is the "%" character, followed by W or B for white or black winning, followed by C, S, I, or R, for win by Capture, Sanctum, Immobilization, or Resignation.
 
-Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format (this does not yet work).
+Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format.
 """
                 ]
             , playButton

@@ -27,8 +27,7 @@ import Agog.Interface as Interface
 import Agog.NewBoard as NewBoard exposing (SizerKind(..), rc)
 import Agog.Types as Types
     exposing
-        ( Board
-        , Choice(..)
+        ( Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)
@@ -43,6 +42,7 @@ import Agog.Types as Types
         , PlayerNames
         , PublicGame
         , PublicType(..)
+        , RotateBoard(..)
         , RowCol
         , SavedModel
         , Score
@@ -236,6 +236,7 @@ type alias Model =
     , isLive : Bool
     , settings : Settings
     , styleType : StyleType
+    , rotate : RotateBoard
     }
 
 
@@ -253,6 +254,7 @@ type Msg
     | IncomingMessage ServerInterface Message
     | SetDecoration Decoration
     | SetChooseFirst Player
+    | SetRotate RotateBoard
     | SetIsLocal Bool
     | SetDarkMode Bool
     | SetName String
@@ -407,6 +409,7 @@ init flags url key =
             , playerid = ""
             , isLive = False
             , settings = Types.emptySettings
+            , rotate = RotateWhiteDown
             }
     in
     model
@@ -560,6 +563,7 @@ modelToSavedModel model =
     , playerid = model.playerid
     , settings = model.settings
     , styleType = model.styleType
+    , rotate = model.rotate
     }
 
 
@@ -579,6 +583,7 @@ savedModelToModel savedModel model =
         , playerid = savedModel.playerid
         , settings = savedModel.settings
         , styleType = savedModel.styleType
+        , rotate = savedModel.rotate
         , interface = proxyServer
     }
 
@@ -1049,6 +1054,10 @@ updateInternal msg model =
 
         SetChooseFirst player ->
             { model | chooseFirst = player }
+                |> withNoCmd
+
+        SetRotate rotate ->
+            { model | rotate = rotate }
                 |> withNoCmd
 
         SetIsLocal isLocal ->
@@ -2000,7 +2009,12 @@ mainPage bsize model =
                 Just gameState.whoseTurn
 
         rotated =
-            currentPlayer == Just WhitePlayer
+            case model.rotate of
+                RotateWhiteDown ->
+                    False
+
+                RotatePlayerDown ->
+                    currentPlayer == Just BlackPlayer
 
         { corruptJumped, makeHulk } =
             model.chooseMoveOptionsUI
@@ -2350,6 +2364,19 @@ mainPage bsize model =
                         button [ onClick ResetScore ]
                             [ text "Reset" ]
                     ]
+            , br
+            , b "Rotate: "
+            , radio "rotate"
+                "white down"
+                (model.rotate == RotateWhiteDown)
+                False
+                (SetRotate RotateWhiteDown)
+            , text " "
+            , radio "rotate"
+                "player down"
+                (model.rotate == RotatePlayerDown)
+                False
+                (SetRotate RotatePlayerDown)
             , br
             , b "Local: "
             , input

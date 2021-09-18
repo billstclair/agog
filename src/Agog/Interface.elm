@@ -23,8 +23,7 @@ import Agog.EncodeDecode as ED
 import Agog.NewBoard as NewBoard
 import Agog.Types as Types
     exposing
-        ( Board
-        , Choice(..)
+        ( Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)

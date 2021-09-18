@@ -11,8 +11,7 @@
 
 
 module Agog.EncodeDecode exposing
-    ( boardToString
-    , decodeSavedModel
+    ( decodeSavedModel
     , defaultOneMove
     , encodeGameState
     , encodeMessageForLog
@@ -33,7 +32,6 @@ module Agog.EncodeDecode exposing
     , oneMovesToString
     , pieceToString
     , publicGameToFramework
-    , stringToBoard
     , stringToNewBoard
     , stringToOneMove
     , stringToPiece
@@ -42,8 +40,7 @@ module Agog.EncodeDecode exposing
 import Agog.NewBoard as NewBoard exposing (rc)
 import Agog.Types as Types
     exposing
-        ( Board
-        , Choice(..)
+        ( Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)
@@ -66,6 +63,7 @@ import Agog.Types as Types
         , PrivateGameState
         , PublicGame
         , PublicType(..)
+        , RotateBoard(..)
         , RowCol
         , SavedModel
         , Score
@@ -140,6 +138,34 @@ styleTypeDecoder =
             )
 
 
+encodeRotateBoard : RotateBoard -> Value
+encodeRotateBoard rotate =
+    JE.string <|
+        case rotate of
+            RotateWhiteDown ->
+                "RotateWhiteDown"
+
+            RotatePlayerDown ->
+                "RotatePlayerDown"
+
+
+boardRotateDecoder : Decoder RotateBoard
+boardRotateDecoder =
+    JD.string
+        |> JD.andThen
+            (\s ->
+                case s of
+                    "RotateWhiteDown" ->
+                        JD.succeed RotateWhiteDown
+
+                    "RotatePlayerDown" ->
+                        JD.succeed RotatePlayerDown
+
+                    _ ->
+                        JD.fail <| "Unknown RotateBoard value: " ++ s
+            )
+
+
 encodeSavedModel : SavedModel -> Value
 encodeSavedModel model =
     JE.object
@@ -156,6 +182,7 @@ encodeSavedModel model =
         , ( "playerid", JE.string model.playerid )
         , ( "settings", encodeSettings model.settings )
         , ( "styleType", encodeStyleType model.styleType )
+        , ( "rotate", encodeRotateBoard model.rotate )
         ]
 
 
@@ -180,6 +207,7 @@ savedModelDecoder =
         |> optional "playerid" JD.string ""
         |> optional "settings" settingsDecoder Types.emptySettings
         |> optional "styleType" styleTypeDecoder LightStyle
+        |> optional "rotate" boardRotateDecoder RotateWhiteDown
 
 
 encodePage : Page -> Value
@@ -493,74 +521,6 @@ stringToRow string =
         |> List.map String.fromChar
         |> List.map stringToBool
         |> Array.fromList
-
-
-boardToString : Board -> String
-boardToString board =
-    Array.toList board
-        |> List.map rowToString
-        |> List.intersperse "|"
-        |> String.concat
-
-
-stringToBoard : String -> Maybe Board
-stringToBoard string =
-    if String.length string /= 41 then
-        Nothing
-
-    else
-        let
-            rows =
-                [ String.slice 0 6 string
-                , String.slice 7 13 string
-                , String.slice 14 20 string
-                , String.slice 21 27 string
-                , String.slice 28 34 string
-                , String.slice 35 41 string
-                ]
-        in
-        rows
-            |> List.map stringToRow
-            |> Array.fromList
-            |> Just
-
-
-encodeBoard : Board -> Value
-encodeBoard board =
-    JE.string <| boardToString board
-
-
-newishBoardDecoder : Decoder Board
-newishBoardDecoder =
-    JD.string
-        |> JD.andThen
-            (\string ->
-                case stringToBoard string of
-                    Nothing ->
-                        JD.fail "Invalid board string."
-
-                    Just board ->
-                        JD.succeed board
-            )
-
-
-boardDecoder : Decoder Board
-boardDecoder =
-    JD.oneOf
-        [ newishBoardDecoder
-        , oldBoardDecoder
-        ]
-
-
-oldBoardDecoder : Decoder Board
-oldBoardDecoder =
-    JD.list (JD.list JD.bool)
-        |> JD.andThen
-            (\l ->
-                List.map (\l2 -> Array.fromList l2) l
-                    |> Array.fromList
-                    |> JD.succeed
-            )
 
 
 pieceToPrettyString : Piece -> String

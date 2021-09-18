@@ -46,8 +46,7 @@ module Agog.NewBoard exposing
 
 import Agog.Types as Types
     exposing
-        ( Board
-        , Color(..)
+        ( Color(..)
         , GameState
         , JumpSequence
         , MovesOrJumps(..)
@@ -507,16 +506,13 @@ getPathSizer sizer =
 
 
 render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Maybe Player -> Bool -> GameState -> Html msg
-render style size tagger sizer player notRotated gameState =
+render style size tagger sizer player rotated gameState =
     let
         board =
             gameState.newBoard
 
         { jumperLocations, legalMoves, jumps, selected } =
             gameState
-
-        rotated =
-            False
 
         whiteSpace =
             5
@@ -530,11 +526,11 @@ render style size tagger sizer player notRotated gameState =
         delta =
             round (toFloat (innerSize - lineWidth) / 8 / sqrt 2)
 
-        translate =
-            (innerSize - 8 * delta) // 2
-
         center =
-            innerSize // 2
+            4 * delta + fontSize delta
+
+        translate =
+            round (toFloat center * (sqrt 2 - 1) / 2) + (3 * whiteSpace)
     in
     svg
         [ width sizeS
@@ -543,23 +539,22 @@ render style size tagger sizer player notRotated gameState =
         [ g
             [ transform
                 ("translate("
-                    ++ tos whiteSpace
+                    ++ tos (whiteSpace + translate)
                     ++ " "
-                    ++ tos whiteSpace
+                    ++ tos (whiteSpace + translate)
                     ++ ")"
                 )
             ]
             [ g
                 [ transform
-                    (" translate("
-                        ++ tos translate
-                        ++ " "
-                        ++ tos 0
-                        ++ ")"
-                        ++ " rotate(-45,"
-                        ++ tos center
-                        ++ " "
-                        ++ tos center
+                    ("rotate("
+                        ++ (if rotated then
+                                "135,"
+
+                            else
+                                "-45,"
+                           )
+                        ++ (tos center ++ "," ++ tos center)
                         ++ ")"
                     )
                 ]
@@ -567,7 +562,7 @@ render style size tagger sizer player notRotated gameState =
                 List.concat
                     [ drawRows style delta rotated
                     , drawCols style delta rotated sizer board
-                    , drawRects style selected jumperLocations legalMoves jumps board delta
+                    , drawRects style selected jumperLocations legalMoves jumps board rotated delta
                     , drawClickRects style delta rotated tagger
                     ]
             ]
@@ -617,7 +612,7 @@ drawRow style delta rotated idx =
             delta * idx + delta // 2
 
         ycs =
-            tosy delta rotated yc
+            tosy delta False yc
 
         fsize =
             fontSize delta
@@ -644,23 +639,21 @@ drawRow style delta rotated idx =
                 "0"
 
             ys =
-                if not rotated then
-                    tos (yc - 3 + (delta // 2) + (fsize // 2))
-
-                else
-                    -- Needs to be fixed
-                    tosy delta rotated (yc - fsize // 4)
+                tos (yc - 3 + (delta // 2) + (fsize // 2))
         in
         Svg.text_
             (List.concat
-                [ if rotated then
-                    [ rotate "90" ]
+                [ if False then
+                    --rotated then
+                    [ rotate "180" ]
 
                   else
                     []
                 , [ x "0"
                   , y ys
                   , Attributes.style <| fontStyle fsize
+
+                  --, textAnchor "middle"
                   , stroke style.lineColor
                   , fill style.lineColor
                   ]
@@ -680,8 +673,8 @@ indices =
     [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
 
-drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> NewBoard -> Int -> List (Svg msg)
-drawRects style selected jumperLocations legalMoves jumps board delta =
+drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> NewBoard -> Bool -> Int -> List (Svg msg)
+drawRects style selected jumperLocations legalMoves jumps board rotated delta =
     let
         docol f rowidx colidx res =
             f delta rowidx colidx
@@ -694,7 +687,7 @@ drawRects style selected jumperLocations legalMoves jumps board delta =
         |> removeBlankGs
     )
         ++ drawHighlights style selected jumperLocations legalMoves delta
-        ++ (List.foldr (dorow (drawPiece style board)) [] indices
+        ++ (List.foldr (dorow (drawPiece style board rotated)) [] indices
                 |> removeBlankGs
            )
         ++ drawJumps style board jumps delta
@@ -810,8 +803,8 @@ drawCircle style color delta rowidx colidx =
         []
 
 
-drawPiece : Style -> NewBoard -> Int -> Int -> Int -> Svg msg
-drawPiece style board delta rowidx colidx =
+drawPiece : Style -> NewBoard -> Bool -> Int -> Int -> Int -> Svg msg
+drawPiece style board rotated delta rowidx colidx =
     let
         rowcol =
             rc rowidx colidx
@@ -829,7 +822,13 @@ drawPiece style board delta rowidx colidx =
             toFloat colidx
 
         offset =
-            1.0 / 8.0
+            (1.0 / 8.0)
+                * (if rotated then
+                    -1
+
+                   else
+                    0
+                  )
 
         draw color pieceType =
             case pieceType of
@@ -1085,7 +1084,8 @@ drawCol style delta rotated sizer board idx =
             fontSize delta
 
         ( xi, yi ) =
-            if rotated then
+            if False then
+                --rotated then
                 ( xc, fsize * 1 // 8 )
 
             else
@@ -1118,8 +1118,9 @@ drawCol style delta rotated sizer board idx =
                 in
                 Svg.text_
                     (List.concat
-                        [ if rotated then
-                            [ rotate "90" ]
+                        [ if False then
+                            -- rotated then
+                            [ rotate "180" ]
 
                           else
                             []

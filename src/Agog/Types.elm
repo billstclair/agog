@@ -11,8 +11,7 @@
 
 
 module Agog.Types exposing
-    ( Board
-    , Choice(..)
+    ( Choice(..)
     , ChooseMoveOption(..)
     , Color(..)
     , Decoration(..)
@@ -35,6 +34,7 @@ module Agog.Types exposing
     , PrivateGameState
     , PublicGame
     , PublicType(..)
+    , RotateBoard(..)
     , RowCol
     , SavedModel
     , Score
@@ -76,8 +76,9 @@ import WebSocketFramework.Types
         )
 
 
-type alias Board =
-    Array (Array Bool)
+type RotateBoard
+    = RotateWhiteDown
+    | RotatePlayerDown
 
 
 type Color
@@ -292,6 +293,7 @@ type alias SavedModel =
     , playerid : String
     , settings : Settings
     , styleType : StyleType
+    , rotate : RotateBoard
     }
 
 
