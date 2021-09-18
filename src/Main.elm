@@ -2683,7 +2683,11 @@ footerParagraph =
             [ text "GibGoyGames@gmail.com" ]
         , text ">"
         , br
-        , text "MIT License"
+        , a
+            [ href "https://github.com/billstclair/agog/blob/main/LICENSE"
+            , target "_blank"
+            ]
+            [ text "MIT License" ]
         ]
 
 
