@@ -220,6 +220,7 @@ type alias Model =
     , requestedNew : Bool
     , chooseMoveOptionsUI : ChooseMoveOptionsUI
     , delayedClick : Maybe RowCol
+    , reallyClearStorage : Bool
 
     -- persistent below here
     , page : Page
@@ -276,6 +277,7 @@ type Msg
     | SetTestClear Bool
     | SetTestColor Color
     | SetTestPieceType String
+    | MaybeClearStorage
     | ClearStorage
     | Click ( Int, Int )
     | CorruptJumpedUI (AskYesNo ())
@@ -393,6 +395,7 @@ init flags url key =
             , requestedNew = False
             , chooseMoveOptionsUI = chooseMoveOptionsUINo
             , delayedClick = Nothing
+            , reallyClearStorage = False
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -606,7 +609,10 @@ incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
 incomingMessage interface message mdl =
     let
         model =
-            { mdl | interface = interface }
+            { mdl
+                | interface = interface
+                , reallyClearStorage = False
+            }
 
         msgString =
             Debug.log "incomingMessage" <| ED.encodeMessageForLog message
@@ -998,6 +1004,9 @@ update msg model =
                 IncomingMessage _ _ ->
                     cmd == Cmd.none
 
+                MaybeClearStorage ->
+                    False
+
                 ClearStorage ->
                     False
 
@@ -1388,6 +1397,13 @@ updateInternal msg model =
                             }
                     }
                         |> withNoCmd
+
+        MaybeClearStorage ->
+            { model
+                | reallyClearStorage = True
+                , error = Just "Click the \"Clear Storage Now!\" button to clear all storage."
+            }
+                |> withNoCmd
 
         ClearStorage ->
             let
@@ -2589,12 +2605,23 @@ mainPage bsize model =
             , text <| moveString gameState.moves
             ]
         , footerParagraph
-        , p []
+        , let
+            really =
+                model.reallyClearStorage
+
+            ( msg, label ) =
+                if really then
+                    ( ClearStorage, "Clear Storage Now!" )
+
+                else
+                    ( MaybeClearStorage, "Clear Storage!" )
+          in
+          p []
             [ button
-                [ onClick ClearStorage
+                [ onClick msg
                 , title "Clear Local Storage. Cannot be undone!"
                 ]
-                [ text <| "Clear!" ]
+                [ text label ]
             ]
         ]
 
@@ -2650,6 +2677,13 @@ footerParagraph =
             , target "_blank"
             ]
             [ text "Gib Goy Games" ]
+        , br
+        , text <| chars.copyright ++ " 2019-2021 Bill St. Clair <"
+        , a [ href "mailto:GibGoyGames@gmail.com" ]
+            [ text "GibGoyGames@gmail.com" ]
+        , text ">"
+        , br
+        , text "MIT License"
         ]
 
 
@@ -2784,8 +2818,9 @@ publicPage bsize model =
                         )
                         model.publicGames
                     ]
+            , playButton
+            , footerParagraph
             ]
-        , playButton
         ]
 
 
