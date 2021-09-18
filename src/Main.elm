@@ -2891,6 +2891,26 @@ movesPage bsize model =
 
         { white, black } =
             gameState.players
+
+        pairList : List a -> List (List a)
+        pairList list =
+            let
+                mapper a ( evenp, res ) =
+                    if evenp then
+                        ( False, [ a ] :: res )
+
+                    else
+                        case res of
+                            [ a1 ] :: rest ->
+                                ( True, [ a1, a ] :: rest )
+
+                            _ ->
+                                -- Can't happen
+                                ( True, res )
+            in
+            List.foldl mapper ( True, [] ) list
+                |> Tuple.second
+                |> List.reverse
     in
     rulesDiv False
         [ rulesDiv True
@@ -2919,7 +2939,7 @@ movesPage bsize model =
                     , th "Black"
                     ]
                 ]
-                    ++ List.indexedMap movesRow (List.reverse moves)
+                    ++ List.indexedMap movesRow (List.reverse moves |> pairList)
                     ++ (let
                             ( winString, isResign ) =
                                 case List.head moves of
@@ -2995,23 +3015,37 @@ isEven x =
     x == x // 2 * 2
 
 
-movesRow : Int -> OneMove -> Html Msg
-movesRow index move =
+movesRow : Int -> List OneMove -> Html Msg
+movesRow index moves =
+    let
+        ( maybeWhite, maybeBlack ) =
+            case List.take 2 moves of
+                [ white ] ->
+                    ( Just white, Nothing )
+
+                [ white, black ] ->
+                    ( Just white, Just black )
+
+                _ ->
+                    ( Nothing, Nothing )
+    in
     tr []
         [ td [ alignCenterStyle ] [ text (String.fromInt <| index + 1) ]
         , td [ alignCenterStyle ]
-            [ if isEven index then
-                text <| ED.oneMoveToPrettyString move
+            [ case maybeWhite of
+                Nothing ->
+                    text chars.nbsp
 
-              else
-                text chars.nbsp
+                Just white ->
+                    text <| ED.oneMoveToPrettyString white
             ]
         , td [ alignCenterStyle ]
-            [ if isEven index then
-                text chars.nbsp
+            [ case maybeBlack of
+                Nothing ->
+                    text chars.nbsp
 
-              else
-                text <| ED.oneMoveToPrettyString move
+                Just black ->
+                    text <| ED.oneMoveToPrettyString black
             ]
         ]
 
