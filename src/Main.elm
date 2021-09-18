@@ -1943,6 +1943,9 @@ view model =
 
                     PublicPage ->
                         publicPage bsize model
+
+                    MovesPage ->
+                        movesPage bsize model
                 ]
         ]
     }
@@ -1953,6 +1956,22 @@ ids =
     , chatInput = "chatInput"
     , forName = "forName"
     }
+
+
+winReasonToDescription : WinReason -> String
+winReasonToDescription reason =
+    case reason of
+        WinByCapture ->
+            "by capture"
+
+        WinBySanctum ->
+            "by sanctum"
+
+        WinByImmobilization ->
+            "by immobilization"
+
+        WinByResignation ->
+            "by resignation"
 
 
 mainPage : Int -> Model -> Html Msg
@@ -2008,20 +2027,6 @@ mainPage bsize model =
             else
                 ( True
                 , let
-                    winReasonToDescription reason =
-                        case reason of
-                            WinByCapture ->
-                                "by capture"
-
-                            WinBySanctum ->
-                                "by sanctum"
-
-                            WinByImmobilization ->
-                                "by immobilization"
-
-                            WinByResignation ->
-                                "by resignation"
-
                     winString player reason =
                         let
                             rawName =
@@ -2548,7 +2553,11 @@ mainPage bsize model =
                     ]
             ]
         , p []
-            [ b "Moves: "
+            [ a
+                [ href "#"
+                , onClick <| SetPage MovesPage
+                ]
+                [ b "Moves: " ]
             , text <| moveString gameState.moves
             ]
         , footerParagraph
@@ -2789,6 +2798,116 @@ renderPublicGameRow myGameid name playing { gameid, creator, player, forName } =
                     , disabled True
                     ]
                     []
+            ]
+        ]
+
+
+movesPage : Int -> Model -> Html Msg
+movesPage bsize model =
+    let
+        settings =
+            model.settings
+
+        name =
+            settings.name
+
+        gameState =
+            model.gameState
+
+        moves =
+            gameState.moves
+
+        { white, black } =
+            gameState.players
+    in
+    rulesDiv False
+        [ rulesDiv True
+            [ h2 [ align "center" ]
+                [ text "Moves" ]
+            , p [] [ playButton ]
+            , if model.isLocal then
+                text ""
+
+              else
+                p []
+                    [ b "White: "
+                    , text white
+                    , text ", "
+                    , text "Black: "
+                    , text black
+                    ]
+            , table
+                [ class "prettytable"
+                , style "color" "black"
+                ]
+              <|
+                [ tr []
+                    [ th chars.nbsp
+                    , th "White"
+                    , th "Black"
+                    ]
+                ]
+                    ++ List.indexedMap movesRow (List.reverse moves)
+                    ++ (let
+                            winString =
+                                case List.head moves of
+                                    Nothing ->
+                                        ""
+
+                                    Just { winner } ->
+                                        let
+                                            winDescription color reason =
+                                                (color ++ " won by ")
+                                                    ++ winReasonToDescription reason
+                                        in
+                                        case winner of
+                                            NoWinner ->
+                                                ""
+
+                                            WhiteWinner reason ->
+                                                winDescription "White" reason
+
+                                            BlackWinner reason ->
+                                                winDescription "Black" reason
+                        in
+                        if winString == "" then
+                            [ text "" ]
+
+                        else
+                            [ tr []
+                                [ td [ colspan 3 ]
+                                    [ text winString ]
+                                ]
+                            ]
+                       )
+            , p [] [ playButton ]
+            , footerParagraph
+            ]
+        ]
+
+
+isEven : Int -> Bool
+isEven x =
+    x == x // 2 * 2
+
+
+movesRow : Int -> OneMove -> Html Msg
+movesRow index move =
+    tr []
+        [ td [] [ text (String.fromInt <| index + 1) ]
+        , td [ style "text-align" "center" ]
+            [ if isEven index then
+                text <| ED.oneMoveToPrettyString move
+
+              else
+                text chars.nbsp
+            ]
+        , td [ style "text-align" "center" ]
+            [ if isEven index then
+                text chars.nbsp
+
+              else
+                text <| ED.oneMoveToPrettyString move
             ]
         ]
 

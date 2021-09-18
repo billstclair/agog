@@ -174,6 +174,7 @@ type Page
     | RulesPage
     | InstructionsPage
     | PublicPage
+    | MovesPage
 
 
 type alias Score =

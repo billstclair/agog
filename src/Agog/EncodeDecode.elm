@@ -28,6 +28,7 @@ module Agog.EncodeDecode exposing
     , movesDecoder
     , newBoardToString
     , oneMoveDecoder
+    , oneMoveToPrettyString
     , oneMoveToString
     , oneMovesToString
     , pieceToString
@@ -197,6 +198,9 @@ encodePage page =
             PublicPage ->
                 "PublicPage"
 
+            MovesPage ->
+                "MovesPage"
+
 
 pageDecoder : Decoder Page
 pageDecoder =
@@ -215,6 +219,9 @@ pageDecoder =
 
                     "PublicPage" ->
                         JD.succeed PublicPage
+
+                    "MovesPage" ->
+                        JD.succeed MovesPage
 
                     _ ->
                         JD.fail <| "Unknown page: " ++ s
@@ -556,6 +563,25 @@ oldBoardDecoder =
             )
 
 
+pieceToPrettyString : Piece -> String
+pieceToPrettyString { pieceType } =
+    case pieceType of
+        Golem ->
+            ""
+
+        Hulk ->
+            "H"
+
+        CorruptedHulk ->
+            "C"
+
+        Journeyman ->
+            "J"
+
+        NoPiece ->
+            "-"
+
+
 pieceToString : Piece -> String
 pieceToString { color, pieceType } =
     let
@@ -864,6 +890,91 @@ maybeOneMoveToString maybeMove =
 
         Just move ->
             Just <| oneMoveToString move
+
+
+oneMoveToPrettyString : OneMove -> String
+oneMoveToPrettyString { piece, isUnique, sequence, winner } =
+    let
+        pieceString =
+            pieceToPrettyString piece
+
+        sequenceString =
+            oneMoveSequenceToPrettyString isUnique sequence
+    in
+    pieceString ++ sequenceString
+
+
+unsharedRowOrCol : RowCol -> RowCol -> String
+unsharedRowOrCol from to =
+    if from.row == to.row then
+        NewBoard.colToString from.col
+
+    else if from.col == to.col then
+        NewBoard.rowToString from.row
+
+    else
+        NewBoard.rowColToString from
+
+
+oneMoveSequenceToPrettyString : Bool -> OneMoveSequence -> String
+oneMoveSequenceToPrettyString isUnique sequence =
+    case sequence of
+        OneSlide { from, to, makeHulk } ->
+            let
+                fromString =
+                    if isUnique then
+                        ""
+
+                    else
+                        unsharedRowOrCol from to
+
+                toString =
+                    NewBoard.rowColToString to
+
+                hulkString =
+                    case makeHulk of
+                        Nothing ->
+                            ""
+
+                        Just h ->
+                            " " ++ NewBoard.rowColToString h ++ "=H"
+            in
+            fromString ++ toString ++ hulkString
+
+        OneJumpSequence jumps ->
+            case jumps of
+                [] ->
+                    ""
+
+                firstJump :: _ ->
+                    let
+                        mapper list res =
+                            case list of
+                                [] ->
+                                    res
+
+                                head :: tail ->
+                                    let
+                                        { from, over, to, corrupted } =
+                                            head
+
+                                        x =
+                                            if corrupted then
+                                                "+"
+
+                                            else
+                                                "x"
+                                    in
+                                    mapper tail <|
+                                        (x ++ NewBoard.rowColToString to)
+                                            :: res
+
+                        fromString =
+                            unsharedRowOrCol firstJump.from firstJump.to
+                    in
+                    mapper jumps [ fromString ]
+                        |> List.reverse
+                        |> String.concat
 
 
 oneMoveToString : OneMove -> String
