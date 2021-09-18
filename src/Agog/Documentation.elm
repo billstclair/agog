@@ -187,6 +187,8 @@ The green text below the __A•G•O•G__ board is instructions about what you 
 
 At night, you may prefer to display the screen in "Dark Mode". Check that box to do that. Uncheck to return to the default appearance.
 
+You may choose to rotate the board by 180 degrees, if you're playing black, (or black has the move in local mode). Do so by choosing the "player down" radio button instead of "white down" for "Rotate".
+
 Your game state is remembered in your browser's "Local Storage" database. If you refresh the screen with a game in progress, it will attempt to reconnect to the server and resume the game.
 
 Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear!" button, and hopefully you'll be back in business (after unchecking "Local").

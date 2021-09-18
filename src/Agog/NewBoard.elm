@@ -515,7 +515,7 @@ render style size tagger sizer player rotated gameState =
             gameState
 
         whiteSpace =
-            5
+            10
 
         innerSize =
             size - (2 * whiteSpace)
@@ -530,7 +530,7 @@ render style size tagger sizer player rotated gameState =
             4 * delta + fontSize delta
 
         translate =
-            round (toFloat center * (sqrt 2 - 1) / 2) + (3 * whiteSpace)
+            round (toFloat center * (sqrt 2 - 1) / 2) + (2 * whiteSpace)
     in
     svg
         [ width sizeS
@@ -827,7 +827,7 @@ drawPiece style board rotated delta rowidx colidx =
                     -1
 
                    else
-                    0
+                    1
                   )
 
         draw color pieceType =
