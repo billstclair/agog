@@ -1315,7 +1315,8 @@ updateInternal msg model =
             { model
                 | gameState =
                     { gameState
-                        | newBoard = NewBoard.empty
+                        | moves = []
+                        , newBoard = NewBoard.empty
                         , selected = Nothing
                         , legalMoves = Moves []
                     }
@@ -1326,7 +1327,8 @@ updateInternal msg model =
             { model
                 | gameState =
                     { gameState
-                        | newBoard = NewBoard.initial
+                        | moves = []
+                        , newBoard = NewBoard.initial
                         , selected = Nothing
                         , legalMoves = Moves []
                     }

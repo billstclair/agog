@@ -73,6 +73,7 @@ import WebSocketFramework.Types
         ( GameId
         , PlayerId
         , ServerUrl
+        , Statistics
         )
 
 
@@ -314,6 +315,8 @@ type alias SubscriptionSet =
 type alias PrivateGameState =
     { decoration : Decoration
     , subscribers : SubscriptionSet
+    , statisticsSubscribers : Set Socket
+    , statisticsChanged : Bool
     }
 
 
@@ -321,6 +324,8 @@ emptyPrivateGameState : PrivateGameState
 emptyPrivateGameState =
     { decoration = NoDecoration
     , subscribers = Set.empty
+    , statisticsSubscribers = Set.empty
+    , statisticsChanged = False
     }
 
 
@@ -520,6 +525,10 @@ type Message
         { added : List PublicGame
         , removed : List String
         }
+    | StatisticsReq
+        { subscribe : Bool
+        }
+    | StatisticsRsp { statistics : Maybe Statistics }
       -- Errors
     | ErrorRsp
         { request : String

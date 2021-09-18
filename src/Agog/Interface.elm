@@ -14,9 +14,11 @@
 module Agog.Interface exposing
     ( emptyGameState
     , forNameMatches
+    , getStatisticsChanged
     , isFirstJumpTo
     , messageProcessor
     , proxyMessageProcessor
+    , setStatisticsChanged
     )
 
 import Agog.EncodeDecode as ED
@@ -130,8 +132,56 @@ proxyMessageProcessor =
     generalMessageProcessor True
 
 
+getStatisticsChanged : Types.ServerState -> Bool
+getStatisticsChanged state =
+    case state.state of
+        Nothing ->
+            False
+
+        Just gameState ->
+            gameState.private.statisticsChanged
+
+
+setStatisticsChanged : Bool -> Types.ServerState -> Types.ServerState
+setStatisticsChanged changed state =
+    case state.state of
+        Nothing ->
+            -- can't happen
+            state
+
+        Just gameState ->
+            let
+                pgs =
+                    gameState.private
+            in
+            { state
+                | state =
+                    Just
+                        { gameState
+                            | private =
+                                { pgs | statisticsChanged = changed }
+                        }
+            }
+
+
 generalMessageProcessor : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessor isProxyServer state message =
+    let
+        ( newState, response ) =
+            generalMessageProcessorInternal isProxyServer state message
+
+        newState2 =
+            if isProxyServer || state.statistics == newState.statistics then
+                newState
+
+            else
+                setStatisticsChanged True newState
+    in
+    ( newState2, response )
+
+
+generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
+generalMessageProcessorInternal isProxyServer state message =
     case message of
         NewReq { name, player, publicType, restoreState } ->
             if name == "" then
@@ -533,6 +583,10 @@ generalMessageProcessor isProxyServer state message =
                             )
             in
             ( state, Just <| PublicGamesRsp { games = games } )
+
+        StatisticsReq { subscribe } ->
+            -- subscription is processed by the server code only
+            ( state, Just <| StatisticsRsp { statistics = state.statistics } )
 
         ChatReq { playerid, text } ->
             case lookupGame message playerid state of

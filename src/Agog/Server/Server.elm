@@ -113,6 +113,11 @@ messageSender mdl socket state request response =
                     , Cmd.none
                     )
 
+                StatisticsReq { subscribe } ->
+                    ( handleStatisticsSubscription subscribe socket state
+                    , Cmd.none
+                    )
+
                 _ ->
                     case response of
                         LeaveRsp { gameid } ->
@@ -125,6 +130,9 @@ messageSender mdl socket state request response =
                         _ ->
                             ( state, Cmd.none )
 
+        ( state3, cmd3 ) =
+            computeStatisticsSubscriberSends state2
+
         sender =
             case request of
                 UpdateReq _ ->
@@ -136,22 +144,9 @@ messageSender mdl socket state request response =
                 _ ->
                     case response of
                         NewRsp { gameid } ->
-                            let
-                                sockets =
-                                    WebSocketFramework.Server.otherSockets gameid
-                                        ""
-                                        model
-                            in
                             sendNewRsp model state
 
                         JoinRsp { gameid } ->
-                            let
-                                sockets =
-                                    WebSocketFramework.Server.otherSockets
-                                        gameid
-                                        ""
-                                        model
-                            in
                             sendJoinRsp model state
 
                         AnotherGameRsp record ->
@@ -171,9 +166,70 @@ messageSender mdl socket state request response =
                         _ ->
                             sendToAll model
     in
-    ( WebSocketFramework.Server.setState model state2
-    , Cmd.batch [ cmd, sender response socket ]
+    ( WebSocketFramework.Server.setState model state3
+    , Cmd.batch [ cmd, cmd3, sender response socket ]
     )
+
+
+computeStatisticsSubscriberSends : ServerState -> ( ServerState, Cmd Msg )
+computeStatisticsSubscriberSends state =
+    if not <| Interface.getStatisticsChanged state then
+        ( state, Cmd.none )
+
+    else
+        let
+            message =
+                StatisticsRsp { statistics = state.statistics }
+        in
+        ( Interface.setStatisticsChanged False state
+        , (List.map (sendToOne message) <| getStatisticsSubscribers state)
+            |> Cmd.batch
+        )
+
+
+getStatisticsSubscribers : ServerState -> List Socket
+getStatisticsSubscribers state =
+    case state.state of
+        Nothing ->
+            []
+
+        Just gameState ->
+            gameState.private.statisticsSubscribers
+                |> Set.toList
+
+
+handleStatisticsSubscription : Bool -> String -> ServerState -> ServerState
+handleStatisticsSubscription subscribe socket state =
+    let
+        gs =
+            case state.state of
+                Nothing ->
+                    Interface.emptyGameState <| PlayerNames "" ""
+
+                Just gameState ->
+                    gameState
+
+        private =
+            gs.private
+
+        subscribers =
+            private.statisticsSubscribers
+    in
+    { state
+        | state =
+            Just
+                { gs
+                    | private =
+                        { private
+                            | statisticsSubscribers =
+                                if subscribe then
+                                    Set.insert socket subscribers
+
+                                else
+                                    Set.filter ((/=) socket) subscribers
+                        }
+                }
+    }
 
 
 handlePublicGamesSubscription : Bool -> String -> Socket -> ServerState -> ServerState

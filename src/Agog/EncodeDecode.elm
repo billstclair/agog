@@ -83,6 +83,7 @@ import Json.Decode.Pipeline as DP exposing (optional, required)
 import Json.Encode as JE exposing (Value)
 import Set exposing (Set)
 import WebSocketFramework exposing (decodePlist, unknownMessage)
+import WebSocketFramework.EncodeDecode as WSFED
 import WebSocketFramework.Types
     exposing
         ( GameId
@@ -90,6 +91,7 @@ import WebSocketFramework.Types
         , Plist
         , ReqRsp(..)
         , ServerState
+        , Statistics
         )
 
 
@@ -746,7 +748,7 @@ playerNamesDecoder =
 
 
 encodePrivateGameState : PrivateGameState -> Value
-encodePrivateGameState { decoration, subscribers } =
+encodePrivateGameState { decoration, subscribers, statisticsSubscribers, statisticsChanged } =
     List.concat
         [ case decoration of
             NoDecoration ->
@@ -760,6 +762,17 @@ encodePrivateGameState { decoration, subscribers } =
 
             list ->
                 [ ( "subscribers", JE.list encodeSubscriberPair list ) ]
+        , case Set.toList statisticsSubscribers of
+            [] ->
+                []
+
+            list ->
+                [ ( "statisticsSubscribers", JE.list JE.string list ) ]
+        , if not statisticsChanged then
+            []
+
+          else
+            [ ( "statisticsChanged", JE.bool True ) ]
         ]
         |> JE.object
 
@@ -794,11 +807,19 @@ subscribersDecoder =
         |> JD.andThen (Set.fromList >> JD.succeed)
 
 
+socketSetDecoder : Decoder (Set Socket)
+socketSetDecoder =
+    JD.list JD.string
+        |> JD.andThen (Set.fromList >> JD.succeed)
+
+
 privateGameStateDecoder : Decoder PrivateGameState
 privateGameStateDecoder =
     JD.succeed PrivateGameState
         |> optional "decoration" decorationDecoder NoDecoration
         |> optional "subscribers" subscribersDecoder Set.empty
+        |> optional "statisticsSubscribers" socketSetDecoder Set.empty
+        |> optional "statisticsChanged" JD.bool False
 
 
 encodeOneMoveSequence : OneMoveSequence -> Value
@@ -1980,6 +2001,16 @@ messageEncoderInternal includePrivate message =
                 ]
             )
 
+        StatisticsReq { subscribe } ->
+            ( Req "statistics"
+            , [ ( "subscribe", JE.bool subscribe ) ]
+            )
+
+        StatisticsRsp { statistics } ->
+            ( Rsp "statistics"
+            , [ ( "statistics", encodeMaybe WSFED.encodeStatistics statistics ) ]
+            )
+
         ErrorRsp { request, text } ->
             ( Rsp "error"
             , [ ( "request", JE.string request )
@@ -2266,6 +2297,24 @@ publicGamesUpdateRspDecoder =
         |> optional "removed" (JD.list JD.string) []
 
 
+statisticsReqDecoder : Decoder Message
+statisticsReqDecoder =
+    JD.succeed
+        (\subscribe ->
+            StatisticsReq { subscribe = subscribe }
+        )
+        |> optional "subscribe" JD.bool False
+
+
+statisticsRspDecoder : Decoder Message
+statisticsRspDecoder =
+    JD.succeed
+        (\statistics ->
+            StatisticsRsp { statistics = statistics }
+        )
+        |> optional "statistics" (JD.nullable WSFED.statisticsDecoder) Nothing
+
+
 errorRspDecoder : Decoder Message
 errorRspDecoder =
     JD.succeed
@@ -2323,6 +2372,9 @@ messageDecoder ( reqrsp, plist ) =
                 "publicGames" ->
                     decodePlist publicGamesReqDecoder plist
 
+                "statistics" ->
+                    decodePlist statisticsReqDecoder plist
+
                 "chat" ->
                     decodePlist chatReqDecoder plist
 
@@ -2360,6 +2412,9 @@ messageDecoder ( reqrsp, plist ) =
 
                 "publicGamesUpdate" ->
                     decodePlist publicGamesUpdateRspDecoder plist
+
+                "statistics" ->
+                    decodePlist statisticsRspDecoder plist
 
                 "error" ->
                     decodePlist errorRspDecoder plist
