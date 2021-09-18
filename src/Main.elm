@@ -2970,32 +2970,7 @@ movesPage bsize model =
                             [ text "" ]
 
                         else
-                            [ if isResign then
-                                let
-                                    index =
-                                        List.length moves + 1
-                                in
-                                tr []
-                                    [ td [ alignCenterStyle ] [ text <| String.fromInt index ]
-                                    , td [ alignCenterStyle ]
-                                        [ if isEven index then
-                                            text chars.nbsp
-
-                                          else
-                                            text "Resign"
-                                        ]
-                                    , td [ alignCenterStyle ]
-                                        [ if isEven index then
-                                            text "Resign"
-
-                                          else
-                                            text chars.nbsp
-                                        ]
-                                    ]
-
-                              else
-                                text ""
-                            , tr []
+                            [ tr []
                                 [ td
                                     [ colspan 3
                                     , alignCenterStyle

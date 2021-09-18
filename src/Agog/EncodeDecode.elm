@@ -804,6 +804,9 @@ privateGameStateDecoder =
 encodeOneMoveSequence : OneMoveSequence -> Value
 encodeOneMoveSequence oneMoveSequence =
     case oneMoveSequence of
+        OneResign ->
+            JE.string "resign"
+
         OneSlide { from, to, makeHulk } ->
             JE.object
                 ([ ( "from", encodeRowCol from )
@@ -824,7 +827,16 @@ encodeOneMoveSequence oneMoveSequence =
 oneMoveSequenceDecoder : Decoder OneMoveSequence
 oneMoveSequenceDecoder =
     JD.oneOf
-        [ JD.succeed
+        [ JD.string
+            |> JD.andThen
+                (\s ->
+                    if s == "resign" then
+                        JD.succeed OneResign
+
+                    else
+                        JD.fail <| "Unknown OneMoveSequence: " ++ s
+                )
+        , JD.succeed
             (\from to makeHulk ->
                 OneSlide { from = from, to = to, makeHulk = makeHulk }
             )
@@ -879,6 +891,9 @@ unsharedRowOrCol from to =
 oneMoveSequenceToPrettyString : Bool -> OneMoveSequence -> String
 oneMoveSequenceToPrettyString isUnique sequence =
     case sequence of
+        OneResign ->
+            "resign"
+
         OneSlide { from, to, makeHulk } ->
             let
                 fromString =
@@ -967,6 +982,9 @@ oneMoveToString { piece, isUnique, sequence, winner } =
 oneMoveSequenceToString : OneMoveSequence -> String
 oneMoveSequenceToString sequence =
     case sequence of
+        OneResign ->
+            "resign"
+
         OneSlide { from, to, makeHulk } ->
             NewBoard.rowColToString from
                 ++ "-"
@@ -1112,33 +1130,37 @@ locBetween rc1 rc2 =
 
 stringToOneMoveSequence : String -> Maybe OneMoveSequence
 stringToOneMoveSequence string =
-    let
-        jumps =
-            String.split "x" string
-
-        corruptingJumps =
-            List.map (String.split "+") jumps
-    in
-    if
-        (List.head jumps == Just string)
-            && (List.head corruptingJumps == Just jumps)
-    then
-        -- It's a move
-        case stringToOneSlideRecord string of
-            Nothing ->
-                Nothing
-
-            Just oneSlideRecord ->
-                Just <| OneSlide oneSlideRecord
+    if string == "resign" then
+        Just OneResign
 
     else
-        -- It's a jump sequence
-        case listOfStringListsToOneJumpSequence corruptingJumps of
-            Nothing ->
-                Nothing
+        let
+            jumps =
+                String.split "x" string
 
-            Just oneJumpSequence ->
-                Just <| OneJumpSequence oneJumpSequence
+            corruptingJumps =
+                List.map (String.split "+") jumps
+        in
+        if
+            (List.head jumps == Just string)
+                && (List.head corruptingJumps == Just jumps)
+        then
+            -- It's a move
+            case stringToOneSlideRecord string of
+                Nothing ->
+                    Nothing
+
+                Just oneSlideRecord ->
+                    Just <| OneSlide oneSlideRecord
+
+        else
+            -- It's a jump sequence
+            case listOfStringListsToOneJumpSequence corruptingJumps of
+                Nothing ->
+                    Nothing
+
+                Just oneJumpSequence ->
+                    Just <| OneJumpSequence oneJumpSequence
 
 
 torc : String -> RowCol

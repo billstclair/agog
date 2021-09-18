@@ -353,7 +353,8 @@ type alias OneSlideRecord =
 
 
 type OneMoveSequence
-    = OneSlide OneSlideRecord
+    = OneResign
+    | OneSlide OneSlideRecord
     | OneJumpSequence (List OneCorruptibleJump)
 
 

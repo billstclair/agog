@@ -737,19 +737,43 @@ populateWinnerInFirstMove gameState =
 
         winner ->
             let
-                moves =
+                ( moves, reason, otherColor ) =
+                    case winner of
+                        NoWinner ->
+                            ( gameState.moves, WinByCapture, WhiteColor )
+
+                        WhiteWinner reas ->
+                            ( gameState.moves, reas, BlackColor )
+
+                        BlackWinner reas ->
+                            ( gameState.moves, reas, WhiteColor )
+
+                newMoves =
                     if winner == NoWinner then
-                        gameState.moves
+                        moves
 
                     else
-                        case gameState.moves of
-                            move :: otherMoves ->
-                                { move | winner = winner } :: otherMoves
+                        case reason of
+                            WinByResignation ->
+                                { piece =
+                                    { color = otherColor
+                                    , pieceType = Golem
+                                    }
+                                , isUnique = True
+                                , sequence = OneResign
+                                , winner = winner
+                                }
+                                    :: moves
 
-                            ms ->
-                                ms
+                            _ ->
+                                case moves of
+                                    move :: otherMoves ->
+                                        { move | winner = winner } :: otherMoves
+
+                                    ms ->
+                                        ms
             in
-            { gameState | moves = moves }
+            { gameState | moves = newMoves }
 
 
 chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> List ChooseMoveOption -> ( Types.ServerState, Maybe Message )
@@ -874,6 +898,10 @@ chooseMove state message gameid gameState player rowCol options =
 
                                                 move :: otherMoves ->
                                                     case move.sequence of
+                                                        OneResign ->
+                                                            -- Can't happen
+                                                            []
+
                                                         OneSlide _ ->
                                                             -- Can't happen
                                                             []
