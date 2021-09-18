@@ -2202,15 +2202,15 @@ mainPage bsize model =
 
                         label =
                             if model.isLocal then
-                                name
+                                color
 
                             else if model.player == gameState.whoseTurn then
-                                "You (" ++ name ++ ")"
+                                "You (" ++ name ++ "), " ++ color
 
                             else
-                                name
+                                name ++ ", " ++ color
                       in
-                      text <| label ++ ", " ++ color
+                      text label
                     , br
                     ]
             , if corruptJumped == AskAsk || makeHulk == AskAsk then

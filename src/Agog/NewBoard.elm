@@ -530,7 +530,7 @@ render style size tagger sizer player rotated gameState =
             4 * delta + fontSize delta
 
         translate =
-            round (toFloat center * (sqrt 2 - 1) / 2) + (2 * whiteSpace)
+            round (toFloat center * (sqrt 2 - 1) / 2) + whiteSpace
     in
     svg
         [ width sizeS
