@@ -2803,6 +2803,11 @@ renderPublicGameRow myGameid name playing { gameid, creator, player, forName } =
         ]
 
 
+alignCenterStyle : Html.Attribute msg
+alignCenterStyle =
+    style "text-align" "center"
+
+
 movesPage : Int -> Model -> Html Msg
 movesPage bsize model =
     let
@@ -2885,15 +2890,15 @@ movesPage bsize model =
                                         List.length moves + 1
                                 in
                                 tr []
-                                    [ td [] [ text <| String.fromInt index ]
-                                    , td [ style "text-align" "center" ]
+                                    [ td [ alignCenterStyle ] [ text <| String.fromInt index ]
+                                    , td [ alignCenterStyle ]
                                         [ if isEven index then
                                             text chars.nbsp
 
                                           else
                                             text "Resign"
                                         ]
-                                    , td [ style "text-align" "center" ]
+                                    , td [ alignCenterStyle ]
                                         [ if isEven index then
                                             text "Resign"
 
@@ -2907,7 +2912,7 @@ movesPage bsize model =
                             , tr []
                                 [ td
                                     [ colspan 3
-                                    , style "text-align" "center"
+                                    , alignCenterStyle
                                     ]
                                     [ text winString ]
                                 ]
@@ -2927,15 +2932,15 @@ isEven x =
 movesRow : Int -> OneMove -> Html Msg
 movesRow index move =
     tr []
-        [ td [] [ text (String.fromInt <| index + 1) ]
-        , td [ style "text-align" "center" ]
+        [ td [ alignCenterStyle ] [ text (String.fromInt <| index + 1) ]
+        , td [ alignCenterStyle ]
             [ if isEven index then
                 text <| ED.oneMoveToPrettyString move
 
               else
                 text chars.nbsp
             ]
-        , td [ style "text-align" "center" ]
+        , td [ alignCenterStyle ]
             [ if isEven index then
                 text chars.nbsp
 
