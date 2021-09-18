@@ -2875,7 +2875,10 @@ movesPage bsize model =
 
                         else
                             [ tr []
-                                [ td [ colspan 3 ]
+                                [ td
+                                    [ colspan 3
+                                    , style "text-align" "center"
+                                    ]
                                     [ text winString ]
                                 ]
                             ]
