@@ -249,6 +249,37 @@ Sometimes you want to play a game locally, without going through the server (exc
 
 Local mode has another feature, "Test Mode". Enable that by checking the "Test Mode" check box. This provides "Erase Board!" and "Initial Setup" buttons, a "Remove clicked" checkbox, which, when checked, causes a click on a piece to remove it from the board, a "Test piece" popup, which allows you to choose a piece type, and "White" & "Black" radio buttons, which choose the piece color. When you click on an empty square on the board, that piece will appear there. Unchecking "Test mode" returns to game play.
 """
+                , playButton
+                , rulesDiv False
+                    [ h3 [ align "center" ]
+                        [ text "STATISTICS" ]
+                    , Markdown.toHtml [] """
+The __A•G•O•G__ server keeps track of some statistics about games. These are shown on the "Statistics" page, available from the "Statistics" link at the bottom of the page. It displays a table containing counts for the following:
+
+1. Finished Games
+1. Finished Game Total Moves
+1. White Won
+1. Black Won
+1. Active Games
+1. Total Sessions
+1. Total Public Sessions
+1. Active Sessions
+
+"Finished Games" is the number of games that have been completed. "Finished Game Total Moves" is the sum of the number of moves in each of the finished games. "White Won" and "Black Won" are the number of times that white or black won a finished game. These will be missing if the server was just started and no games have been completed yet.
+
+If "Finished Games" is greater than 0, then a "White Wins" percentage and an "Average moves/game" ratio are computed and displayed below the table.
+
+"Active Games" is the number of games that are currently being played.
+
+"Total Sessions" is the total number of sessions that have been initiated, whether a second player ever joined or not.
+
+"Total Public Sessions" is the number of the sessions that were created as public games.
+
+"Active Sessions" is the number of currently active sessions. It will be less than "Active Games" when some of the sessions are between games.
+
+The statistics page currently shows only statistics since the last time the server was started.
+"""
+                    ]
                 ]
             , playButton
             ]
