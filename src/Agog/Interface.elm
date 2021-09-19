@@ -12,7 +12,8 @@
 
 
 module Agog.Interface exposing
-    ( emptyGameState
+    ( bumpStatistic
+    , emptyGameState
     , forNameMatches
     , getStatisticsChanged
     , isFirstJumpTo
@@ -45,10 +46,12 @@ import Agog.Types as Types
         , RowCol
         , Score
         , ServerState
+        , StatisticsKeys
         , UndoState
         , UndoWhichJumps(..)
         , WinReason(..)
         , Winner(..)
+        , statisticsKeys
         )
 import Agog.WhichServer as WhichServer
 import Debug
@@ -164,6 +167,46 @@ setStatisticsChanged changed state =
             }
 
 
+bumpStatistic : (StatisticsKeys -> String) -> Types.ServerState -> Types.ServerState
+bumpStatistic dotProperty state =
+    changeStatistic dotProperty 1 state
+
+
+decrementStatistic : (StatisticsKeys -> String) -> Types.ServerState -> Types.ServerState
+decrementStatistic dotProperty state =
+    changeStatistic dotProperty -1 state
+
+
+changeStatistic : (StatisticsKeys -> String) -> Int -> Types.ServerState -> Types.ServerState
+changeStatistic dotProperty delta state =
+    let
+        property =
+            dotProperty statisticsKeys
+
+        state2 =
+            case state.statistics of
+                Just _ ->
+                    state
+
+                Nothing ->
+                    -- This automatically enables statistics.
+                    -- May want it to be an environment variable for the server.
+                    { state
+                        | statistics =
+                            Just <| WebSocketFramework.Types.emptyStatistics
+                    }
+
+        value =
+            case ServerInterface.getStatisticsProperty property state2 of
+                Nothing ->
+                    0
+
+                Just v ->
+                    v
+    in
+    ServerInterface.setStatisticsProperty property (Just <| value + delta) state2
+
+
 generalMessageProcessor : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessor isProxyServer state message =
     let
@@ -222,6 +265,8 @@ generalMessageProcessorInternal isProxyServer state message =
 
                     state4 =
                         ServerInterface.addGame gameid gameState state3
+                            |> bumpStatistic .totalConnections
+                            |> bumpStatistic .activeConnections
 
                     state5 =
                         ServerInterface.addPlayer playerid playerInfo state4
@@ -254,6 +299,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                         publicGame
                                         state5.publicGames
                             }
+                                |> bumpStatistic .totalPublicConnections
                 in
                 ( state6
                 , Just <|
@@ -331,14 +377,21 @@ generalMessageProcessorInternal isProxyServer state message =
                         )
 
         LeaveReq { playerid } ->
-            case ServerInterface.getPlayer playerid state of
-                Nothing ->
-                    errorRes message state "Unknown playerid"
+            case lookupGame message playerid state of
+                Err res ->
+                    res
 
-                Just { gameid, player } ->
+                Ok ( gameid, gameState, player ) ->
                     let
                         state2 =
                             ServerInterface.removeGame gameid state
+                                |> decrementStatistic .activeConnections
+                                |> (if gameState.winner == NoWinner then
+                                        decrementStatistic .activeGames
+
+                                    else
+                                        identity
+                                   )
                     in
                     ( state2
                     , Just <|
@@ -364,8 +417,11 @@ generalMessageProcessorInternal isProxyServer state message =
                                     |> updateJumperLocations
                                     |> NewBoard.populateLegalMoves
                                     |> populateWinner
+
+                            state2 =
+                                populateEndOfGameStatistics gs state
                         in
-                        ( ServerInterface.updateGame gameid gs state
+                        ( ServerInterface.updateGame gameid gs state2
                         , Just <|
                             UpdateRsp
                                 { gameid = gameid
@@ -454,8 +510,11 @@ generalMessageProcessorInternal isProxyServer state message =
                                                                 st
                                                     in
                                                     List.foldl loop state playerids
+
+                                            state3 =
+                                                bumpStatistic .activeGames state2
                                         in
-                                        ( ServerInterface.updateGame gameid gs2 state2
+                                        ( ServerInterface.updateGame gameid gs2 state3
                                         , Just <|
                                             AnotherGameRsp
                                                 { gameid = gameid
@@ -480,8 +539,11 @@ generalMessageProcessorInternal isProxyServer state message =
                                                 { gameState | winner = winner }
                                                     |> populateWinnerInFirstMove
                                                     |> updateScore
+
+                                            state2 =
+                                                populateEndOfGameStatistics gs state
                                         in
-                                        ( ServerInterface.updateGame gameid gs state
+                                        ( ServerInterface.updateGame gameid gs state2
                                         , Just <|
                                             ResignRsp
                                                 { gameid = gameid
@@ -768,6 +830,34 @@ toCorruptibleJump from options { over, to } =
     }
 
 
+populateEndOfGameStatistics : GameState -> Types.ServerState -> Types.ServerState
+populateEndOfGameStatistics gameState state =
+    let
+        update player =
+            state
+                |> bumpStatistic .finishedGames
+                |> decrementStatistic .activeGames
+                |> bumpStatistic
+                    (case player of
+                        WhitePlayer ->
+                            .whiteWon
+
+                        BlackPlayer ->
+                            .blackWon
+                    )
+                |> changeStatistic .totalMoves (List.length gameState.moves)
+    in
+    case gameState.winner of
+        NoWinner ->
+            state
+
+        WhiteWinner _ ->
+            update WhitePlayer
+
+        BlackWinner _ ->
+            update BlackPlayer
+
+
 populateWinner : GameState -> GameState
 populateWinner gameState =
     case gameState.winner of
@@ -898,8 +988,11 @@ chooseMove state message gameid gameState player rowCol options =
                                         gs2
                                             |> updateJumperLocations
                                             |> populateWinner
+
+                                    state2 =
+                                        populateEndOfGameStatistics gs3 state
                                 in
-                                ( ServerInterface.updateGame gameid gs3 state
+                                ( ServerInterface.updateGame gameid gs3 state2
                                 , Just <|
                                     PlayRsp
                                         { gameid = gameid
@@ -1050,8 +1143,11 @@ chooseMove state message gameid gameState player rowCol options =
                                                     gs3
                                                         |> updateJumperLocations
                                                         |> populateWinner
+
+                                                state2 =
+                                                    populateEndOfGameStatistics gs4 state
                                             in
-                                            ( ServerInterface.updateGame gameid gs4 state
+                                            ( ServerInterface.updateGame gameid gs4 state2
                                             , Just <|
                                                 PlayRsp
                                                     { gameid = gameid

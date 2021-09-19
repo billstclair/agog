@@ -41,6 +41,7 @@ module Agog.Types exposing
     , ServerState
     , Settings
     , Socket
+    , StatisticsKeys
     , Style
     , StyleType(..)
     , SubscriptionSet
@@ -61,6 +62,8 @@ module Agog.Types exposing
     , otherColor
     , otherPlayer
     , playerColor
+    , statisticsKeyOrder
+    , statisticsKeys
     , typeToStyle
     , zeroScore
     )
@@ -637,3 +640,41 @@ messageToGameid message =
 
 type alias ServerState =
     WebSocketFramework.Types.ServerState GameState Player
+
+
+type alias StatisticsKeys =
+    { finishedGames : String
+    , totalMoves : String
+    , whiteWon : String
+    , blackWon : String
+    , activeGames : String
+    , totalConnections : String
+    , totalPublicConnections : String
+    , activeConnections : String
+    }
+
+
+statisticsKeys : StatisticsKeys
+statisticsKeys =
+    { finishedGames = "Finished Games"
+    , totalMoves = "Finished Game Total Moves"
+    , whiteWon = "White Won"
+    , blackWon = "Black Won"
+    , activeGames = "Active Games"
+    , totalConnections = "Total Connections"
+    , totalPublicConnections = "Total Public Connections"
+    , activeConnections = "Active Connections"
+    }
+
+
+statisticsKeyOrder : List (StatisticsKeys -> String)
+statisticsKeyOrder =
+    [ .finishedGames
+    , .totalMoves
+    , .whiteWon
+    , .blackWon
+    , .activeGames
+    , .totalConnections
+    , .totalPublicConnections
+    , .activeConnections
+    ]
