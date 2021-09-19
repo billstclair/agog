@@ -125,16 +125,6 @@ lookupGame message playerid state =
                     Ok ( gameid, gameState, player )
 
 
-messageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
-messageProcessor =
-    generalMessageProcessor False
-
-
-proxyMessageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
-proxyMessageProcessor =
-    generalMessageProcessor True
-
-
 getStatisticsChanged : Types.ServerState -> Bool
 getStatisticsChanged state =
     case state.state of
@@ -181,7 +171,7 @@ changeStatistic : (StatisticsKeys -> String) -> Int -> Types.ServerState -> Type
 changeStatistic dotProperty delta state =
     let
         property =
-            dotProperty statisticsKeys
+            Debug.log ("changeStatistic " ++ String.fromInt delta ++ ", property") <| dotProperty statisticsKeys
 
         state2 =
             case state.statistics of
@@ -203,8 +193,24 @@ changeStatistic dotProperty delta state =
 
                 Just v ->
                     v
+
+        res =
+            ServerInterface.setStatisticsProperty property (Just <| value + delta) state2
+
+        stats =
+            Debug.log "  =>" res.statistics
     in
-    ServerInterface.setStatisticsProperty property (Just <| value + delta) state2
+    res
+
+
+messageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
+messageProcessor =
+    generalMessageProcessor False
+
+
+proxyMessageProcessor : Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
+proxyMessageProcessor =
+    generalMessageProcessor True
 
 
 generalMessageProcessor : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
@@ -360,6 +366,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                 ServerInterface.updateGame gameid
                                     gameState2
                                     state3
+                                    |> bumpStatistic .activeGames
                         in
                         ( { state4
                             | publicGames =
@@ -383,10 +390,16 @@ generalMessageProcessorInternal isProxyServer state message =
 
                 Ok ( gameid, gameState, player ) ->
                     let
+                        players =
+                            gameState.players
+
+                        gameOn =
+                            players.white /= "" && players.black /= ""
+
                         state2 =
                             ServerInterface.removeGame gameid state
                                 |> decrementStatistic .activeConnections
-                                |> (if gameState.winner == NoWinner then
+                                |> (if gameOn && gameState.winner == NoWinner then
                                         decrementStatistic .activeGames
 
                                     else
@@ -648,7 +661,11 @@ generalMessageProcessorInternal isProxyServer state message =
 
         StatisticsReq { subscribe } ->
             -- subscription is processed by the server code only
-            ( state, Just <| StatisticsRsp { statistics = state.statistics } )
+            let
+                statistics =
+                    Debug.log "statisticsReq" state.statistics
+            in
+            ( state, Just <| StatisticsRsp { statistics = statistics } )
 
         ChatReq { playerid, text } ->
             case lookupGame message playerid state of
@@ -845,6 +862,16 @@ populateEndOfGameStatistics gameState state =
                         BlackPlayer ->
                             .blackWon
                     )
+                -- Ensure that there is a row for each on the statistics page.
+                |> changeStatistic
+                    (case player of
+                        WhitePlayer ->
+                            .blackWon
+
+                        BlackPlayer ->
+                            .whiteWon
+                    )
+                    0
                 |> changeStatistic .totalMoves (List.length gameState.moves)
     in
     case gameState.winner of

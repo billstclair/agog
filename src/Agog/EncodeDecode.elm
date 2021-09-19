@@ -231,6 +231,9 @@ encodePage page =
             MovesPage ->
                 "MovesPage"
 
+            StatisticsPage ->
+                "StatisticsPage"
+
 
 pageDecoder : Decoder Page
 pageDecoder =
@@ -252,6 +255,9 @@ pageDecoder =
 
                     "MovesPage" ->
                         JD.succeed MovesPage
+
+                    "StatisticsPage" ->
+                        JD.succeed StatisticsPage
 
                     _ ->
                         JD.fail <| "Unknown page: " ++ s

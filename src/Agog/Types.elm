@@ -180,6 +180,7 @@ type Page
     | InstructionsPage
     | PublicPage
     | MovesPage
+    | StatisticsPage
 
 
 type alias Score =

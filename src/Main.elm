@@ -47,12 +47,14 @@ import Agog.Types as Types
         , SavedModel
         , Score
         , Settings
+        , StatisticsKeys
         , Style
         , StyleType(..)
         , TestMode
         , UndoWhichJumps(..)
         , WinReason(..)
         , Winner(..)
+        , statisticsKeys
         )
 import Agog.WhichServer as WhichServer
 import Browser exposing (Document, UrlRequest(..))
@@ -166,6 +168,7 @@ import WebSocketFramework.Types
         , ReqRsp(..)
         , ServerInterface(..)
         , ServerMessageProcessor
+        , Statistics
         )
 
 
@@ -207,6 +210,7 @@ chooseMoveOptionsUINo =
 type alias Model =
     { serverUrl : String
     , interface : ServerInterface
+    , interfaceIsProxy : Bool
     , connectionReason : ConnectionReason
     , funnelState : State
     , otherPlayerid : PlayerId
@@ -221,6 +225,7 @@ type alias Model =
     , chooseMoveOptionsUI : ChooseMoveOptionsUI
     , delayedClick : Maybe RowCol
     , reallyClearStorage : Bool
+    , statistics : Maybe Statistics
 
     -- persistent below here
     , page : Page
@@ -382,6 +387,7 @@ init flags url key =
         model =
             { serverUrl = WhichServer.serverUrl
             , interface = proxyServer
+            , interfaceIsProxy = True
             , connectionReason = NoConnection
             , funnelState = initialFunnelState
             , otherPlayerid = ""
@@ -396,6 +402,7 @@ init flags url key =
             , chooseMoveOptionsUI = chooseMoveOptionsUINo
             , delayedClick = Nothing
             , reallyClearStorage = False
+            , statistics = Nothing
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -829,6 +836,10 @@ incomingMessage interface message mdl =
             { model | publicGames = List.concat [ games, added ] }
                 |> withNoCmd
 
+        StatisticsRsp { statistics } ->
+            { model | statistics = Debug.log "Received StatisticsRsp" statistics }
+                |> withNoCmd
+
         ErrorRsp { request, text } ->
             { model | error = Just text }
                 |> withNoCmd
@@ -1161,8 +1172,20 @@ updateInternal msg model =
                 ( mdl, cmd ) =
                     { model | page = page }
                         |> webSocketConnect PublicGamesConnection
+
+                cmd3 =
+                    if page == StatisticsPage then
+                        send mdl <|
+                            StatisticsReq { subscribe = True }
+
+                    else if model.page == StatisticsPage then
+                        send mdl <|
+                            StatisticsReq { subscribe = False }
+
+                    else
+                        Cmd.none
             in
-            mdl |> withCmds [ cmd, unsubscribe ]
+            mdl |> withCmds [ cmd, unsubscribe, cmd3 ]
 
         SetHideTitle hideTitle ->
             { model | settings = { settings | hideTitle = hideTitle } }
@@ -1561,14 +1584,25 @@ webSocketConnect : ConnectionReason -> Model -> ( Model, Cmd Msg )
 webSocketConnect reason model =
     if model.isLocal then
         { model
-            | interface = proxyServer
+            | interface =
+                if model.interfaceIsProxy then
+                    model.interface
+
+                else
+                    proxyServer
             , isLive = True
         }
             |> withNoCmd
 
     else
         { model
-            | interface = makeWebSocketServer model
+            | interface =
+                if model.interfaceIsProxy then
+                    makeWebSocketServer model
+
+                else
+                    model.interface
+            , interfaceIsProxy = False
             , connectionReason = Debug.log "webSocketConnect" reason
         }
             |> withCmd
@@ -1973,6 +2007,9 @@ view model =
 
                     MovesPage ->
                         movesPage bsize model
+
+                    StatisticsPage ->
+                        statisticsPage bsize model
                 ]
         ]
     }
@@ -2667,6 +2704,12 @@ footerParagraph =
             , onClick <| SetPage RulesPage
             ]
             [ text "Rules" ]
+        , text " "
+        , a
+            [ href "#"
+            , onClick <| SetPage StatisticsPage
+            ]
+            [ text "Statistics" ]
         , br
         , a
             [ href "https://github.com/billstclair/agog/"
@@ -2808,7 +2851,11 @@ publicPage bsize model =
                   else
                     text ""
                 ]
-            , table [ class "prettytable" ] <|
+            , table
+                [ class "prettytable"
+                , style "color" "black"
+                ]
+              <|
                 List.concat
                     [ [ tr []
                             [ th "GameId"
@@ -3035,6 +3082,87 @@ playerString player =
 
         BlackPlayer ->
             "Black"
+
+
+statisticsPage : Int -> Model -> Html Msg
+statisticsPage bsize model =
+    rulesDiv False
+        [ rulesDiv True
+            [ h2 [ align "center" ]
+                [ text "Statistics" ]
+            , p [] [ playButton ]
+            , if model.isLocal then
+                p [] [ text "There are no live updates in local mode." ]
+
+              else
+                text ""
+            , case model.statistics of
+                Nothing ->
+                    p []
+                        [ text "There are no statistics." ]
+
+                Just statistics ->
+                    span []
+                        [ table
+                            [ class "prettytable"
+                            , style "color" "black"
+                            ]
+                          <|
+                            [ tr []
+                                [ th "Statistic"
+                                , th "Count"
+                                ]
+                            ]
+                                ++ List.map (statisticsRow statistics) Types.statisticsKeyOrder
+                        , case Dict.get statisticsKeys.finishedGames statistics of
+                            Nothing ->
+                                text ""
+
+                            Just finishedGames ->
+                                span []
+                                    [ case Dict.get statisticsKeys.whiteWon statistics of
+                                        Nothing ->
+                                            text ""
+
+                                        Just whiteWon ->
+                                            span []
+                                                [ b "White wins: "
+                                                , text <| String.fromInt (whiteWon * 100 // finishedGames)
+                                                , text "%"
+                                                , br
+                                                ]
+                                    , case Dict.get statisticsKeys.totalMoves statistics of
+                                        Nothing ->
+                                            text ""
+
+                                        Just totalMoves ->
+                                            span []
+                                                [ b "Average moves/game: "
+                                                , text <| String.fromInt (totalMoves // finishedGames)
+                                                ]
+                                    ]
+                        ]
+            , p [] [ playButton ]
+            , footerParagraph
+            ]
+        ]
+
+
+statisticsRow : Statistics -> (StatisticsKeys -> String) -> Html Msg
+statisticsRow statistics keystring =
+    let
+        property =
+            keystring Types.statisticsKeys
+    in
+    case Dict.get property statistics of
+        Nothing ->
+            text ""
+
+        Just value ->
+            tr []
+                [ td [] [ text property ]
+                , td [] [ text <| String.fromInt value ]
+                ]
 
 
 b : String -> Html msg
