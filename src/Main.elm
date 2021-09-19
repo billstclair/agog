@@ -181,6 +181,7 @@ type ConnectionReason
     | StartGameConnection
     | JoinGameConnection
     | PublicGamesConnection
+    | StatisticsConnection
     | UpdateConnection
 
 
@@ -534,6 +535,10 @@ handleGetResponse key value model =
                         else if not model2.isLocal && model2.page == PublicPage then
                             { model2 | gameid = "" }
                                 |> webSocketConnect PublicGamesConnection
+
+                        else if not model2.isLocal && model2.page == StatisticsPage then
+                            { model2 | gameid = "" }
+                                |> webSocketConnect StatisticsConnection
 
                         else if model2.isLocal then
                             { model2 | gameid = "" }
@@ -964,6 +969,12 @@ socketHandler response state mdl =
                                     , gameid = Just model.gameid
                                     }
 
+                        StatisticsConnection ->
+                            send model <|
+                                StatisticsReq
+                                    { subscribe = model.page == StatisticsPage
+                                    }
+
                         UpdateConnection ->
                             send model <|
                                 UpdateReq
@@ -1154,12 +1165,42 @@ updateInternal msg model =
 
         SetPage page ->
             let
-                unsubscribe =
-                    -- This doesn't work if you change || to &&.
-                    -- You get "unknown playerid" errors.
-                    -- I dont understand it.
-                    if page /= PublicPage || model.page == PublicPage then
-                        send model <|
+                mdl =
+                    { model | page = page }
+
+                ( mdl2, cmd ) =
+                    if page == PublicPage then
+                        webSocketConnect PublicGamesConnection mdl
+
+                    else if page == StatisticsPage then
+                        webSocketConnect StatisticsConnection mdl
+
+                    else
+                        ( mdl, Cmd.none )
+
+                cmd2 =
+                    if page == StatisticsPage then
+                        send mdl2 <|
+                            StatisticsReq { subscribe = True }
+
+                    else if model.page == StatisticsPage then
+                        send mdl2 <|
+                            StatisticsReq { subscribe = False }
+
+                    else
+                        Cmd.none
+
+                cmd3 =
+                    if page == PublicPage then
+                        send mdl2 <|
+                            PublicGamesReq
+                                { subscribe = True
+                                , forName = ""
+                                , gameid = Nothing
+                                }
+
+                    else if model.page == PublicPage then
+                        send mdl2 <|
                             PublicGamesReq
                                 { subscribe = False
                                 , forName = ""
@@ -1168,24 +1209,8 @@ updateInternal msg model =
 
                     else
                         Cmd.none
-
-                ( mdl, cmd ) =
-                    { model | page = page }
-                        |> webSocketConnect PublicGamesConnection
-
-                cmd3 =
-                    if page == StatisticsPage then
-                        send mdl <|
-                            StatisticsReq { subscribe = True }
-
-                    else if model.page == StatisticsPage then
-                        send mdl <|
-                            StatisticsReq { subscribe = False }
-
-                    else
-                        Cmd.none
             in
-            mdl |> withCmds [ cmd, unsubscribe, cmd3 ]
+            mdl2 |> withCmds [ cmd, cmd2, cmd3 ]
 
         SetHideTitle hideTitle ->
             { model | settings = { settings | hideTitle = hideTitle } }
@@ -1597,7 +1622,8 @@ webSocketConnect reason model =
     else
         { model
             | interface =
-                if model.interfaceIsProxy then
+                if True then
+                    --model.interfaceIsProxy then
                     makeWebSocketServer model
 
                 else
@@ -2844,7 +2870,7 @@ publicPage bsize model =
                         ]
                 ]
             , p [ align "center" ]
-                [ if isPlaying model then
+                [ if model.isLive then
                     p [ style "color" "red" ]
                         [ text "You're playing a game. What are you doing here?" ]
 
@@ -2865,10 +2891,7 @@ publicPage bsize model =
                             ]
                       ]
                     , List.map
-                        (renderPublicGameRow model.gameid
-                            name
-                            (isPlaying model)
-                        )
+                        (renderPublicGameRow model.gameid name model.isLive)
                         model.publicGames
                     ]
             , playButton
@@ -2878,14 +2901,14 @@ publicPage bsize model =
 
 
 renderPublicGameRow : String -> String -> Bool -> PublicGame -> Html Msg
-renderPublicGameRow myGameid name playing { gameid, creator, player, forName } =
+renderPublicGameRow myGameid name connected { gameid, creator, player, forName } =
     let
         center =
             style "text-align" "center"
     in
     tr []
         [ td [ center ]
-            [ if gameid == myGameid || playing || name == "" then
+            [ if gameid == myGameid || connected || name == "" then
                 text gameid
 
               else

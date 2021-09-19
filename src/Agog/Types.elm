@@ -662,9 +662,9 @@ statisticsKeys =
     , whiteWon = "White Won"
     , blackWon = "Black Won"
     , activeGames = "Active Games"
-    , totalConnections = "Total Connections"
-    , totalPublicConnections = "Total Public Connections"
-    , activeConnections = "Active Connections"
+    , totalConnections = "Total Sessions"
+    , totalPublicConnections = "Total Public Sessions"
+    , activeConnections = "Active Sessions"
     }
 
 

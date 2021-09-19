@@ -14,7 +14,7 @@
             "billstclair/elm-svg-button": "3.0.0",
             "billstclair/elm-websocket-client": "4.1.0",
             "billstclair/elm-websocket-framework": "14.1.0",
-            "billstclair/elm-websocket-framework-server": "14.1.4",
+            "billstclair/elm-websocket-framework-server": "14.1.5",
             "cuducos/elm-format-number": "6.0.2",
             "elm/browser": "1.0.1",
             "elm/core": "1.0.2",

@@ -171,7 +171,7 @@ changeStatistic : (StatisticsKeys -> String) -> Int -> Types.ServerState -> Type
 changeStatistic dotProperty delta state =
     let
         property =
-            Debug.log ("changeStatistic " ++ String.fromInt delta ++ ", property") <| dotProperty statisticsKeys
+            dotProperty statisticsKeys
 
         state2 =
             case state.statistics of
@@ -198,7 +198,7 @@ changeStatistic dotProperty delta state =
             ServerInterface.setStatisticsProperty property (Just <| value + delta) state2
 
         stats =
-            Debug.log "  =>" res.statistics
+            res.statistics
     in
     res
 
@@ -628,7 +628,7 @@ generalMessageProcessorInternal isProxyServer state message =
             -- subscribe is processed by the server code only
             let
                 games =
-                    Debug.log "publicGames" state.publicGames
+                    state.publicGames
                         |> List.filterMap ED.frameworkToPublicGame
                         |> List.filterMap
                             (\game ->
@@ -663,7 +663,7 @@ generalMessageProcessorInternal isProxyServer state message =
             -- subscription is processed by the server code only
             let
                 statistics =
-                    Debug.log "statisticsReq" state.statistics
+                    state.statistics
             in
             ( state, Just <| StatisticsRsp { statistics = statistics } )
 
