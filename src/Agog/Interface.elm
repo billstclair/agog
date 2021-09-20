@@ -551,7 +551,6 @@ generalMessageProcessorInternal isProxyServer state message =
                                             gs =
                                                 { gameState | winner = winner }
                                                     |> populateWinnerInFirstMove
-                                                    |> updateScore
 
                                             state2 =
                                                 populateEndOfGameStatistics gs state
@@ -902,49 +901,48 @@ populateWinner gameState =
 
 populateWinnerInFirstMove : GameState -> GameState
 populateWinnerInFirstMove gameState =
-    case gameState.winner of
-        NoWinner ->
-            gameState
+    let
+        winner =
+            gameState.winner
 
-        winner ->
-            let
-                ( moves, reason, otherColor ) =
-                    case winner of
-                        NoWinner ->
-                            ( gameState.moves, WinByCapture, WhiteColor )
+        ( moves, reason, otherColor ) =
+            case winner of
+                NoWinner ->
+                    ( gameState.moves, WinByCapture, WhiteColor )
 
-                        WhiteWinner reas ->
-                            ( gameState.moves, reas, BlackColor )
+                WhiteWinner reas ->
+                    ( gameState.moves, reas, BlackColor )
 
-                        BlackWinner reas ->
-                            ( gameState.moves, reas, WhiteColor )
+                BlackWinner reas ->
+                    ( gameState.moves, reas, WhiteColor )
 
-                newMoves =
-                    if winner == NoWinner then
-                        moves
+        newMoves =
+            if winner == NoWinner then
+                moves
 
-                    else
-                        case reason of
-                            WinByResignation ->
-                                { piece =
-                                    { color = otherColor
-                                    , pieceType = Golem
-                                    }
-                                , isUnique = True
-                                , sequence = OneResign
-                                , winner = winner
-                                }
-                                    :: moves
+            else
+                case reason of
+                    WinByResignation ->
+                        { piece =
+                            { color = otherColor
+                            , pieceType = Golem
+                            }
+                        , isUnique = True
+                        , sequence = OneResign
+                        , winner = winner
+                        }
+                            :: moves
 
-                            _ ->
-                                case moves of
-                                    move :: otherMoves ->
-                                        { move | winner = winner } :: otherMoves
+                    _ ->
+                        case moves of
+                            move :: otherMoves ->
+                                { move | winner = winner } :: otherMoves
 
-                                    ms ->
-                                        ms
-            in
-            { gameState | moves = newMoves }
+                            ms ->
+                                ms
+    in
+    { gameState | moves = newMoves }
+        |> updateScore
 
 
 chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> List ChooseMoveOption -> ( Types.ServerState, Maybe Message )
@@ -1267,7 +1265,6 @@ endOfTurn selected moved piece options gameState =
         , undoStates = []
         , jumps = []
     }
-        |> updateScore
 
 
 chooseUndoJump : Types.ServerState -> Message -> String -> GameState -> UndoWhichJumps -> ( Types.ServerState, Maybe Message )

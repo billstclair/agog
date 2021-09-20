@@ -244,6 +244,7 @@ type alias Model =
     , settings : Settings
     , styleType : StyleType
     , rotate : RotateBoard
+    , yourWins : Int
     }
 
 
@@ -421,6 +422,7 @@ init flags url key =
             , isLive = False
             , settings = Types.emptySettings
             , rotate = RotateWhiteDown
+            , yourWins = 0
             }
     in
     model
@@ -579,6 +581,7 @@ modelToSavedModel model =
     , settings = model.settings
     , styleType = model.styleType
     , rotate = model.rotate
+    , yourWins = model.yourWins
     }
 
 
@@ -599,6 +602,7 @@ savedModelToModel savedModel model =
         , settings = savedModel.settings
         , styleType = savedModel.styleType
         , rotate = savedModel.rotate
+        , yourWins = savedModel.yourWins
         , interface = proxyServer
     }
 
@@ -631,6 +635,10 @@ incomingMessage interface message mdl =
     in
     case message of
         NewRsp { gameid, playerid, player, name, gameState } ->
+            let
+                ( chatSettings, chatCmd ) =
+                    clearChatSettings True model.chatSettings
+            in
             { model
                 | gameid = gameid
                 , playerid = playerid
@@ -639,24 +647,27 @@ incomingMessage interface message mdl =
                 , connectionReason = JoinGameConnection
                 , gameState = gameState
                 , decoration = gameState.private.decoration
+                , yourWins = 0
+                , chatSettings = chatSettings
             }
-                |> withCmd
-                    (if not model.isLocal then
+                |> withCmds
+                    [ chatCmd
+                    , if not model.isLocal then
                         Cmd.none
 
-                     else if player == WhitePlayer then
+                      else if player == WhitePlayer then
                         send model <|
                             JoinReq { gameid = gameid, name = "Black" }
 
-                     else
+                      else
                         send model <|
                             JoinReq { gameid = gameid, name = "White" }
-                    )
+                    ]
 
         JoinRsp { gameid, playerid, player, gameState } ->
             let
-                chatSettings =
-                    model.chatSettings
+                ( chatSettings, chatCmd ) =
+                    clearChatSettings True model.chatSettings
 
                 model2 =
                     { model
@@ -670,11 +681,8 @@ incomingMessage interface message mdl =
 
                             else
                                 player
-                        , chatSettings =
-                            { chatSettings
-                                | lines = []
-                                , input = ""
-                            }
+                        , yourWins = 0
+                        , chatSettings = chatSettings
                     }
 
                 model3 =
@@ -697,7 +705,11 @@ incomingMessage interface message mdl =
                             Just pid ->
                                 { model2 | playerid = pid }
             in
-            model3 |> withCmd (setPage MainPage)
+            model3
+                |> withCmds
+                    [ chatCmd
+                    , setPage MainPage
+                    ]
 
         LeaveRsp { gameid, player } ->
             let
@@ -763,6 +775,7 @@ incomingMessage interface message mdl =
                     | gameState = gameState
                     , decoration = d
                     , otherDecoration = od2
+                    , yourWins = computeYourWins gameState model
                 }
                     |> withNoCmd
 
@@ -784,6 +797,8 @@ incomingMessage interface message mdl =
                 , decoration = NoDecoration
                 , otherDecoration = NoDecoration
                 , firstSelection = NoDecoration
+                , yourWins =
+                    computeYourWins gameState model
                 , error =
                     if model.isLocal then
                         Nothing
@@ -842,7 +857,7 @@ incomingMessage interface message mdl =
                 |> withNoCmd
 
         StatisticsRsp { statistics } ->
-            { model | statistics = Debug.log "Received StatisticsRsp" statistics }
+            { model | statistics = statistics }
                 |> withNoCmd
 
         ErrorRsp { request, text } ->
@@ -868,6 +883,24 @@ incomingMessage interface message mdl =
 
         _ ->
             model |> withNoCmd
+
+
+computeYourWins : GameState -> Model -> Int
+computeYourWins gameState model =
+    let
+        winner =
+            gameState.winner
+    in
+    Debug.log "  yourWins" <|
+        if
+            (Debug.log "PlayRsp, winner" winner /= NoWinner)
+                && (Debug.log "  model winner" model.gameState.winner == NoWinner)
+                && ((Debug.log "  player" <| Just model.player) == (Debug.log "  winPlayer" <| Types.winPlayer winner))
+        then
+            model.yourWins + 1
+
+        else
+            model.yourWins
 
 
 setPage : Page -> Cmd Msg
@@ -1024,7 +1057,8 @@ update msg model =
                     False
 
                 IncomingMessage _ _ ->
-                    cmd == Cmd.none
+                    -- cmd == Cmd.none
+                    True
 
                 MaybeClearStorage ->
                     False
@@ -1519,14 +1553,11 @@ updateInternal msg model =
 
         ChatClear ->
             let
-                chatSettings =
-                    model.chatSettings
-
-                newSettings =
-                    { chatSettings | lines = [] }
+                ( chatSettings, chatCmd ) =
+                    clearChatSettings False model.chatSettings
             in
-            { model | chatSettings = newSettings }
-                |> withCmd (putChat newSettings)
+            { model | chatSettings = chatSettings }
+                |> withCmd chatCmd
 
         DelayedAction updater time ->
             updater { model | time = time }
@@ -1571,6 +1602,23 @@ updateInternal msg model =
 
                 Ok res ->
                     res
+
+
+clearChatSettings : Bool -> ChatSettings -> ( ChatSettings, Cmd Msg )
+clearChatSettings clearInput chatSettings =
+    let
+        newSettings =
+            { chatSettings
+                | lines = []
+                , input =
+                    if clearInput then
+                        ""
+
+                    else
+                        chatSettings.input
+            }
+    in
+    ( newSettings, putChat newSettings )
 
 
 chatSend : String -> ChatSettings -> Model -> ( Model, Cmd Msg )
@@ -2404,25 +2452,36 @@ mainPage bsize model =
             , let
                 { games, whiteWins, blackWins } =
                     gameState.score
+
+                yourWins =
+                    model.yourWins
+
+                player =
+                    model.player
+
+                otherPlayer =
+                    Types.otherPlayer player
               in
               if games == 0 then
                 text ""
 
               else
                 let
-                    winString player wins =
-                        let
-                            name =
-                                playerName player model
+                    ( yourWinString, otherWinString ) =
+                        if model.isLocal then
+                            ( "White won " ++ String.fromInt whiteWins
+                            , "Black won " ++ String.fromInt blackWins
+                            )
 
-                            nameString =
-                                if not model.isLocal && player == model.player then
-                                    "You (" ++ name ++ ")"
-
-                                else
-                                    name
-                        in
-                        nameString ++ " won " ++ String.fromInt wins
+                        else
+                            ( "You ("
+                                ++ playerName player model
+                                ++ ") won "
+                                ++ String.fromInt yourWins
+                            , playerName otherPlayer model
+                                ++ " won "
+                                ++ String.fromInt (games - yourWins)
+                            )
                 in
                 span []
                     [ br
@@ -2434,9 +2493,9 @@ mainPage bsize model =
                                 else
                                     " games, "
                                )
-                    , text <| winString WhitePlayer whiteWins
+                    , text yourWinString
                     , text ", "
-                    , text <| winString BlackPlayer blackWins
+                    , text otherWinString
                     , text " "
                     , if not model.isLocal then
                         text ""

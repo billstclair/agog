@@ -65,6 +65,7 @@ module Agog.Types exposing
     , statisticsKeyOrder
     , statisticsKeys
     , typeToStyle
+    , winPlayer
     , zeroScore
     )
 
@@ -160,6 +161,19 @@ type Winner
     = NoWinner
     | WhiteWinner WinReason
     | BlackWinner WinReason
+
+
+winPlayer : Winner -> Maybe Player
+winPlayer winner =
+    case winner of
+        NoWinner ->
+            Nothing
+
+        WhiteWinner _ ->
+            Just WhitePlayer
+
+        BlackWinner _ ->
+            Just BlackPlayer
 
 
 type alias PieceSelected =
@@ -299,6 +313,7 @@ type alias SavedModel =
     , settings : Settings
     , styleType : StyleType
     , rotate : RotateBoard
+    , yourWins : Int
     }
 
 
