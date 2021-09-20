@@ -13,6 +13,7 @@ import Agog.Types as Types
         , SubscriptionSet
         )
 import Set exposing (Set)
+import Time exposing (Posix)
 import WebSocketFramework.Server
     exposing
         ( Msg
@@ -99,6 +100,37 @@ deathRowDuration =
 messageSender : ServerMessageSender ServerModel Message GameState Player
 messageSender mdl socket state request response =
     let
+        time =
+            WebSocketFramework.Server.getTime mdl
+
+        state2 =
+            let
+                gs =
+                    case state.state of
+                        Nothing ->
+                            Interface.emptyGameState <| PlayerNames "" ""
+
+                        Just gs2 ->
+                            gs2
+
+                private =
+                    gs.private
+            in
+            if private.startTime /= Nothing then
+                state
+
+            else
+                { state
+                    | state =
+                        Just
+                            { gs
+                                | private =
+                                    { private
+                                        | startTime = Just time
+                                    }
+                            }
+                }
+
         model =
             if WebSocketFramework.Server.getDeathRowDuration mdl == deathRowDuration then
                 mdl
@@ -106,15 +138,15 @@ messageSender mdl socket state request response =
             else
                 WebSocketFramework.Server.setDeathRowDuration mdl deathRowDuration
 
-        ( state2, cmd ) =
+        ( state3, cmd3 ) =
             case request of
                 PublicGamesReq { subscribe, forName } ->
-                    ( handlePublicGamesSubscription subscribe forName socket state
+                    ( handlePublicGamesSubscription subscribe forName socket state2
                     , Cmd.none
                     )
 
                 StatisticsReq { subscribe } ->
-                    ( handleStatisticsSubscription subscribe socket state
+                    ( handleStatisticsSubscription subscribe socket state2
                     , Cmd.none
                     )
 
@@ -123,15 +155,15 @@ messageSender mdl socket state request response =
                         LeaveRsp { gameid } ->
                             let
                                 ( model2, cmd2 ) =
-                                    gamesDeleter model [ gameid ] state
+                                    gamesDeleter model [ gameid ] state2
                             in
                             ( WebSocketFramework.Server.getState model2, cmd2 )
 
                         _ ->
-                            ( state, Cmd.none )
+                            ( state2, Cmd.none )
 
-        ( state3, cmd3 ) =
-            computeStatisticsSubscriberSends state2
+        ( state4, cmd4 ) =
+            computeStatisticsSubscriberSends time state3
 
         sender =
             case request of
@@ -166,22 +198,63 @@ messageSender mdl socket state request response =
                         _ ->
                             sendToAll model
     in
-    ( WebSocketFramework.Server.setState model state3
-    , Cmd.batch [ cmd, cmd3, sender response socket ]
+    ( WebSocketFramework.Server.setState model state4
+    , Cmd.batch [ cmd3, cmd4, sender response socket ]
     )
 
 
-computeStatisticsSubscriberSends : ServerState -> ( ServerState, Cmd Msg )
-computeStatisticsSubscriberSends state =
+getStatisticsTimes : Maybe Int -> ServerState -> ( ServerState, Maybe Int, Maybe Int )
+getStatisticsTimes newUpdateTime state =
+    case state.state of
+        Nothing ->
+            -- Can't happen
+            ( state, Nothing, Nothing )
+
+        Just gs ->
+            let
+                private =
+                    gs.private
+
+                newPrivate =
+                    case newUpdateTime of
+                        Nothing ->
+                            private
+
+                        _ ->
+                            { private | updateTime = newUpdateTime }
+
+                newState =
+                    case newUpdateTime of
+                        Nothing ->
+                            state
+
+                        _ ->
+                            { state
+                                | state =
+                                    Just { gs | private = newPrivate }
+                            }
+            in
+            ( newState, newPrivate.startTime, newPrivate.updateTime )
+
+
+computeStatisticsSubscriberSends : Int -> ServerState -> ( ServerState, Cmd Msg )
+computeStatisticsSubscriberSends time state =
     if not <| Interface.getStatisticsChanged state then
         ( state, Cmd.none )
 
     else
         let
+            ( state2, startTime, updateTime ) =
+                getStatisticsTimes (Just time) state
+
             message =
-                StatisticsRsp { statistics = state.statistics }
+                StatisticsRsp
+                    { statistics = state.statistics
+                    , startTime = startTime
+                    , updateTime = updateTime
+                    }
         in
-        ( Interface.setStatisticsChanged False state
+        ( Interface.setStatisticsChanged False state2
         , (List.map (sendToOne message) <| getStatisticsSubscribers state)
             |> Cmd.batch
         )

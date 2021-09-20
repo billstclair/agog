@@ -336,6 +336,10 @@ type alias PrivateGameState =
     , subscribers : SubscriptionSet
     , statisticsSubscribers : Set Socket
     , statisticsChanged : Bool
+
+    -- Milliseconds
+    , startTime : Maybe Int
+    , updateTime : Maybe Int
     }
 
 
@@ -345,6 +349,8 @@ emptyPrivateGameState =
     , subscribers = Set.empty
     , statisticsSubscribers = Set.empty
     , statisticsChanged = False
+    , startTime = Nothing
+    , updateTime = Nothing
     }
 
 
@@ -547,7 +553,11 @@ type Message
     | StatisticsReq
         { subscribe : Bool
         }
-    | StatisticsRsp { statistics : Maybe Statistics }
+    | StatisticsRsp
+        { statistics : Maybe Statistics
+        , startTime : Maybe Int
+        , updateTime : Maybe Int
+        }
       -- Errors
     | ErrorRsp
         { request : String

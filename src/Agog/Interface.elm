@@ -663,8 +663,27 @@ generalMessageProcessorInternal isProxyServer state message =
             let
                 statistics =
                     state.statistics
+
+                ( startTime, updateTime ) =
+                    case state.state of
+                        Nothing ->
+                            ( Nothing, Nothing )
+
+                        Just gs ->
+                            let
+                                pgs =
+                                    gs.private
+                            in
+                            ( pgs.startTime, pgs.updateTime )
             in
-            ( state, Just <| StatisticsRsp { statistics = statistics } )
+            ( state
+            , Just <|
+                StatisticsRsp
+                    { statistics = statistics
+                    , startTime = startTime
+                    , updateTime = updateTime
+                    }
+            )
 
         ChatReq { playerid, text } ->
             case lookupGame message playerid state of

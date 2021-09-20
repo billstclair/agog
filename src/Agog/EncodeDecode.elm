@@ -756,7 +756,7 @@ playerNamesDecoder =
 
 
 encodePrivateGameState : PrivateGameState -> Value
-encodePrivateGameState { decoration, subscribers, statisticsSubscribers, statisticsChanged } =
+encodePrivateGameState { decoration, subscribers, statisticsSubscribers, statisticsChanged, startTime, updateTime } =
     List.concat
         [ case decoration of
             NoDecoration ->
@@ -781,6 +781,18 @@ encodePrivateGameState { decoration, subscribers, statisticsSubscribers, statist
 
           else
             [ ( "statisticsChanged", JE.bool True ) ]
+        , case startTime of
+            Nothing ->
+                []
+
+            Just time ->
+                [ ( "startTime", JE.int time ) ]
+        , case updateTime of
+            Nothing ->
+                []
+
+            Just time ->
+                [ ( "updateTime", JE.int time ) ]
         ]
         |> JE.object
 
@@ -828,6 +840,8 @@ privateGameStateDecoder =
         |> optional "subscribers" subscribersDecoder Set.empty
         |> optional "statisticsSubscribers" socketSetDecoder Set.empty
         |> optional "statisticsChanged" JD.bool False
+        |> optional "startTime" (JD.nullable JD.int) Nothing
+        |> optional "updateTime" (JD.nullable JD.int) Nothing
 
 
 encodeOneMoveSequence : OneMoveSequence -> Value
@@ -2014,9 +2028,12 @@ messageEncoderInternal includePrivate message =
             , [ ( "subscribe", JE.bool subscribe ) ]
             )
 
-        StatisticsRsp { statistics } ->
+        StatisticsRsp { statistics, startTime, updateTime } ->
             ( Rsp "statistics"
-            , [ ( "statistics", encodeMaybe WSFED.encodeStatistics statistics ) ]
+            , [ ( "statistics", encodeMaybe WSFED.encodeStatistics statistics )
+              , ( "startTime", encodeMaybe JE.int startTime )
+              , ( "updateTime", encodeMaybe JE.int updateTime )
+              ]
             )
 
         ErrorRsp { request, text } ->
@@ -2317,10 +2334,16 @@ statisticsReqDecoder =
 statisticsRspDecoder : Decoder Message
 statisticsRspDecoder =
     JD.succeed
-        (\statistics ->
-            StatisticsRsp { statistics = statistics }
+        (\statistics startTime updateTime ->
+            StatisticsRsp
+                { statistics = statistics
+                , startTime = startTime
+                , updateTime = updateTime
+                }
         )
         |> optional "statistics" (JD.nullable WSFED.statisticsDecoder) Nothing
+        |> optional "startTime" (JD.nullable JD.int) Nothing
+        |> optional "updateTime" (JD.nullable JD.int) Nothing
 
 
 errorRspDecoder : Decoder Message
