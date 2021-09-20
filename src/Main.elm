@@ -63,6 +63,7 @@ import Browser.Events as Events
 import Browser.Navigation as Navigation exposing (Key)
 import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
+import DateFormat.Relative
 import Dict exposing (Dict)
 import ElmChat exposing (LineSpec(..), defaultExtraAttributes)
 import FormatNumber exposing (format)
@@ -122,6 +123,7 @@ import Html.Attributes as Attributes
         , width
         )
 import Html.Events exposing (keyCode, on, onCheck, onClick, onInput)
+import Html.Lazy as Lazy
 import Json.Decode as JD exposing (Decoder, Value)
 import Json.Encode as JE
 import List.Extra as LE
@@ -153,7 +155,7 @@ import Svg.Attributes
 import Svg.Button as SB exposing (Button, Content(..))
 import Svg.Events
 import Task
-import Time exposing (Posix, Zone)
+import Time exposing (Month(..), Posix, Zone)
 import Url exposing (Url)
 import WebSocketFramework
 import WebSocketFramework.EncodeDecode as WSFED
@@ -209,7 +211,8 @@ chooseMoveOptionsUINo =
 
 
 type alias Model =
-    { serverUrl : String
+    { tick : Posix
+    , serverUrl : String
     , interface : ServerInterface
     , interfaceIsProxy : Bool
     , connectionReason : ConnectionReason
@@ -227,6 +230,7 @@ type alias Model =
     , delayedClick : Maybe RowCol
     , reallyClearStorage : Bool
     , statistics : Maybe Statistics
+    , statisticsTimes : ( Maybe Int, Maybe Int )
 
     -- persistent below here
     , page : Page
@@ -259,6 +263,7 @@ isPlaying model =
 
 type Msg
     = Noop
+    | Tick Posix
     | IncomingMessage ServerInterface Message
     | SetDecoration Decoration
     | SetChooseFirst Player
@@ -387,7 +392,8 @@ init : Value -> url -> Key -> ( Model, Cmd Msg )
 init flags url key =
     let
         model =
-            { serverUrl = WhichServer.serverUrl
+            { tick = Time.millisToPosix 0
+            , serverUrl = WhichServer.serverUrl
             , interface = proxyServer
             , interfaceIsProxy = True
             , connectionReason = NoConnection
@@ -405,6 +411,7 @@ init flags url key =
             , delayedClick = Nothing
             , reallyClearStorage = False
             , statistics = Nothing
+            , statisticsTimes = ( Nothing, Nothing )
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -429,6 +436,7 @@ init flags url key =
         |> withCmds
             [ Task.perform getViewport Dom.getViewport
             , Task.perform SetZone Time.here
+            , Task.perform Tick Time.now
             ]
 
 
@@ -856,8 +864,11 @@ incomingMessage interface message mdl =
             { model | publicGames = List.concat [ games, added ] }
                 |> withNoCmd
 
-        StatisticsRsp { statistics } ->
-            { model | statistics = statistics }
+        StatisticsRsp { statistics, startTime, updateTime } ->
+            { model
+                | statistics = statistics
+                , statisticsTimes = ( startTime, updateTime )
+            }
                 |> withNoCmd
 
         ErrorRsp { request, text } ->
@@ -1109,6 +1120,10 @@ updateInternal msg model =
     case msg of
         Noop ->
             model |> withNoCmd
+
+        Tick posix ->
+            { model | tick = posix }
+                |> withNoCmd
 
         IncomingMessage interface message ->
             incomingMessage interface message model
@@ -2001,6 +2016,7 @@ subscriptions model =
     Sub.batch
         [ Events.onResize WindowResize
         , PortFunnels.subscriptions Process model
+        , Time.every 900 Tick
         ]
 
 
@@ -2259,7 +2275,8 @@ mainPage bsize model =
             Types.typeToStyle model.styleType
     in
     div [ align "center" ]
-        [ NewBoard.render theStyle
+        [ Lazy.lazy7 NewBoard.render
+            theStyle
             bsize
             Click
             (Just <| NewBoard.getSizer DefaultSizer)
@@ -3184,6 +3201,18 @@ statisticsPage bsize model =
                         [ text "There are no statistics." ]
 
                 Just statistics ->
+                    let
+                        ( startTime, updateTime ) =
+                            model.statisticsTimes
+
+                        uptime =
+                            case startTime of
+                                Nothing ->
+                                    0
+
+                                Just time ->
+                                    Time.posixToMillis model.tick - time
+                    in
                     span []
                         [ table
                             [ class "prettytable"
@@ -3221,13 +3250,110 @@ statisticsPage bsize model =
                                             span []
                                                 [ b "Average moves/game: "
                                                 , text <| String.fromInt (totalMoves // finishedGames)
+                                                , br
                                                 ]
+                                    ]
+                        , case updateTime of
+                            Nothing ->
+                                text ""
+
+                            Just time ->
+                                span []
+                                    [ b "Last update time: "
+                                    , text <|
+                                        DateFormat.Relative.relativeTime
+                                            model.tick
+                                            (Time.millisToPosix <|
+                                                min time
+                                                    (Time.posixToMillis model.tick)
+                                            )
+                                    , br
+                                    ]
+                        , case startTime of
+                            Nothing ->
+                                text ""
+
+                            Just time ->
+                                span []
+                                    [ b "Server uptime: "
+                                    , text <|
+                                        uptimeString model.tick
+                                            (Time.millisToPosix time)
+                                    , br
                                     ]
                         ]
             , p [] [ playButton ]
             , footerParagraph
             ]
         ]
+
+
+monthNumber : Time.Month -> Int
+monthNumber month =
+    let
+        months =
+            [ Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec ]
+    in
+    case LE.elemIndex month months of
+        Nothing ->
+            0
+
+        Just idx ->
+            idx
+
+
+uptimeString : Posix -> Posix -> String
+uptimeString now start =
+    let
+        delta =
+            (Time.posixToMillis now - Time.posixToMillis start) // 1000
+
+        days =
+            delta // (3600 * 24)
+
+        deltaMinusDays =
+            delta - days * 3600 * 24
+
+        hours =
+            deltaMinusDays // 3600
+
+        deltaMinusHours =
+            deltaMinusDays - hours * 3600
+
+        minutes =
+            deltaMinusHours // 60
+
+        showDays =
+            days /= 0
+
+        showHours =
+            showDays || hours /= 0
+
+        dayString =
+            if showDays then
+                String.fromInt days ++ plural days " day, " " days, "
+
+            else
+                ""
+
+        hourString =
+            if showHours then
+                String.fromInt hours ++ plural hours " hour, " " hours, "
+
+            else
+                ""
+
+        minuteString =
+            String.fromInt minutes ++ plural minutes " minute" " minutes"
+
+        plural num one notone =
+            if num == 1 then
+                one
+
+            else
+                notone
+    in
+    dayString ++ hourString ++ minuteString
 
 
 statisticsRow : Statistics -> (StatisticsKeys -> String) -> Html Msg
