@@ -516,7 +516,10 @@ handleGetResponse key value model =
             Ok settings ->
                 let
                     chatSettings =
-                        { settings | id = ids.chatOutput }
+                        { settings
+                            | id = ids.chatOutput
+                            , zone = model.chatSettings.zone
+                        }
                 in
                 { model
                     | chatSettings = chatSettings
@@ -1236,6 +1239,9 @@ updateInternal msg model =
                         send mdl2 <|
                             StatisticsReq { subscribe = False }
 
+                    else if page == MainPage then
+                        ElmChat.restoreScroll model.chatSettings
+
                     else
                         Cmd.none
 
@@ -1561,7 +1567,7 @@ updateInternal msg model =
 
         ChatUpdate chatSettings cmd ->
             { model | chatSettings = chatSettings }
-                |> withCmd (putChat chatSettings)
+                |> withCmds [ cmd, putChat chatSettings ]
 
         ChatSend line chatSettings ->
             chatSend line chatSettings model

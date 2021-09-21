@@ -974,16 +974,19 @@ drawJumps style board jumps delta =
                             ( rowidxF, colidxF )
 
                 xc =
-                    deltaF * colidxF + deltaF
+                    deltaF * colF + deltaF
 
                 yc =
-                    deltaF * rowidxF + deltaF
+                    deltaF * rowF + deltaF
 
                 len =
                     deltaF * (9.0 / 16.0) * (2.0 / 3.0)
 
                 leno2 =
                     len / 2
+
+                leno2hyp =
+                    leno2 * sqrt 2 / 2
 
                 w =
                     "3"
@@ -996,26 +999,48 @@ drawJumps style board jumps delta =
                     else
                         color
             in
-            g []
-                [ Svg.line
-                    [ x1 <| tos (round <| xc - leno2)
-                    , x2 <| tos (round <| xc + leno2)
-                    , y1 <| tos (round yc)
-                    , y2 <| tos (round yc)
-                    , strokeWidth w
-                    , stroke strokeColor
+            g [] <|
+                if oneJump.corrupted then
+                    [ Svg.line
+                        [ x1 <| tos (round <| xc - leno2hyp)
+                        , x2 <| tos (round <| xc + leno2hyp)
+                        , y1 <| tos (round <| yc - leno2hyp)
+                        , y2 <| tos (round <| yc + leno2hyp)
+                        , strokeWidth w
+                        , stroke strokeColor
+                        ]
+                        []
+                    , Svg.line
+                        [ x1 <| tos (round <| xc + leno2hyp)
+                        , x2 <| tos (round <| xc - leno2hyp)
+                        , y1 <| tos (round <| yc - leno2hyp)
+                        , y2 <| tos (round <| yc + leno2hyp)
+                        , strokeWidth w
+                        , stroke strokeColor
+                        ]
+                        []
                     ]
-                    []
-                , Svg.line
-                    [ y1 <| tos (round <| yc - leno2)
-                    , y2 <| tos (round <| yc + leno2)
-                    , x1 <| tos (round xc)
-                    , x2 <| tos (round xc)
-                    , strokeWidth w
-                    , stroke strokeColor
+
+                else
+                    [ Svg.line
+                        [ x1 <| tos (round <| xc - leno2)
+                        , x2 <| tos (round <| xc + leno2)
+                        , y1 <| tos (round yc)
+                        , y2 <| tos (round yc)
+                        , strokeWidth w
+                        , stroke strokeColor
+                        ]
+                        []
+                    , Svg.line
+                        [ y1 <| tos (round <| yc - leno2)
+                        , y2 <| tos (round <| yc + leno2)
+                        , x1 <| tos (round xc)
+                        , x2 <| tos (round xc)
+                        , strokeWidth w
+                        , stroke strokeColor
+                        ]
+                        []
                     ]
-                    []
-                ]
     in
     List.map drawJump jumps
 
