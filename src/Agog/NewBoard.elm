@@ -1,4 +1,4 @@
----------------------------------------------------------------------
+--------------------------------------------------------------------
 --
 -- NewBoard.elm
 -- AGOG board, storage and rendering.
@@ -687,6 +687,12 @@ drawRects style selected jumperLocations legalMoves jumps board rotated delta =
         |> removeBlankGs
     )
         ++ drawHighlights style selected jumperLocations legalMoves delta
+        ++ (drawSomeRemovedPieces style rotated WhiteColor delta <|
+                (23 - countColor WhiteColor board)
+           )
+        ++ (drawSomeRemovedPieces style rotated BlackColor delta <|
+                (23 - countColor BlackColor board)
+           )
         ++ (List.foldr (dorow (drawPiece style board rotated)) [] indices
                 |> removeBlankGs
            )
@@ -801,6 +807,93 @@ drawCircle style color delta rowidx colidx =
         , fill colorString
         ]
         []
+
+
+drawRemovedPieces : Style -> Bool -> Color -> Int -> RowCol -> Int -> Svg msg
+drawRemovedPieces style rotated color delta rowcol cnt =
+    let
+        { row, col } =
+            rowcol
+
+        deltaF =
+            toFloat delta
+
+        rowidxF =
+            toFloat row
+
+        colidxF =
+            toFloat col
+
+        offset =
+            (1.0 / 8.0)
+                * (if rotated then
+                    -1
+
+                   else
+                    1
+                  )
+
+        draw offsetCnt res =
+            let
+                rowF =
+                    rowidxF - offsetCnt * offset
+
+                colF =
+                    colidxF + offsetCnt * offset
+            in
+            drawCircle style color deltaF rowF colF
+                :: res
+
+        range =
+            List.range 0 (cnt - 1)
+                |> List.map toFloat
+    in
+    List.foldl draw [] range
+        |> List.reverse
+        |> g []
+
+
+whiteRemovedPieceLocs : List RowCol
+whiteRemovedPieceLocs =
+    [ rc 6 8, rc 5 8, rc 4 8, rc 3 8, rc 2 8, rc 1 8, rc 3 9 ]
+
+
+blackRemovedPieceLocs : List RowCol
+blackRemovedPieceLocs =
+    [ rc -1 6, rc -1 5, rc -1 4, rc -1 3, rc -1 2, rc -1 1, rc -2 4 ]
+
+
+drawSomeRemovedPieces : Style -> Bool -> Color -> Int -> Int -> List (Svg msg)
+drawSomeRemovedPieces style rotated color delta cnt =
+    let
+        loop : Int -> List RowCol -> List (Svg msg) -> List (Svg msg)
+        loop remaining locs res =
+            if remaining <= 0 then
+                res
+
+            else
+                case locs of
+                    [] ->
+                        res
+
+                    loc :: tail ->
+                        loop (remaining - 3)
+                            tail
+                        <|
+                            (drawRemovedPieces style rotated color delta loc <|
+                                min 3 remaining
+                            )
+                                :: res
+
+        locations =
+            case color of
+                WhiteColor ->
+                    whiteRemovedPieceLocs
+
+                BlackColor ->
+                    blackRemovedPieceLocs
+    in
+    loop cnt locations []
 
 
 drawPiece : Style -> NewBoard -> Bool -> Int -> Int -> Int -> Svg msg
