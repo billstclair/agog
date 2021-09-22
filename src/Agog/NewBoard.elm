@@ -855,7 +855,7 @@ drawRemovedPieces style rotated color delta rowcol cnt =
 
 whiteRemovedPieceLocs : List RowCol
 whiteRemovedPieceLocs =
-    [ rc 6 8, rc 5 8, rc 4 8, rc 3 8, rc 2 8, rc 1 8, rc 3 9 ]
+    [ rc 1 8, rc 2 8, rc 3 8, rc 4 8, rc 5 8, rc 6 8, rc 3 9 ]
 
 
 blackRemovedPieceLocs : List RowCol
