@@ -855,12 +855,12 @@ drawRemovedPieces style rotated color delta rowcol cnt =
 
 whiteRemovedPieceLocs : List RowCol
 whiteRemovedPieceLocs =
-    [ rc 1 8, rc 2 8, rc 3 8, rc 4 8, rc 5 8, rc 6 8, rc 3 9 ]
+    [ rc 1 8, rc 2 8, rc 3 8, rc 4 8, rc 5 8, rc 6 8, rc 2 9, rc 3 9 ]
 
 
 blackRemovedPieceLocs : List RowCol
 blackRemovedPieceLocs =
-    [ rc -1 6, rc -1 5, rc -1 4, rc -1 3, rc -1 2, rc -1 1, rc -2 4 ]
+    [ rc -1 6, rc -1 5, rc -1 4, rc -1 3, rc -1 2, rc -1 1, rc -2 5, rc -2 4 ]
 
 
 drawSomeRemovedPieces : Style -> Bool -> Color -> Int -> Int -> List (Svg msg)
