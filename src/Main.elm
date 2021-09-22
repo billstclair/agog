@@ -2170,10 +2170,11 @@ mainPage bsize model =
         { corruptJumped, makeHulk } =
             model.chooseMoveOptionsUI
 
-        ( playing, message ) =
+        ( playing, message, yourTurn ) =
             if not model.isLive then
                 ( False
                 , "Enter \"Your Name\" and either click \"Start Game\" or enter \"Game ID\" and click \"Join\""
+                , True
                 )
 
             else if white == "" || black == "" then
@@ -2187,11 +2188,11 @@ mainPage bsize model =
                             "Black"
                   in
                   "Waiting for " ++ waitingFor ++ " to join"
+                , False
                 )
 
             else
-                ( True
-                , let
+                let
                     winString player reason =
                         let
                             rawName =
@@ -2205,20 +2206,21 @@ mainPage bsize model =
                                     "You (" ++ rawName ++ ")"
                         in
                         name ++ " won " ++ winReasonToDescription reason ++ "!"
-                  in
-                  case gameState.winner of
+                in
+                case gameState.winner of
                     WhiteWinner reason ->
-                        winString WhitePlayer reason
+                        ( False, winString WhitePlayer reason, False )
 
                     BlackWinner reason ->
-                        winString BlackPlayer reason
+                        ( False, winString BlackPlayer reason, False )
 
                     NoWinner ->
                         let
-                            ( prefixp, action ) =
+                            ( prefixp, action, yourTurn2 ) =
                                 if corruptJumped == AskAsk || makeHulk == AskAsk then
                                     ( True
                                     , "follow the instructions in the orange-outlined box below"
+                                    , True
                                     )
 
                                 else if
@@ -2235,6 +2237,7 @@ mainPage bsize model =
                                     in
                                     ( False
                                     , "Waiting for " ++ otherName ++ " to move"
+                                    , False
                                     )
 
                                 else
@@ -2257,6 +2260,7 @@ mainPage bsize model =
 
                                                 Jumps _ ->
                                                     "click on a highlighted square to jump"
+                                    , True
                                     )
 
                             prefix =
@@ -2274,8 +2278,7 @@ mainPage bsize model =
                                 else
                                     ""
                         in
-                        prefix ++ action ++ "."
-                )
+                        ( True, prefix ++ action ++ ".", yourTurn2 )
 
         theStyle =
             Types.typeToStyle model.styleType
@@ -2313,7 +2316,7 @@ mainPage bsize model =
                         ]
             , span
                 [ style "color"
-                    (if not playing || gameState.winner == NoWinner then
+                    (if not yourTurn && (not playing || gameState.winner == NoWinner) then
                         "green"
 
                      else
@@ -2326,16 +2329,14 @@ mainPage bsize model =
                      else
                         "bold"
                     )
+                , style "font-size" <|
+                    if yourTurn then
+                        "150%"
+
+                    else
+                        "100%"
                 ]
                 [ text message ]
-            , br
-            , b " Dark Mode: "
-            , input
-                [ type_ "checkbox"
-                , checked <| model.styleType == DarkStyle
-                , onCheck SetDarkMode
-                ]
-                []
             , br
             , if gameState.winner /= NoWinner then
                 text ""
@@ -2419,7 +2420,6 @@ mainPage bsize model =
                             , button [ onClick ChatClear ]
                                 [ text "Clear" ]
                             , ElmChat.chat chatSettings
-                            , br
                             ]
                     , b "White: "
                     , text <|
@@ -2472,6 +2472,14 @@ mainPage bsize model =
                                 [ text "Undo All Jumps" ]
                             ]
                     ]
+            , br
+            , a
+                [ href "#"
+                , onClick <| SetPage MovesPage
+                ]
+                [ b "Moves" ]
+            , b ": "
+            , text <| moveString gameState.moves
             , let
                 { games, whiteWins, blackWins } =
                     gameState.score
@@ -2527,6 +2535,7 @@ mainPage bsize model =
                         button [ onClick ResetScore ]
                             [ text "Reset" ]
                     ]
+            , br
             , br
             , b "Rotate: "
             , radio "rotate"
@@ -2743,13 +2752,13 @@ mainPage bsize model =
                     ]
             ]
         , p []
-            [ a
-                [ href "#"
-                , onClick <| SetPage MovesPage
+            [ b " Dark Mode: "
+            , input
+                [ type_ "checkbox"
+                , checked <| model.styleType == DarkStyle
+                , onCheck SetDarkMode
                 ]
-                [ b "Moves" ]
-            , b ": "
-            , text <| moveString gameState.moves
+                []
             ]
         , footerParagraph
         , let
