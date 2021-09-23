@@ -77,6 +77,7 @@ type Response
 type Message
     = IsAvailableReq
     | GetPermissionReq
+    | RequestPermissionReq
     | SendNotificationReq String (Maybe Options)
     | DismissNotificationReq Int
     | LookupNotificationReq Int
@@ -84,6 +85,7 @@ type Message
     | IsAvailableAnswer Bool
     | GetPermissionAnswer Permission
     | NotificationAnswer { id : Int, title : String, options : Maybe Options }
+    | ErrorAnswer String
 
 
 isAvailable : Message
@@ -94,6 +96,11 @@ isAvailable =
 getPermission : Message
 getPermission =
     GetPermissionReq
+
+
+requestPermission : Message
+requestPermission =
+    RequestPermissionReq
 
 
 dismissNotification : Int -> Message
@@ -144,12 +151,14 @@ moduleDesc =
 tags =
     { isAvailable = "isAvailable"
     , getPermission = "getPermission"
+    , requestPermission = "requestPermission"
     , sendNotification = "sendNotification"
     , dismissNotification = "dismissNotification"
     , lookupNotification = "lookupNotification"
     , wasAvailable = "wasAvailable"
     , gotPermission = "gotPermission"
     , notification = "notification"
+    , error = "error"
     }
 
 
@@ -161,6 +170,9 @@ encode message =
 
         GetPermissionReq ->
             GenericMessage moduleName tags.getPermission JE.null
+
+        RequestPermissionReq ->
+            GenericMessage moduleName tags.requestPermission JE.null
 
         SendNotificationReq title options ->
             GenericMessage moduleName tags.sendNotification <| JE.string title
@@ -200,6 +212,9 @@ encode message =
             in
             GenericMessage moduleName tags.notification v
 
+        ErrorAnswer s ->
+            GenericMessage moduleName tags.error <| JE.string s
+
 
 decode : GenericMessage -> Result String Message
 decode { tag, args } =
@@ -208,6 +223,9 @@ decode { tag, args } =
 
     else if tag == tags.getPermission then
         Ok GetPermissionReq
+
+    else if tag == tags.requestPermission then
+        Ok RequestPermissionReq
 
     else if tag == tags.sendNotification then
         case JD.decodeValue JD.string args of
@@ -270,6 +288,14 @@ decode { tag, args } =
             Err _ ->
                 Err "Bad title string from JS code. Shouldn't happen."
 
+    else if tag == tags.error then
+        case JD.decodeValue JD.string args of
+            Ok s ->
+                Ok <| ErrorAnswer s
+
+            Err _ ->
+                Err "Bad error string from JS code. Shouldn't happen."
+
     else
         Err <| "Unknown tag: " ++ tag
 
@@ -299,7 +325,12 @@ process message state =
                 Notification { id = id, title = title, options = options }
             )
 
+        ErrorAnswer string ->
+            ( state
+            , ErrorResponse string
+            )
+
         _ ->
             ( state
-            , ErrorResponse "Unknown message from JS code. Shouldn't happen."
+            , ErrorResponse <| "Unexpected message from JS code. Shouldn't happen."
             )
