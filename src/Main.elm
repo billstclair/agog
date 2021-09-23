@@ -2331,7 +2331,7 @@ mainPage bsize model =
                     )
                 , style "font-size" <|
                     if yourTurn then
-                        "150%"
+                        "125%"
 
                     else
                         "100%"
