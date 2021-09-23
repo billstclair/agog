@@ -129,6 +129,7 @@ import Json.Encode as JE
 import List.Extra as LE
 import Markdown
 import PortFunnel.LocalStorage as LocalStorage
+import PortFunnel.Notification as Notification exposing (Permission(..))
 import PortFunnel.WebSocket as WebSocket exposing (Response(..))
 import PortFunnels exposing (FunnelDict, Handler(..), State)
 import Random exposing (Seed)
@@ -231,6 +232,8 @@ type alias Model =
     , reallyClearStorage : Bool
     , statistics : Maybe Statistics
     , statisticsTimes : ( Maybe Int, Maybe Int )
+    , notificationAvailable : Maybe Bool
+    , notificationPermission : Maybe Permission
 
     -- persistent below here
     , page : Page
@@ -249,6 +252,7 @@ type alias Model =
     , styleType : StyleType
     , rotate : RotateBoard
     , yourWins : Int
+    , notificationsEnabled : Bool
     }
 
 
@@ -284,6 +288,7 @@ type Msg
     | JoinGame GameId
     | Disconnect
     | SetTestMode Bool
+    | SetNotificationsEnabled Bool
     | EraseBoard
     | InitialBoard
     | SetTestClear Bool
@@ -412,6 +417,8 @@ init flags url key =
             , reallyClearStorage = False
             , statistics = Nothing
             , statisticsTimes = ( Nothing, Nothing )
+            , notificationAvailable = Nothing
+            , notificationPermission = Nothing
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -430,6 +437,7 @@ init flags url key =
             , settings = Types.emptySettings
             , rotate = RotateWhiteDown
             , yourWins = 0
+            , notificationsEnabled = False
             }
     in
     model
@@ -593,6 +601,7 @@ modelToSavedModel model =
     , styleType = model.styleType
     , rotate = model.rotate
     , yourWins = model.yourWins
+    , notificationsEnabled = model.notificationsEnabled
     }
 
 
@@ -614,6 +623,7 @@ savedModelToModel savedModel model =
         , styleType = savedModel.styleType
         , rotate = savedModel.rotate
         , yourWins = savedModel.yourWins
+        , notificationsEnabled = savedModel.notificationsEnabled
         , interface = proxyServer
     }
 
@@ -920,6 +930,74 @@ computeYourWins gameState model =
 setPage : Page -> Cmd Msg
 setPage page =
     Task.perform SetPage <| Task.succeed page
+
+
+notificationHandler : Notification.Response -> State -> Model -> ( Model, Cmd Msg )
+notificationHandler response state mdl =
+    -- TODO
+    let
+        model =
+            { mdl | funnelState = state }
+    in
+    case response of
+        Notification.NoResponse ->
+            model |> withNoCmd
+
+        Notification.AvailableResponse available ->
+            { model | notificationAvailable = Just <| Debug.log "AvailableResponse" available }
+                |> withNoCmd
+
+        Notification.PermissionResponse permission ->
+            let
+                enabled =
+                    case model.notificationPermission of
+                        Nothing ->
+                            permission == PermissionGranted
+
+                        _ ->
+                            model.notificationsEnabled
+            in
+            { model
+                | notificationPermission =
+                    Just <| Debug.log "PermissionResponse" permission
+                , error =
+                    if permission == PermissionDenied then
+                        Just "You denied notification permission. This can only be changed in your brower's settings."
+
+                    else
+                        model.error
+                , notificationsEnabled = enabled
+            }
+                |> withCmd
+                    (if enabled && not model.notificationsEnabled then
+                        notificationSend "Notifications Enabled!"
+
+                     else
+                        Cmd.none
+                    )
+
+        Notification.NotificationResponse notification ->
+            let
+                n =
+                    Debug.log "notification" notification
+            in
+            model |> withNoCmd
+
+        Notification.ErrorResponse s ->
+            { model | error = Just <| "Notification error: " ++ s }
+                |> withNoCmd
+
+
+notificationSend : String -> Cmd Msg
+notificationSend title =
+    Notification.displayNotification title
+        |> notificationCmd
+
+
+notificationCmd : Notification.Message -> Cmd Msg
+notificationCmd message =
+    message
+        |> Notification.send (getCmdPort Notification.moduleName ())
 
 
 socketHandler : Response -> State -> Model -> ( Model, Cmd Msg )
@@ -1413,6 +1491,32 @@ updateInternal msg model =
                         gs.testMode
             }
                 |> withCmd cmd
+
+        SetNotificationsEnabled enabled ->
+            if not enabled then
+                { model | notificationsEnabled = False }
+                    |> withNoCmd
+
+            else
+                case model.notificationPermission of
+                    Nothing ->
+                        model
+                            |> withCmd
+                                (notificationCmd Notification.requestPermission)
+
+                    Just PermissionDenied ->
+                        { model | notificationsEnabled = False }
+                            |> withNoCmd
+
+                    _ ->
+                        { model | notificationsEnabled = enabled }
+                            |> withCmd
+                                (if enabled then
+                                    notificationSend "Notifications Enabled!"
+
+                                 else
+                                    Cmd.none
+                                )
 
         EraseBoard ->
             { model
@@ -2558,6 +2662,34 @@ mainPage bsize model =
                 , disabled <| not model.isLocal && model.isLive
                 ]
                 []
+            , case model.notificationAvailable of
+                Just True ->
+                    let
+                        isDisabled =
+                            model.notificationPermission == Just PermissionDenied
+
+                        theTitle =
+                            if isDisabled then
+                                "Notifications are disabled in the browser. You'll have to fix this in browser settings."
+
+                            else
+                                "Check to use system notifications."
+                    in
+                    span []
+                        [ text " "
+                        , b "Notifications: "
+                        , input
+                            [ type_ "checkbox"
+                            , checked model.notificationsEnabled
+                            , onCheck SetNotificationsEnabled
+                            , disabled isDisabled
+                            , title theTitle
+                            ]
+                            []
+                        ]
+
+                _ ->
+                    text ""
             , text " "
             , button
                 [ onClick NewGame
@@ -3483,6 +3615,7 @@ funnelDict =
     PortFunnels.makeFunnelDict
         [ LocalStorageHandler storageHandler
         , WebSocketHandler socketHandler
+        , NotificationHandler notificationHandler
         ]
         getCmdPort
 

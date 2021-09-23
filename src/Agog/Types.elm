@@ -314,6 +314,7 @@ type alias SavedModel =
     , styleType : StyleType
     , rotate : RotateBoard
     , yourWins : Int
+    , notificationsEnabled : Bool
     }
 
 

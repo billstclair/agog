@@ -14,15 +14,22 @@ module PortFunnel.Notification exposing
     ( Error(..)
     , Message
     , Notification
+    , Permission(..)
     , Response(..)
     , State
+    , commander
     , dismissNotification
     , displayNotification
     , getPermission
+    , initialState
     , isAvailable
     , lookupNotification
+    , moduleDesc
+    , moduleName
     , notificationId
     , notificationOptions
+    , requestPermission
+    , send
     )
 
 {-| PortFunnel interface to the Notification DOM.
@@ -43,6 +50,16 @@ type State
 initialState : State
 initialState =
     State ()
+
+
+{-| Responsible for sending a `CmdResponse` back through the port.
+
+This funnel doesn't initiate any sends, so this function always returns `Cmd.none`.
+
+-}
+commander : (GenericMessage -> Cmd msg) -> Response -> Cmd msg
+commander _ _ =
+    Cmd.none
 
 
 type Permission

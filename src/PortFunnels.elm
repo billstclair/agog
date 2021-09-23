@@ -42,6 +42,7 @@ import PortFunnel
         , StateAccessors
         )
 import PortFunnel.LocalStorage as LocalStorage
+import PortFunnel.Notification as Notification
 import PortFunnel.WebSocket as WebSocket
 
 
@@ -50,6 +51,7 @@ import PortFunnel.WebSocket as WebSocket
 type alias State =
     { storage : LocalStorage.State
     , websocket : WebSocket.State
+    , notification : Notification.State
     }
 
 
@@ -62,6 +64,7 @@ initialState : String -> State
 initialState prefix =
     { storage = LocalStorage.initialState prefix
     , websocket = WebSocket.initialState
+    , notification = Notification.initialState
     }
 
 
@@ -77,6 +80,11 @@ websocketAccessors =
     StateAccessors .websocket (\substate state -> { state | websocket = substate })
 
 
+notificationAccessors : StateAccessors State Notification.State
+notificationAccessors =
+    StateAccessors .notification (\substate state -> { state | notification = substate })
+
+
 {-| A `Funnel` tags a module-specific `FunnelSpec`.
 
 Add a tag here for each funnel module you use.
@@ -85,6 +93,7 @@ Add a tag here for each funnel module you use.
 type Funnel model msg
     = LocalStorageFunnel (FunnelSpec State LocalStorage.State LocalStorage.Message LocalStorage.Response model msg)
     | WebSocketFunnel (FunnelSpec State WebSocket.State WebSocket.Message WebSocket.Response model msg)
+    | NotificationFunnel (FunnelSpec State Notification.State Notification.Message Notification.Response model msg)
 
 
 {-| A `Handler` tags a function to handle responses from one funnel module.
@@ -95,6 +104,7 @@ Add a tag in this type for each funnel module you use.
 type Handler model msg
     = LocalStorageHandler (LocalStorage.Response -> State -> model -> ( model, Cmd msg ))
     | WebSocketHandler (WebSocket.Response -> State -> model -> ( model, Cmd msg ))
+    | NotificationHandler (Notification.Response -> State -> model -> ( model, Cmd msg ))
 
 
 {-| This packages up everything necessary to dispatch for each module.
@@ -115,6 +125,12 @@ handlerToFunnel handler =
             ( WebSocket.moduleName
             , FunnelSpec websocketAccessors WebSocket.moduleDesc WebSocket.commander websocketHandler
                 |> WebSocketFunnel
+            )
+
+        NotificationHandler notificationHandler ->
+            ( Notification.moduleName
+            , FunnelSpec notificationAccessors Notification.moduleDesc Notification.commander notificationHandler
+                |> NotificationFunnel
             )
 
 
@@ -147,6 +163,13 @@ appTrampoline portGetter genericMessage funnel state model =
 
         WebSocketFunnel appFunnel ->
             PortFunnel.appProcess (portGetter WebSocket.moduleName model)
+                genericMessage
+                appFunnel
+                state
+                model
+
+        NotificationFunnel appFunnel ->
+            PortFunnel.appProcess (portGetter Notification.moduleName model)
                 genericMessage
                 appFunnel
                 state

@@ -62,7 +62,7 @@
                args: isAvailable
              };
     } else if (tag == 'getPermission') {
-        return isAvailable({ tag: 'gotPermission',
+        return ifAvailable({ tag: 'gotPermission',
                              args: Notification
                            });
     } else if (tag == 'requestPermission') {
@@ -80,8 +80,8 @@
             newid = id++;
             notifications[newid] = notification;
             notification.onclose = function() { delete notifications[newid] };
-            return isAvailable({ tag: 'notification',
-                                 args: new Notification
+            return ifAvailable({ tag: 'notification',
+                                 args: { id: newid, title: title }
                                });
         }
         else {

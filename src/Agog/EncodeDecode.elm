@@ -186,6 +186,7 @@ encodeSavedModel model =
         , ( "styleType", encodeStyleType model.styleType )
         , ( "rotate", encodeRotateBoard model.rotate )
         , ( "yourWins", JE.int model.yourWins )
+        , ( "notificationsEnabled", JE.bool model.notificationsEnabled )
         ]
 
 
@@ -212,6 +213,7 @@ savedModelDecoder =
         |> optional "styleType" styleTypeDecoder LightStyle
         |> optional "rotate" boardRotateDecoder RotateWhiteDown
         |> optional "yourWins" JD.int 0
+        |> optional "notificationsEnabled" JD.bool False
 
 
 encodePage : Page -> Value
