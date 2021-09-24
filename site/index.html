@@ -16,6 +16,11 @@
     <script type='text/javascript'>
       // It's an application, so it doesn't need a div.
       var app = Elm['Main'].init({ flags: true });
+      var onVisibilityChange = app.ports.onVisibilityChange;
+      document.addEventListener('visibilitychange',
+                                function() {
+                                    onVisibilityChange.send(document.visibilityState == 'visible');
+                                });                                
       var modules = ['LocalStorage'];
       PortFunnel.subscribe(app, {modules: modules});
     </script>

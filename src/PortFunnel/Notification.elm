@@ -88,6 +88,7 @@ type Response
     | AvailableResponse Bool
     | PermissionResponse Permission
     | NotificationResponse Notification
+    | ClickResponse Int
     | ErrorResponse String
 
 
@@ -102,6 +103,7 @@ type Message
     | IsAvailableAnswer Bool
     | GetPermissionAnswer Permission
     | NotificationAnswer { id : Int, title : String, options : Maybe Options }
+    | NotificationClicked Int
     | ErrorAnswer String
 
 
@@ -175,6 +177,7 @@ tags =
     , wasAvailable = "wasAvailable"
     , gotPermission = "gotPermission"
     , notification = "notification"
+    , onClick = "onClick"
     , error = "error"
     }
 
@@ -228,6 +231,9 @@ encode message =
                         ]
             in
             GenericMessage moduleName tags.notification v
+
+        NotificationClicked id ->
+            GenericMessage moduleName tags.onClick <| JE.int id
 
         ErrorAnswer s ->
             GenericMessage moduleName tags.error <| JE.string s
@@ -305,6 +311,14 @@ decode { tag, args } =
             Err _ ->
                 Err "Bad title string from JS code. Shouldn't happen."
 
+    else if tag == tags.onClick then
+        case JD.decodeValue JD.int args of
+            Ok id ->
+                Ok <| NotificationClicked id
+
+            Err _ ->
+                Err "Bad notification ID from JS code. Shouldn't happen."
+
     else if tag == tags.error then
         case JD.decodeValue JD.string args of
             Ok s ->
@@ -340,6 +354,11 @@ process message state =
             ( state
             , NotificationResponse <|
                 Notification { id = id, title = title, options = options }
+            )
+
+        NotificationClicked id ->
+            ( state
+            , ClickResponse id
             )
 
         ErrorAnswer string ->

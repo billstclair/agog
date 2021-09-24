@@ -19,7 +19,7 @@
 ----------------------------------------------------------------------
 
 
-module Main exposing (main)
+port module Main exposing (main)
 
 import Agog.Documentation as Documentation
 import Agog.EncodeDecode as ED
@@ -59,7 +59,7 @@ import Agog.Types as Types
 import Agog.WhichServer as WhichServer
 import Browser exposing (Document, UrlRequest(..))
 import Browser.Dom as Dom exposing (Viewport)
-import Browser.Events as Events
+import Browser.Events as Events exposing (Visibility(..))
 import Browser.Navigation as Navigation exposing (Key)
 import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
@@ -175,6 +175,9 @@ import WebSocketFramework.Types
         )
 
 
+port onVisibilityChange : (Bool -> msg) -> Sub msg
+
+
 type alias ServerInterface =
     WebSocketFramework.Types.ServerInterface GameState Player Message Msg
 
@@ -234,6 +237,7 @@ type alias Model =
     , statisticsTimes : ( Maybe Int, Maybe Int )
     , notificationAvailable : Maybe Bool
     , notificationPermission : Maybe Permission
+    , visible : Bool
 
     -- persistent below here
     , page : Page
@@ -306,6 +310,7 @@ type Msg
     | DelayedAction (Model -> ( Model, Cmd Msg )) Posix
     | SetZone Zone
     | WindowResize Int Int
+    | VisibilityChange Bool
     | HandleUrlRequest UrlRequest
     | HandleUrlChange Url
     | Process Value
@@ -419,6 +424,7 @@ init flags url key =
             , statisticsTimes = ( Nothing, Nothing )
             , notificationAvailable = Nothing
             , notificationPermission = Nothing
+            , visible = True
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -730,10 +736,19 @@ incomingMessage interface message mdl =
                 |> withCmds
                     [ chatCmd
                     , setPage MainPage
+                    , maybeSendNotification False "The game is on!" model
                     ]
 
         LeaveRsp { gameid, player } ->
             let
+                name =
+                    playerName
+                        (Types.otherPlayer model.player)
+                        model
+
+                leftMsg =
+                    name ++ " left"
+
                 model2 =
                     { model
                         | gameid = ""
@@ -744,13 +759,7 @@ incomingMessage interface message mdl =
                                 Nothing
 
                             else
-                                let
-                                    name =
-                                        playerName
-                                            (Types.otherPlayer model.player)
-                                            model
-                                in
-                                Just <| name ++ " left"
+                                Just leftMsg
                     }
             in
             if model.isLocal then
@@ -758,11 +767,16 @@ incomingMessage interface message mdl =
 
             else
                 { model2 | isLive = False }
-                    |> withCmd
-                        (Cmd.none
-                         --WebSocket.makeClose model.serverUrl
-                         --|> webSocketSend
-                        )
+                    |> withCmds
+                        [ if player /= model.player then
+                            maybeSendNotification True leftMsg model2
+
+                          else
+                            Cmd.none
+
+                        --WebSocket.makeClose model.serverUrl
+                        --|> webSocketSend
+                        ]
 
         UpdateRsp { gameid, gameState } ->
             { model
@@ -791,14 +805,22 @@ incomingMessage interface message mdl =
 
                         else
                             ( decoration, NoDecoration )
+
+                    mdl2 =
+                        { model
+                            | gameState = gameState
+                            , decoration = d
+                            , otherDecoration = od2
+                            , yourWins = computeYourWins gameState model
+                        }
                 in
-                { model
-                    | gameState = gameState
-                    , decoration = d
-                    , otherDecoration = od2
-                    , yourWins = computeYourWins gameState model
-                }
-                    |> withNoCmd
+                mdl2
+                    |> withCmd
+                        (maybeSendNotification
+                            False
+                            "It's your turn in AGOG."
+                            mdl2
+                        )
 
             else
                 let
@@ -813,46 +835,66 @@ incomingMessage interface message mdl =
                     |> withNoCmd
 
         ResignRsp { gameid, gameState, player } ->
-            { model
-                | gameState = gameState
-                , decoration = NoDecoration
-                , otherDecoration = NoDecoration
-                , firstSelection = NoDecoration
-                , yourWins =
-                    computeYourWins gameState model
-                , error =
-                    if model.isLocal then
-                        Nothing
-
-                    else if model.player == player then
-                        Just "You resigned."
+            let
+                resignMsg =
+                    if model.player == player then
+                        "You resigned."
 
                     else
-                        Just <| playerName player model ++ " resigned."
-            }
-                |> withNoCmd
+                        playerName player model ++ " resigned."
+
+                mdl2 =
+                    { model
+                        | gameState = gameState
+                        , decoration = NoDecoration
+                        , otherDecoration = NoDecoration
+                        , firstSelection = NoDecoration
+                        , yourWins =
+                            computeYourWins gameState model
+                        , error =
+                            if model.isLocal then
+                                Nothing
+
+                            else
+                                Just resignMsg
+                    }
+            in
+            mdl2 |> withCmd (maybeSendNotification True resignMsg mdl2)
 
         AnotherGameRsp { gameid, gameState, player } ->
-            { model
-                | requestedNew = False
-                , gameState = gameState
-                , decoration = NoDecoration
-                , otherDecoration = NoDecoration
-                , firstSelection = NoDecoration
-                , player = player
-                , error =
+            let
+                ( error, msg ) =
                     if not model.isLocal && not model.requestedNew then
                         let
-                            name =
+                            m =
                                 playerName (Types.otherPlayer player)
                                     { model | gameState = gameState }
+                                    ++ " asked for a new game"
                         in
-                        Just <| name ++ " asked for a new game"
+                        ( Just m, m )
 
                     else
-                        Nothing
-            }
-                |> withNoCmd
+                        ( Nothing, "" )
+
+                mdl2 =
+                    { model
+                        | requestedNew = False
+                        , gameState = gameState
+                        , decoration = NoDecoration
+                        , otherDecoration = NoDecoration
+                        , firstSelection = NoDecoration
+                        , player = player
+                        , error = error
+                    }
+
+                cmd =
+                    if error == Nothing then
+                        Cmd.none
+
+                    else
+                        maybeSendNotification True msg mdl2
+            in
+            mdl2 |> withCmd cmd
 
         GameOverRsp { gameid, gameState } ->
             { model
@@ -903,6 +945,9 @@ incomingMessage interface message mdl =
                     -- Kluge. ElmChat is supposed to do this
                     , Task.attempt (\_ -> Noop) <|
                         Dom.setViewportOf ids.chatOutput 0 1000000
+                    , maybeSendNotification True
+                        ("You got an AGOG chat message from " ++ name)
+                        model
                     ]
 
         _ ->
@@ -915,16 +960,16 @@ computeYourWins gameState model =
         winner =
             gameState.winner
     in
-    Debug.log "  yourWins" <|
-        if
-            (Debug.log "PlayRsp, winner" winner /= NoWinner)
-                && (Debug.log "  model winner" model.gameState.winner == NoWinner)
-                && ((Debug.log "  player" <| Just model.player) == (Debug.log "  winPlayer" <| Types.winPlayer winner))
-        then
-            model.yourWins + 1
+    if
+        (winner /= NoWinner)
+            && (model.gameState.winner == NoWinner)
+            && Just model.player
+            == Types.winPlayer winner
+    then
+        model.yourWins + 1
 
-        else
-            model.yourWins
+    else
+        model.yourWins
 
 
 setPage : Page -> Cmd Msg
@@ -944,7 +989,7 @@ notificationHandler response state mdl =
             model |> withNoCmd
 
         Notification.AvailableResponse available ->
-            { model | notificationAvailable = Just <| Debug.log "AvailableResponse" available }
+            { model | notificationAvailable = Just available }
                 |> withNoCmd
 
         Notification.PermissionResponse permission ->
@@ -970,7 +1015,7 @@ notificationHandler response state mdl =
             }
                 |> withCmd
                     (if enabled && not model.notificationsEnabled then
-                        notificationSend "Notifications Enabled!"
+                        sendNotification "Notifications Enabled!"
 
                      else
                         Cmd.none
@@ -983,13 +1028,34 @@ notificationHandler response state mdl =
             in
             model |> withNoCmd
 
+        Notification.ClickResponse id ->
+            model
+                |> withCmds
+                    [ setPage MainPage
+                    , notificationCmd (Notification.dismissNotification id)
+                    ]
+
         Notification.ErrorResponse s ->
             { model | error = Just <| "Notification error: " ++ s }
                 |> withNoCmd
 
 
-notificationSend : String -> Cmd Msg
-notificationSend title =
+maybeSendNotification : Bool -> String -> Model -> Cmd Msg
+maybeSendNotification ignoreWhoseTurn title model =
+    if
+        model.notificationsEnabled
+            && (ignoreWhoseTurn || model.gameState.whoseTurn == model.player)
+            && not model.isLocal
+            && not model.visible
+    then
+        sendNotification title
+
+    else
+        Cmd.none
+
+
+sendNotification : String -> Cmd Msg
+sendNotification title =
     Notification.displayNotification title
         |> notificationCmd
 
@@ -1512,7 +1578,7 @@ updateInternal msg model =
                         { model | notificationsEnabled = enabled }
                             |> withCmd
                                 (if enabled then
-                                    notificationSend "Notifications Enabled!"
+                                    sendNotification "Notifications Enabled!"
 
                                  else
                                     Cmd.none
@@ -1697,6 +1763,10 @@ updateInternal msg model =
 
         WindowResize w h ->
             { model | windowSize = ( w, h ) }
+                |> withNoCmd
+
+        VisibilityChange visibility ->
+            { model | visible = Debug.log "visible" visibility }
                 |> withNoCmd
 
         HandleUrlRequest request ->
@@ -2125,6 +2195,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Events.onResize WindowResize
+        , onVisibilityChange VisibilityChange -- Browser.Events.onVisibilityChange doesn't work
         , PortFunnels.subscriptions Process model
         , Time.every 900 Tick
         ]

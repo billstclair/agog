@@ -79,7 +79,17 @@
             notification = new Notification(title);
             newid = id++;
             notifications[newid] = notification;
-            notification.onclose = function() { delete notifications[newid] };
+            notification.onclose = function() {
+                delete notifications[newid]
+            };
+            if (isAvailable) {
+                notification.onclick = function(e) {
+                    sub.send({ module: moduleName,
+                               tag: 'onClick',
+                               args: newid
+                             })
+                };
+            }
             return ifAvailable({ tag: 'notification',
                                  args: { id: newid, title: title }
                                });
