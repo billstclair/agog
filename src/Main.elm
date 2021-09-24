@@ -1811,7 +1811,7 @@ updateInternal msg model =
                 |> withNoCmd
 
         VisibilityChange visibility ->
-            { model | visible = Debug.log "visible" visibility }
+            { model | visible = visibility }
                 |> withNoCmd
 
         HandleUrlRequest request ->

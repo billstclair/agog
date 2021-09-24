@@ -13,6 +13,21 @@
   var moduleName = 'Notification';
   var sub;
 
+  var tags =
+      { isAvailable: "isAvailable",
+        getPermission: "getPermission",
+        requestPermission: "requestPermission",
+        sendNotification: "sendNotification",
+        dismissNotification:  "dismissNotification",
+        lookupNotification:  "lookupNotification",
+        wasAvailable:  "wasAvailable",
+        gotPermission:  "gotPermission",
+        notification:  "notification",
+        onClick:  "onClick",
+        error:  "error"
+      }
+
+
   var isAvailable =
       window.Notification != null;
 
@@ -32,7 +47,7 @@
 
     // Let the Elm code know we've started, with an IsAvailableAnswer message
     sub.send({ module: moduleName,
-               tag: "wasAvailable",
+               tag: tags.wasAvailable,
                args : isAvailable
              });
   }
@@ -41,7 +56,7 @@
 
   function returnError(msg) {
       return { moduleName: moduleName,
-               tag: 'error',
+               tag: tags.error,
                args: msg
              }
   }
@@ -56,24 +71,24 @@
   }
 
   function dispatcher(tag, args) {
-    if (tag == 'isAvailable') {
+    if (tag == tags.isAvailable) {
       return { module: moduleName,
-               tag: 'wasAvailable',
+               tag: tags.wasAvailable,
                args: isAvailable
              };
-    } else if (tag == 'getPermission') {
-        return ifAvailable({ tag: 'gotPermission',
+    } else if (tag == tags.getPermission) {
+        return ifAvailable({ tag: tags.gotPermission,
                              args: Notification
                            });
-    } else if (tag == 'requestPermission') {
+    } else if (tag == tags.requestPermission) {
         // This is the old callback version. More compatible.
         Notification.requestPermission(function(res) {
             sub.send({ module: moduleName,
-                       tag: 'gotPermission',
+                       tag: tags.gotPermission,
                        args: res
                      });
         });
-    } else if (tag == 'sendNotification') {
+    } else if (tag == tags.sendNotification) {
         var title = args;
         if (isAvailable) {
             notification = new Notification(title);
@@ -85,19 +100,19 @@
             if (isAvailable) {
                 notification.onclick = function(e) {
                     sub.send({ module: moduleName,
-                               tag: 'onClick',
+                               tag: tags.onClick,
                                args: newid
                              })
                 };
             }
-            return ifAvailable({ tag: 'notification',
+            return ifAvailable({ tag: tag.notification,
                                  args: { id: newid, title: title }
                                });
         }
         else {
             ifAvailable({});
         }
-    } else if (tag == 'dismissNotification') {
+    } else if (tag == tags.dismissNotification) {
         var myid = args;
         var notification = notifications[myid];
         if (notification) {
@@ -105,11 +120,11 @@
             delete notifications[myid];
         } else
             return returnError('Notification does not exist: ' + myid);
-    } else if (tag == 'lookupNotification') {
+    } else if (tag == tags.lookupNotification) {
         var myid = args;
         var notification = notifications[myid];
         if (notification) {
-            ifAvailable({ tag: 'notification',
+            ifAvailable({ tag: tags.notification,
                           args: { id: id, title: notification.title }
                         });
         } else {
