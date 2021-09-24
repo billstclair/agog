@@ -17,6 +17,10 @@
       // It's an application, so it doesn't need a div.
       var app = Elm['Main'].init({ flags: true });
       var onVisibilityChange = app.ports.onVisibilityChange;
+      app.ports.playAudio.subscribe(function(file) {
+          var audio = new Audio(file);
+          audio.play();
+      });
       document.addEventListener('visibilitychange',
                                 function() {
                                     onVisibilityChange.send(document.visibilityState == 'visible');
@@ -32,7 +36,7 @@
         <p><a href='./'>A•G•O•G</a> is a board game designed by Christopher St. Clair.
         <p style='color: red; font-size: 120%;'>A•G•O•G requires a JavaScript-enabled browser to get more than this static page.</p>
         <p>&copy; 2019-2021 Bill St. Clair<br/>
-          <a href='https://github.com/billstclair/agog>GitHub</a></p>
+          <a href='https://github.com/billstclair/agog'>GitHub</a></p>
       </div>
     </center>
    </noscript>

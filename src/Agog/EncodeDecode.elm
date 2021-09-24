@@ -187,6 +187,7 @@ encodeSavedModel model =
         , ( "rotate", encodeRotateBoard model.rotate )
         , ( "yourWins", JE.int model.yourWins )
         , ( "notificationsEnabled", JE.bool model.notificationsEnabled )
+        , ( "soundEnabled", JE.bool model.soundEnabled )
         ]
 
 
@@ -214,6 +215,7 @@ savedModelDecoder =
         |> optional "rotate" boardRotateDecoder RotateWhiteDown
         |> optional "yourWins" JD.int 0
         |> optional "notificationsEnabled" JD.bool False
+        |> optional "soundEnabled" JD.bool False
 
 
 encodePage : Page -> Value

@@ -59,7 +59,7 @@ import Agog.Types as Types
 import Agog.WhichServer as WhichServer
 import Browser exposing (Document, UrlRequest(..))
 import Browser.Dom as Dom exposing (Viewport)
-import Browser.Events as Events exposing (Visibility(..))
+import Browser.Events as Events
 import Browser.Navigation as Navigation exposing (Key)
 import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
@@ -73,9 +73,11 @@ import Html
         ( Attribute
         , Html
         , a
+        , audio
         , blockquote
         , button
         , div
+        , embed
         , fieldset
         , h1
         , h2
@@ -88,6 +90,7 @@ import Html
         , option
         , p
         , select
+        , source
         , span
         , table
         , td
@@ -100,6 +103,7 @@ import Html.Attributes as Attributes
         ( align
         , alt
         , autofocus
+        , autoplay
         , checked
         , class
         , cols
@@ -178,6 +182,9 @@ import WebSocketFramework.Types
 port onVisibilityChange : (Bool -> msg) -> Sub msg
 
 
+port playAudio : String -> Cmd msg
+
+
 type alias ServerInterface =
     WebSocketFramework.Types.ServerInterface GameState Player Message Msg
 
@@ -238,6 +245,7 @@ type alias Model =
     , notificationAvailable : Maybe Bool
     , notificationPermission : Maybe Permission
     , visible : Bool
+    , soundFile : Maybe String
 
     -- persistent below here
     , page : Page
@@ -257,6 +265,7 @@ type alias Model =
     , rotate : RotateBoard
     , yourWins : Int
     , notificationsEnabled : Bool
+    , soundEnabled : Bool
     }
 
 
@@ -293,6 +302,7 @@ type Msg
     | Disconnect
     | SetTestMode Bool
     | SetNotificationsEnabled Bool
+    | SetSoundEnabled Bool
     | EraseBoard
     | InitialBoard
     | SetTestClear Bool
@@ -307,6 +317,7 @@ type Msg
     | ChatUpdate ChatSettings (Cmd Msg)
     | ChatSend String ChatSettings
     | ChatClear
+    | PlaySound String
     | DelayedAction (Model -> ( Model, Cmd Msg )) Posix
     | SetZone Zone
     | WindowResize Int Int
@@ -425,6 +436,7 @@ init flags url key =
             , notificationAvailable = Nothing
             , notificationPermission = Nothing
             , visible = True
+            , soundFile = Nothing
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -444,6 +456,7 @@ init flags url key =
             , rotate = RotateWhiteDown
             , yourWins = 0
             , notificationsEnabled = False
+            , soundEnabled = False
             }
     in
     model
@@ -608,6 +621,7 @@ modelToSavedModel model =
     , rotate = model.rotate
     , yourWins = model.yourWins
     , notificationsEnabled = model.notificationsEnabled
+    , soundEnabled = model.soundEnabled
     }
 
 
@@ -630,6 +644,7 @@ savedModelToModel savedModel model =
         , rotate = savedModel.rotate
         , yourWins = savedModel.yourWins
         , notificationsEnabled = savedModel.notificationsEnabled
+        , soundEnabled = savedModel.soundEnabled
         , interface = proxyServer
     }
 
@@ -788,6 +803,20 @@ incomingMessage interface message mdl =
                 |> withNoCmd
 
         PlayRsp { gameid, gameState, decoration } ->
+            let
+                sound =
+                    if gameState.whoseTurn /= model.gameState.whoseTurn then
+                        Task.perform PlaySound <| Task.succeed "sounds/move.mp3"
+
+                    else if
+                        (gameState.jumps /= [])
+                            && (gameState.jumps /= model.gameState.jumps)
+                    then
+                        Task.perform PlaySound <| Task.succeed "sounds/jump.mp3"
+
+                    else
+                        Cmd.none
+            in
             if not model.isLocal then
                 let
                     ( idx, od ) =
@@ -815,12 +844,13 @@ incomingMessage interface message mdl =
                         }
                 in
                 mdl2
-                    |> withCmd
-                        (maybeSendNotification
+                    |> withCmds
+                        [ maybeSendNotification
                             False
                             "It's your turn in AGOG."
                             mdl2
-                        )
+                        , sound
+                        ]
 
             else
                 let
@@ -832,7 +862,7 @@ incomingMessage interface message mdl =
                     , decoration = newDecoration
                     , firstSelection = firstSelection
                 }
-                    |> withNoCmd
+                    |> withCmd sound
 
         ResignRsp { gameid, gameState, player } ->
             let
@@ -1233,6 +1263,9 @@ update msg model =
                 ChatClear ->
                     False
 
+                PlaySound _ ->
+                    False
+
                 DelayedAction _ _ ->
                     False
 
@@ -1584,6 +1617,10 @@ updateInternal msg model =
                                     Cmd.none
                                 )
 
+        SetSoundEnabled bool ->
+            { model | soundEnabled = bool }
+                |> withNoCmd
+
         EraseBoard ->
             { model
                 | gameState =
@@ -1749,6 +1786,14 @@ updateInternal msg model =
             in
             { model | chatSettings = chatSettings }
                 |> withCmd chatCmd
+
+        PlaySound file ->
+            if not model.soundEnabled then
+                model |> withNoCmd
+
+            else
+                { model | soundFile = Just file }
+                    |> withCmd (playAudio file)
 
         DelayedAction updater time ->
             updater { model | time = time }
@@ -2761,6 +2806,14 @@ mainPage bsize model =
 
                 _ ->
                     text ""
+            , text " "
+            , b "Sound: "
+            , input
+                [ type_ "checkbox"
+                , checked model.soundEnabled
+                , onCheck SetSoundEnabled
+                ]
+                []
             , text " "
             , button
                 [ onClick NewGame
