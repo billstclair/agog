@@ -16,17 +16,32 @@
     <script type='text/javascript'>
       // It's an application, so it doesn't need a div.
       var app = Elm['Main'].init({ flags: true });
-      var onVisibilityChange = app.ports.onVisibilityChange;
-      app.ports.playAudio.subscribe(function(file) {
-          var audio = new Audio(file);
-          audio.play();
-      });
-      document.addEventListener('visibilitychange',
-                                function() {
-                                    onVisibilityChange.send(document.visibilityState == 'visible');
-                                });                                
+
       var modules = ['LocalStorage'];
       PortFunnel.subscribe(app, {modules: modules});
+
+      var onVisibilityChange = app.ports.onVisibilityChange;
+      document.addEventListener(
+          'visibilitychange',
+          function() {
+              onVisibilityChange.send(document.visibilityState == 'visible');
+          }
+      );                                
+
+      var sounds = [];
+      var files = ['jump.mp3', 'move.mp3'];
+      for (var i = 0; i < files.length; i++) {
+          var file = 'sounds/' + files[i];
+          sounds[file] = new Audio(file);
+      }
+      app.ports.playAudio.subscribe(function(file) {
+          var audio = sounds.file;
+          if (!audio) {
+              audio = new Audio(file);
+              sounds[file] = audio;
+          }
+          audio.play();
+      });
     </script>
 
    <noscript>
