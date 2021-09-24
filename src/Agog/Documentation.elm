@@ -189,6 +189,10 @@ At night, you may prefer to display the screen in "Dark Mode". Check that box to
 
 You may choose to rotate the board by 180 degrees, if you're playing black, (or black has the move in local mode). Do so by choosing the "player down" radio button instead of "white down" for "Rotate".
 
+If notifications are available in your browser (and they currently are NOT available in mobile browsers), there will be a "Notifications" check-box. When you check it for the first time, your browser will ask you whether to allow notifications. If you confirm, then notifications will be shown when your web browser tab is not current, and the other player does something that you should know about (e.g. it's now your turn). If the checkbox is unchecked and disabled, that means that you said not to allow notifications the last time you were asked. You must use your browser's settings to re-enable this.
+
+If you check the "Sound" checkbox, you will hear a sound when pieces move. The sound for an intermediate jump in a sequence is different from the move or last jump sound. In iOS, playing this sound will turn off music; choose accordingly.
+
 Your game state is remembered in your browser's "Local Storage" database. If you refresh the screen with a game in progress, it will attempt to reconnect to the server and resume the game.
 
 Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local").
