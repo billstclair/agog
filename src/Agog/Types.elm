@@ -11,7 +11,8 @@
 
 
 module Agog.Types exposing
-    ( Choice(..)
+    ( ChatSettings
+    , Choice(..)
     , ChooseMoveOption(..)
     , Color(..)
     , Decoration(..)
@@ -19,6 +20,8 @@ module Agog.Types exposing
     , JumpSequence
     , Message(..)
     , MovesOrJumps(..)
+    , NamedGame
+    , NamedGameDict
     , NewBoard
     , OneCorruptibleJump
     , OneJump
@@ -38,6 +41,7 @@ module Agog.Types exposing
     , RowCol
     , SavedModel
     , Score
+    , ServerInterface
     , ServerState
     , Settings
     , Socket
@@ -71,6 +75,7 @@ module Agog.Types exposing
 
 import Array exposing (Array)
 import Dict exposing (Dict)
+import ElmChat
 import Set exposing (Set)
 import WebSocketFramework.Types
     exposing
@@ -706,3 +711,32 @@ statisticsKeyOrder =
     , .totalPublicConnections
     , .activeConnections
     ]
+
+
+type alias ServerInterface msg =
+    WebSocketFramework.Types.ServerInterface GameState Player Message msg
+
+
+type alias ChatSettings msg =
+    ElmChat.Settings msg
+
+
+type alias NamedGame msg =
+    { gamename : String
+    , gameState : GameState
+    , isLocal : Bool
+    , serverUrl : String
+    , otherPlayerid : PlayerId
+    , chatSettings : ChatSettings msg
+    , player : Player
+    , playerid : PlayerId
+    , isLive : Bool
+    , yourWins : Int
+
+    -- Not persistent
+    , interface : ServerInterface msg
+    }
+
+
+type alias NamedGameDict msg =
+    Dict String (NamedGame msg)

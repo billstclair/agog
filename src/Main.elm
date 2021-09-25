@@ -186,7 +186,7 @@ port playAudio : String -> Cmd msg
 
 
 type alias ServerInterface =
-    WebSocketFramework.Types.ServerInterface GameState Player Message Msg
+    Types.ServerInterface Msg
 
 
 type ConnectionReason
@@ -199,7 +199,7 @@ type ConnectionReason
 
 
 type alias ChatSettings =
-    ElmChat.Settings Msg
+    Types.ChatSettings Msg
 
 
 type AskYesNo a

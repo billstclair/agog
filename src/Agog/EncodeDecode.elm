@@ -16,6 +16,7 @@ module Agog.EncodeDecode exposing
     , encodeGameState
     , encodeMessageForLog
     , encodeMoves
+    , encodeNamedGame
     , encodeOneMove
     , encodeSavedModel
     , frameworkToPublicGame
@@ -25,6 +26,7 @@ module Agog.EncodeDecode exposing
     , messageEncoder
     , messageEncoderWithPrivate
     , movesDecoder
+    , namedGameDecoder
     , newBoardToString
     , oneMoveDecoder
     , oneMoveToPrettyString
@@ -40,7 +42,8 @@ module Agog.EncodeDecode exposing
 import Agog.NewBoard as NewBoard exposing (rc)
 import Agog.Types as Types
     exposing
-        ( Choice(..)
+        ( ChatSettings
+        , Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
         , Decoration(..)
@@ -48,6 +51,8 @@ import Agog.Types as Types
         , JumpSequence
         , Message(..)
         , MovesOrJumps(..)
+        , NamedGame
+        , NamedGameDict
         , NewBoard
         , OneCorruptibleJump
         , OneJump
@@ -67,6 +72,7 @@ import Agog.Types as Types
         , RowCol
         , SavedModel
         , Score
+        , ServerInterface
         , Settings
         , Socket
         , StyleType(..)
@@ -78,8 +84,9 @@ import Agog.Types as Types
         )
 import Array exposing (Array)
 import Dict exposing (Dict)
+import ElmChat
 import Json.Decode as JD exposing (Decoder)
-import Json.Decode.Pipeline as DP exposing (optional, required)
+import Json.Decode.Pipeline as DP exposing (hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
 import Set exposing (Set)
 import WebSocketFramework exposing (decodePlist, unknownMessage)
@@ -2459,3 +2466,45 @@ messageDecoder ( reqrsp, plist ) =
 
                 _ ->
                     Err <| "Unknown Rsp: " ++ msg
+
+
+encodeNamedGame : NamedGame msg -> Value
+encodeNamedGame game =
+    JE.object
+        [ ( "gamename", JE.string game.gamename )
+        , ( "gameState", encodeGameState True game.gameState )
+        , ( "isLocal", JE.bool game.isLocal )
+        , ( "serverUrl", JE.string game.serverUrl )
+        , ( "otherPlayerid", JE.string game.otherPlayerid )
+        , ( "chatSettings", ElmChat.settingsEncoder game.chatSettings )
+        , ( "player", encodePlayer game.player )
+        , ( "playerid", JE.string game.playerid )
+        , ( "isLive", JE.bool game.isLive )
+        , ( "yourWins", JE.int game.yourWins )
+        ]
+
+
+namedGameDecoder : (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Decoder (NamedGame msg)
+namedGameDecoder chatUpdate proxyServer =
+    JD.succeed NamedGame
+        |> required "gamename" JD.string
+        |> required "gameState" gameStateDecoder
+        |> required "isLocal" JD.bool
+        |> required "serverUrl" JD.string
+        |> required "otherPlayerid" JD.string
+        |> required "chatSettings" (ElmChat.settingsDecoder chatUpdate)
+        |> required "player" playerDecoder
+        |> required "playerid" JD.string
+        |> required "isLive" JD.bool
+        |> required "yourWins" JD.int
+        |> hardcoded proxyServer
+
+
+encodeNamedGameDict : NamedGameDict msg -> Value
+encodeNamedGameDict dict =
+    JE.dict identity encodeNamedGame dict
+
+
+namedGameDictDecoder : (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Decoder (NamedGameDict msg)
+namedGameDictDecoder chatUpdate proxyServer =
+    JD.dict <| namedGameDecoder chatUpdate proxyServer
