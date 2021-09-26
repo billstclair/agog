@@ -82,6 +82,7 @@ import Agog.Types as Types
         , WinReason(..)
         , Winner(..)
         )
+import Agog.WhichServer as WhichServer
 import Array exposing (Array)
 import Dict exposing (Dict)
 import ElmChat
@@ -175,54 +176,149 @@ boardRotateDecoder =
             )
 
 
-encodeSavedModel : SavedModel -> Value
+encodeTestMode : TestMode -> Value
+encodeTestMode { piece, clear } =
+    if not clear then
+        encodePiece piece
+
+    else
+        JE.object
+            [ ( "piece", encodePiece piece )
+            , ( "clear", JE.bool clear )
+            ]
+
+
+testModeDecoder : Decoder TestMode
+testModeDecoder =
+    JD.oneOf
+        [ pieceDecoder
+            |> JD.andThen
+                (\piece ->
+                    JD.succeed
+                        { piece = piece
+                        , clear = False
+                        }
+                )
+        , JD.succeed TestMode
+            |> required "piece" pieceDecoder
+            |> required "clear" JD.bool
+        ]
+
+
+encodeSavedModel : SavedModel msg -> Value
 encodeSavedModel model =
     JE.object
-        [ ( "page", encodePage model.page )
+        [ ( "game", encodeNamedGame model.game )
+        , ( "page", encodePage model.page )
         , ( "decoration", encodeDecoration model.decoration )
         , ( "otherDecoration", encodeDecoration model.otherDecoration )
         , ( "firstSelection", encodeDecoration model.firstSelection )
         , ( "chooseFirst", encodePlayer model.chooseFirst )
-        , ( "player", encodePlayer model.player )
-        , ( "gameState", encodeGameState True model.gameState )
-        , ( "isLocal", JE.bool model.isLocal )
-        , ( "isLive", JE.bool model.isLive )
+        , ( "lastTestMode", encodeMaybe encodeTestMode model.lastTestMode )
         , ( "gameid", JE.string model.gameid )
-        , ( "playerid", JE.string model.playerid )
         , ( "settings", encodeSettings model.settings )
         , ( "styleType", encodeStyleType model.styleType )
         , ( "rotate", encodeRotateBoard model.rotate )
-        , ( "yourWins", JE.int model.yourWins )
         , ( "notificationsEnabled", JE.bool model.notificationsEnabled )
         , ( "soundEnabled", JE.bool model.soundEnabled )
         ]
 
 
-decodeSavedModel : Value -> Result JD.Error SavedModel
-decodeSavedModel value =
-    JD.decodeValue savedModelDecoder value
+decodeSavedModel : ChatSettings msg -> (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Value -> Result JD.Error (SavedModel msg)
+decodeSavedModel chatSettings chatUpdate proxyServer value =
+    JD.decodeValue (savedModelDecoder chatSettings chatUpdate proxyServer) value
 
 
-savedModelDecoder : Decoder SavedModel
-savedModelDecoder =
-    JD.succeed SavedModel
-        |> optional "page" pageDecoder MainPage
-        |> required "decoration" decorationDecoder
-        |> optional "otherDecoration" decorationDecoder NoDecoration
-        |> required "firstSelection" decorationDecoder
-        |> required "chooseFirst" playerDecoder
-        |> required "player" playerDecoder
-        |> required "gameState" gameStateDecoder
-        |> optional "isLocal" JD.bool False
-        |> optional "isLive" JD.bool False
-        |> optional "gameid" JD.string ""
-        |> optional "playerid" JD.string ""
-        |> optional "settings" settingsDecoder Types.emptySettings
-        |> optional "styleType" styleTypeDecoder LightStyle
-        |> optional "rotate" boardRotateDecoder RotateWhiteDown
-        |> optional "yourWins" JD.int 0
-        |> optional "notificationsEnabled" JD.bool False
-        |> optional "soundEnabled" JD.bool False
+type alias OldSavedModel =
+    { page : Page
+    , decoration : Decoration
+    , otherDecoration : Decoration
+    , firstSelection : Decoration
+    , chooseFirst : Player
+    , player : Player
+    , gameState : GameState
+    , isLocal : Bool
+    , isLive : Bool
+    , gameid : String
+    , playerid : String
+    , settings : Settings
+    , styleType : StyleType
+    , rotate : RotateBoard
+    , yourWins : Int
+    , notificationsEnabled : Bool
+    , soundEnabled : Bool
+    }
+
+
+savedModelDecoder : ChatSettings msg -> (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Decoder (SavedModel msg)
+savedModelDecoder chatSettings chatUpdate proxyServer =
+    JD.oneOf
+        [ JD.succeed SavedModel
+            |> required "game" (namedGameDecoder chatUpdate proxyServer)
+            |> optional "page" pageDecoder MainPage
+            |> required "decoration" decorationDecoder
+            |> optional "otherDecoration" decorationDecoder NoDecoration
+            |> required "firstSelection" decorationDecoder
+            |> required "chooseFirst" playerDecoder
+            |> optional "lastTestMode" (JD.nullable testModeDecoder) Nothing
+            |> optional "gameid" JD.string ""
+            |> optional "settings" settingsDecoder Types.emptySettings
+            |> optional "styleType" styleTypeDecoder LightStyle
+            |> optional "rotate" boardRotateDecoder RotateWhiteDown
+            |> optional "notificationsEnabled" JD.bool False
+            |> optional "soundEnabled" JD.bool False
+        , JD.succeed OldSavedModel
+            |> optional "page" pageDecoder MainPage
+            |> required "decoration" decorationDecoder
+            |> optional "otherDecoration" decorationDecoder NoDecoration
+            |> required "firstSelection" decorationDecoder
+            |> required "chooseFirst" playerDecoder
+            |> required "player" playerDecoder
+            |> required "gameState" gameStateDecoder
+            |> optional "isLocal" JD.bool False
+            |> optional "isLive" JD.bool False
+            |> optional "gameid" JD.string ""
+            |> optional "playerid" JD.string ""
+            |> optional "settings" settingsDecoder Types.emptySettings
+            |> optional "styleType" styleTypeDecoder LightStyle
+            |> optional "rotate" boardRotateDecoder RotateWhiteDown
+            |> optional "yourWins" JD.int 0
+            |> optional "notificationsEnabled" JD.bool False
+            |> optional "soundEnabled" JD.bool False
+            |> JD.andThen
+                (\{ page, decoration, otherDecoration, firstSelection, chooseFirst, player, gameState, isLocal, isLive, gameid, playerid, yourWins, settings, styleType, rotate, notificationsEnabled, soundEnabled } ->
+                    let
+                        game =
+                            NamedGame "default"
+                                gameState
+                                isLocal
+                                WhichServer.serverUrl
+                                ""
+                                chatSettings
+                                player
+                                playerid
+                                isLive
+                                yourWins
+                                True
+                                proxyServer
+                    in
+                    SavedModel
+                        game
+                        page
+                        decoration
+                        otherDecoration
+                        firstSelection
+                        chooseFirst
+                        Nothing
+                        gameid
+                        settings
+                        styleType
+                        rotate
+                        notificationsEnabled
+                        soundEnabled
+                        |> JD.succeed
+                )
+        ]
 
 
 encodePage : Page -> Value
@@ -498,21 +594,6 @@ intPairDecoder =
                     _ ->
                         JD.fail "Wrong length Int pair"
             )
-
-
-encodeTestMode : TestMode -> Value
-encodeTestMode { piece, clear } =
-    JE.object
-        [ ( "piece", encodePiece piece )
-        , ( "clear", JE.bool clear )
-        ]
-
-
-testModeDecoder : Decoder TestMode
-testModeDecoder =
-    JD.succeed TestMode
-        |> required "piece" pieceDecoder
-        |> required "clear" JD.bool
 
 
 boolToString : Bool -> String
@@ -2497,6 +2578,8 @@ namedGameDecoder chatUpdate proxyServer =
         |> required "playerid" JD.string
         |> required "isLive" JD.bool
         |> required "yourWins" JD.int
+        -- interfaceIsProxy
+        |> hardcoded True
         |> hardcoded proxyServer
 
 

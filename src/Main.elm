@@ -34,6 +34,8 @@ import Agog.Types as Types
         , GameState
         , Message(..)
         , MovesOrJumps(..)
+        , NamedGame
+        , NamedGameDict
         , NewBoard
         , OneMove
         , Page(..)
@@ -223,17 +225,15 @@ chooseMoveOptionsUINo =
 
 type alias Model =
     { tick : Posix
-    , serverUrl : String
-    , interface : ServerInterface
-    , interfaceIsProxy : Bool
+
+    -- game & gameDict will eventually be persisted separately from Model
+    , gameDict : NamedGameDict Msg
     , connectionReason : ConnectionReason
     , funnelState : State
-    , otherPlayerid : PlayerId
     , key : Key
     , windowSize : ( Int, Int )
     , started : Bool --True when persistent storage is available
     , error : Maybe String
-    , chatSettings : ChatSettings
     , publicGames : List PublicGame
     , time : Posix
     , requestedNew : Bool
@@ -248,22 +248,17 @@ type alias Model =
     , soundFile : Maybe String
 
     -- persistent below here
+    , game : NamedGame Msg
     , page : Page
     , decoration : Decoration
     , otherDecoration : Decoration
     , firstSelection : Decoration
     , chooseFirst : Player
-    , player : Player
-    , gameState : GameState
-    , isLocal : Bool
     , lastTestMode : Maybe TestMode
     , gameid : String
-    , playerid : PlayerId
-    , isLive : Bool
     , settings : Settings
     , styleType : StyleType
     , rotate : RotateBoard
-    , yourWins : Int
     , notificationsEnabled : Bool
     , soundEnabled : Bool
     }
@@ -272,10 +267,13 @@ type alias Model =
 isPlaying : Model -> Bool
 isPlaying model =
     let
+        game =
+            model.game
+
         { white, black } =
-            model.gameState.players
+            game.gameState.players
     in
-    model.isLive && white /= "" && black /= ""
+    game.isLive && white /= "" && black /= ""
 
 
 type Msg
@@ -404,9 +402,28 @@ updateChatAttributes bsize styleType settings =
     }
 
 
-initialChatSettings : Style -> ChatSettings
-initialChatSettings style =
+initialChatSettings : ChatSettings
+initialChatSettings =
     ElmChat.makeSettings ids.chatOutput 14 True ChatUpdate
+
+
+initialNamedGame : NamedGame Msg
+initialNamedGame =
+    { gamename = "default"
+    , gameState = Interface.emptyGameState (PlayerNames "" "")
+    , isLocal = False
+    , serverUrl = WhichServer.serverUrl
+    , otherPlayerid = ""
+    , chatSettings = initialChatSettings
+    , player = WhitePlayer
+    , playerid = ""
+    , isLive = False
+    , yourWins = 0
+
+    -- not persistent
+    , interfaceIsProxy = True
+    , interface = proxyServer
+    }
 
 
 init : Value -> url -> Key -> ( Model, Cmd Msg )
@@ -414,17 +431,14 @@ init flags url key =
     let
         model =
             { tick = Time.millisToPosix 0
-            , serverUrl = WhichServer.serverUrl
-            , interface = proxyServer
-            , interfaceIsProxy = True
+            , game = initialNamedGame
+            , gameDict = Dict.empty
             , connectionReason = NoConnection
             , funnelState = initialFunnelState
-            , otherPlayerid = ""
             , key = key
             , windowSize = ( 0, 0 )
             , started = False
             , error = Nothing
-            , chatSettings = initialChatSettings (Types.typeToStyle LightStyle)
             , publicGames = []
             , time = Time.millisToPosix 0
             , requestedNew = False
@@ -446,15 +460,9 @@ init flags url key =
             , otherDecoration = NoDecoration
             , firstSelection = NoDecoration
             , chooseFirst = WhitePlayer
-            , player = WhitePlayer
-            , gameState = Interface.emptyGameState (PlayerNames "" "")
-            , isLocal = False
             , gameid = ""
-            , playerid = ""
-            , isLive = False
             , settings = Types.emptySettings
             , rotate = RotateWhiteDown
-            , yourWins = 0
             , notificationsEnabled = False
             , soundEnabled = False
             }
@@ -542,14 +550,18 @@ handleGetResponse key value model =
 
             Ok settings ->
                 let
+                    game =
+                        model.game
+
                     chatSettings =
                         { settings
                             | id = ids.chatOutput
-                            , zone = model.chatSettings.zone
+                            , zone = game.chatSettings.zone
                         }
                 in
                 { model
-                    | chatSettings = chatSettings
+                    | game =
+                        { game | chatSettings = chatSettings }
                 }
                     |> withCmd (ElmChat.restoreScroll chatSettings)
 
@@ -558,7 +570,10 @@ handleGetResponse key value model =
             cmd =
                 get pk.chat
         in
-        case Debug.log "decodeSavedModel" <| ED.decodeSavedModel value of
+        case
+            Debug.log "decodeSavedModel" <|
+                ED.decodeSavedModel initialChatSettings ChatUpdate proxyServer value
+        of
             Err e ->
                 model |> withCmd cmd
 
@@ -567,20 +582,23 @@ handleGetResponse key value model =
                     model2 =
                         savedModelToModel savedModel model
 
+                    game2 =
+                        model2.game
+
                     ( model3, cmd2 ) =
-                        if not model2.isLocal && model2.isLive && model2.playerid /= "" then
+                        if not game2.isLocal && game2.isLive && game2.playerid /= "" then
                             model2
                                 |> webSocketConnect UpdateConnection
 
-                        else if not model2.isLocal && model2.page == PublicPage then
+                        else if not game2.isLocal && model2.page == PublicPage then
                             { model2 | gameid = "" }
                                 |> webSocketConnect PublicGamesConnection
 
-                        else if not model2.isLocal && model2.page == StatisticsPage then
+                        else if not game2.isLocal && model2.page == StatisticsPage then
                             { model2 | gameid = "" }
                                 |> webSocketConnect StatisticsConnection
 
-                        else if model2.isLocal then
+                        else if game2.isLocal then
                             { model2 | gameid = "" }
                                 |> withCmd (initialNewReqCmd model2)
 
@@ -599,53 +617,44 @@ initialNewReqCmd model =
         NewReq
             { initialNewReqBody
                 | restoreState =
-                    Just model.gameState
+                    Just model.game.gameState
             }
 
 
-modelToSavedModel : Model -> SavedModel
+modelToSavedModel : Model -> SavedModel Msg
 modelToSavedModel model =
-    { page = model.page
+    { game = model.game
+    , page = model.page
     , decoration = model.decoration
     , otherDecoration = model.otherDecoration
     , firstSelection = model.firstSelection
     , chooseFirst = model.chooseFirst
-    , player = model.player
-    , gameState = model.gameState
-    , isLocal = model.isLocal
-    , isLive = model.isLive
+    , lastTestMode = model.lastTestMode
     , gameid = model.gameid
-    , playerid = model.playerid
     , settings = model.settings
     , styleType = model.styleType
     , rotate = model.rotate
-    , yourWins = model.yourWins
     , notificationsEnabled = model.notificationsEnabled
     , soundEnabled = model.soundEnabled
     }
 
 
-savedModelToModel : SavedModel -> Model -> Model
+savedModelToModel : SavedModel Msg -> Model -> Model
 savedModelToModel savedModel model =
     { model
-        | page = savedModel.page
+        | game = savedModel.game
+        , page = savedModel.page
         , decoration = savedModel.decoration
         , otherDecoration = savedModel.otherDecoration
         , firstSelection = savedModel.firstSelection
         , chooseFirst = savedModel.chooseFirst
-        , player = savedModel.player
-        , gameState = savedModel.gameState
-        , isLocal = savedModel.isLocal
-        , isLive = savedModel.isLive
+        , lastTestMode = savedModel.lastTestMode
         , gameid = savedModel.gameid
-        , playerid = savedModel.playerid
         , settings = savedModel.settings
         , styleType = savedModel.styleType
         , rotate = savedModel.rotate
-        , yourWins = savedModel.yourWins
         , notificationsEnabled = savedModel.notificationsEnabled
         , soundEnabled = savedModel.soundEnabled
-        , interface = proxyServer
     }
 
 
@@ -653,7 +662,7 @@ playerName : Player -> Model -> String
 playerName player model =
     let
         players =
-            model.gameState.players
+            model.game.gameState.players
     in
     case player of
         WhitePlayer ->
@@ -666,9 +675,16 @@ playerName player model =
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
 incomingMessage interface message mdl =
     let
+        g =
+            mdl.game
+
+        game =
+            -- This is where the state for local mode gets preserved.
+            { g | interface = interface }
+
         model =
             { mdl
-                | interface = interface
+                | game = game
                 , reallyClearStorage = False
             }
 
@@ -679,22 +695,25 @@ incomingMessage interface message mdl =
         NewRsp { gameid, playerid, player, name, gameState } ->
             let
                 ( chatSettings, chatCmd ) =
-                    clearChatSettings True model.chatSettings
+                    clearChatSettings True game.chatSettings
             in
             { model
                 | gameid = gameid
-                , playerid = playerid
-                , player = player
-                , isLive = True
                 , connectionReason = JoinGameConnection
-                , gameState = gameState
                 , decoration = gameState.private.decoration
-                , yourWins = 0
-                , chatSettings = chatSettings
+                , game =
+                    { game
+                        | gameState = gameState
+                        , chatSettings = chatSettings
+                        , player = player
+                        , playerid = playerid
+                        , isLive = True
+                        , yourWins = 0
+                    }
             }
                 |> withCmds
                     [ chatCmd
-                    , if not model.isLocal then
+                    , if not game.isLocal then
                         Cmd.none
 
                       else if player == WhitePlayer then
@@ -709,17 +728,15 @@ incomingMessage interface message mdl =
         JoinRsp { gameid, playerid, player, gameState } ->
             let
                 ( chatSettings, chatCmd ) =
-                    clearChatSettings True model.chatSettings
+                    clearChatSettings True game.chatSettings
 
-                model2 =
-                    { model
+                game2 =
+                    { game
                         | gameState = gameState
                         , isLive = True
-                        , connectionReason = NoConnection
-                        , decoration = gameState.private.decoration
                         , player =
                             if playerid == Nothing then
-                                model.player
+                                game.player
 
                             else
                                 player
@@ -727,9 +744,9 @@ incomingMessage interface message mdl =
                         , chatSettings = chatSettings
                     }
 
-                model3 =
-                    if model2.isLocal then
-                        { model2
+                game3 =
+                    if game2.isLocal then
+                        { game2
                             | otherPlayerid =
                                 case playerid of
                                     Just p ->
@@ -742,12 +759,16 @@ incomingMessage interface message mdl =
                     else
                         case playerid of
                             Nothing ->
-                                model2
+                                game2
 
                             Just pid ->
-                                { model2 | playerid = pid }
+                                { game2 | playerid = pid }
             in
-            model3
+            { model
+                | game = game3
+                , connectionReason = NoConnection
+                , decoration = gameState.private.decoration
+            }
                 |> withCmds
                     [ chatCmd
                     , setPage MainPage
@@ -758,44 +779,49 @@ incomingMessage interface message mdl =
             let
                 name =
                     playerName
-                        (Types.otherPlayer model.player)
+                        (Types.otherPlayer game.player)
                         model
 
                 leftMsg =
                     name ++ " left"
 
+                game2 =
+                    { game
+                        | playerid = ""
+                        , otherPlayerid = ""
+                    }
+
                 model2 =
                     { model
-                        | gameid = ""
-                        , playerid = ""
-                        , otherPlayerid = ""
+                        | game = game2
+                        , gameid = ""
                         , error =
-                            if player == model.player then
+                            if player == game2.player then
                                 Nothing
 
                             else
                                 Just leftMsg
                     }
             in
-            if model.isLocal then
+            if game2.isLocal then
                 model2 |> withNoCmd
 
             else
-                { model2 | isLive = False }
+                { model2 | game = { game2 | isLive = False } }
                     |> withCmds
-                        [ if player /= model.player then
+                        [ if player /= game2.player then
                             maybeSendNotification True leftMsg model2
 
                           else
                             Cmd.none
 
-                        --WebSocket.makeClose model.serverUrl
+                        --WebSocket.makeClose game.serverUrl
                         --|> webSocketSend
                         ]
 
         UpdateRsp { gameid, gameState } ->
             { model
-                | gameState = gameState
+                | game = { game | gameState = gameState }
                 , decoration = NoDecoration
                 , otherDecoration = NoDecoration
                 , firstSelection = NoDecoration
@@ -805,19 +831,19 @@ incomingMessage interface message mdl =
         PlayRsp { gameid, gameState, decoration } ->
             let
                 sound =
-                    if gameState.whoseTurn /= model.gameState.whoseTurn then
+                    if gameState.whoseTurn /= game.gameState.whoseTurn then
                         Task.perform PlaySound <| Task.succeed "sounds/move.mp3"
 
                     else if
                         (gameState.jumps /= [])
-                            && (gameState.jumps /= model.gameState.jumps)
+                            && (gameState.jumps /= game.gameState.jumps)
                     then
                         Task.perform PlaySound <| Task.succeed "sounds/jump.mp3"
 
                     else
                         Cmd.none
             in
-            if not model.isLocal then
+            if not game.isLocal then
                 let
                     ( idx, od ) =
                         ( 0, NoDecoration )
@@ -837,10 +863,13 @@ incomingMessage interface message mdl =
 
                     mdl2 =
                         { model
-                            | gameState = gameState
+                            | game =
+                                { game
+                                    | gameState = gameState
+                                    , yourWins = computeYourWins gameState model
+                                }
                             , decoration = d
                             , otherDecoration = od2
-                            , yourWins = computeYourWins gameState model
                         }
                 in
                 mdl2
@@ -858,7 +887,7 @@ incomingMessage interface message mdl =
                         ( NoDecoration, decoration )
                 in
                 { model
-                    | gameState = gameState
+                    | game = { game | gameState = gameState }
                     , decoration = newDecoration
                     , firstSelection = firstSelection
                 }
@@ -867,7 +896,7 @@ incomingMessage interface message mdl =
         ResignRsp { gameid, gameState, player } ->
             let
                 resignMsg =
-                    if model.player == player then
+                    if game.player == player then
                         "You resigned."
 
                     else
@@ -875,14 +904,17 @@ incomingMessage interface message mdl =
 
                 mdl2 =
                     { model
-                        | gameState = gameState
+                        | game =
+                            { game
+                                | gameState = gameState
+                                , yourWins =
+                                    computeYourWins gameState model
+                            }
                         , decoration = NoDecoration
                         , otherDecoration = NoDecoration
                         , firstSelection = NoDecoration
-                        , yourWins =
-                            computeYourWins gameState model
                         , error =
-                            if model.isLocal then
+                            if game.isLocal then
                                 Nothing
 
                             else
@@ -894,11 +926,14 @@ incomingMessage interface message mdl =
         AnotherGameRsp { gameid, gameState, player } ->
             let
                 ( error, msg ) =
-                    if not model.isLocal && not model.requestedNew then
+                    if not game.isLocal && not model.requestedNew then
                         let
                             m =
                                 playerName (Types.otherPlayer player)
-                                    { model | gameState = gameState }
+                                    { model
+                                        | game =
+                                            { game | gameState = gameState }
+                                    }
                                     ++ " asked for a new game"
                         in
                         ( Just m, m )
@@ -908,12 +943,15 @@ incomingMessage interface message mdl =
 
                 mdl2 =
                     { model
-                        | requestedNew = False
-                        , gameState = gameState
+                        | game =
+                            { game
+                                | gameState = gameState
+                                , player = player
+                            }
+                        , requestedNew = False
                         , decoration = NoDecoration
                         , otherDecoration = NoDecoration
                         , firstSelection = NoDecoration
-                        , player = player
                         , error = error
                     }
 
@@ -928,7 +966,7 @@ incomingMessage interface message mdl =
 
         GameOverRsp { gameid, gameState } ->
             { model
-                | gameState = gameState
+                | game = { game | gameState = gameState }
                 , decoration = NoDecoration
                 , otherDecoration = NoDecoration
                 , firstSelection = NoDecoration
@@ -963,12 +1001,12 @@ incomingMessage interface message mdl =
         ChatRsp { gameid, name, text } ->
             let
                 ( chatSettings, cmd ) =
-                    ElmChat.addLineSpec model.chatSettings <|
+                    ElmChat.addLineSpec game.chatSettings <|
                         ElmChat.makeLineSpec text
                             (Just name)
                             (Just model.time)
             in
-            { model | chatSettings = chatSettings }
+            { model | game = { game | chatSettings = chatSettings } }
                 |> withCmds
                     [ cmd
 
@@ -987,19 +1025,22 @@ incomingMessage interface message mdl =
 computeYourWins : GameState -> Model -> Int
 computeYourWins gameState model =
     let
+        game =
+            model.game
+
         winner =
             gameState.winner
     in
     if
         (winner /= NoWinner)
-            && (model.gameState.winner == NoWinner)
-            && Just model.player
+            && (game.gameState.winner == NoWinner)
+            && Just game.player
             == Types.winPlayer winner
     then
-        model.yourWins + 1
+        game.yourWins + 1
 
     else
-        model.yourWins
+        game.yourWins
 
 
 setPage : Page -> Cmd Msg
@@ -1072,10 +1113,14 @@ notificationHandler response state mdl =
 
 maybeSendNotification : Bool -> String -> Model -> Cmd Msg
 maybeSendNotification ignoreWhoseTurn title model =
+    let
+        game =
+            model.game
+    in
     if
         model.notificationsEnabled
-            && (ignoreWhoseTurn || model.gameState.whoseTurn == model.player)
-            && not model.isLocal
+            && (ignoreWhoseTurn || game.gameState.whoseTurn == game.player)
+            && not game.isLocal
             && not model.visible
     then
         sendNotification title
@@ -1101,6 +1146,9 @@ socketHandler response state mdl =
     let
         model =
             { mdl | funnelState = state }
+
+        game =
+            model.game
     in
     case response of
         ErrorResponse error ->
@@ -1128,13 +1176,13 @@ socketHandler response state mdl =
                 Ok message ->
                     { model | error = Nothing }
                         |> withCmd
-                            (Task.perform (IncomingMessage model.interface) <|
+                            (Task.perform (IncomingMessage game.interface) <|
                                 Task.succeed message
                             )
 
         ClosedResponse { expected, reason } ->
             { model
-                | isLive = False
+                | game = { game | isLive = False }
                 , connectionReason = NoConnection
                 , error =
                     if Debug.log "ClosedResponse, expected" expected then
@@ -1199,7 +1247,7 @@ socketHandler response state mdl =
                         UpdateConnection ->
                             send model <|
                                 UpdateReq
-                                    { playerid = model.playerid }
+                                    { playerid = game.playerid }
                     )
 
         _ ->
@@ -1223,10 +1271,10 @@ update msg model =
             updateInternal msg model
 
         { white, black } =
-            mdl.gameState.players
+            mdl.game.gameState.players
 
         focus =
-            --not mdl.isLocal && mdl.isLive && white /= "" && black /= ""
+            --not game.isLocal && game.isLive && white /= "" && black /= ""
             --might be able to be smart and do this just on desktop, but not for now
             False
 
@@ -1291,8 +1339,11 @@ update msg model =
 updateInternal : Msg -> Model -> ( Model, Cmd Msg )
 updateInternal msg model =
     let
+        game =
+            model.game
+
         gameState =
-            model.gameState
+            game.gameState
 
         settings =
             model.settings
@@ -1321,38 +1372,46 @@ updateInternal msg model =
                 |> withNoCmd
 
         SetIsLocal isLocal ->
-            let
-                model2 =
-                    { model
-                        | isLocal = isLocal
-                        , isLive = False
-                        , gameid = ""
-                        , playerid = ""
-                        , otherPlayerid = ""
-                        , interface =
-                            if isLocal then
-                                proxyServer
+            if game.isLocal == isLocal then
+                model |> withNoCmd
 
-                            else
-                                model.interface
-                    }
-            in
-            model2
-                |> withCmd
-                    (if isLocal && not model.isLocal then
-                        Cmd.batch
-                            [ if model.isLive then
-                                send model <|
-                                    LeaveReq { playerid = model.playerid }
+            else
+                let
+                    model2 =
+                        { model
+                            | game =
+                                { game
+                                    | isLocal = isLocal
+                                    , isLive = False
+                                    , playerid = ""
+                                    , otherPlayerid = ""
+                                    , interface =
+                                        if isLocal then
+                                            proxyServer
 
-                              else
-                                Cmd.none
-                            , send model2 <| NewReq initialNewReqBody
-                            ]
+                                        else
+                                            game.interface
+                                    , interfaceIsProxy = isLocal
+                                }
+                            , gameid = ""
+                        }
+                in
+                model2
+                    |> withCmd
+                        (if isLocal && not game.isLocal then
+                            Cmd.batch
+                                [ if game.isLive then
+                                    send model <|
+                                        LeaveReq { playerid = game.playerid }
 
-                     else
-                        Cmd.none
-                    )
+                                  else
+                                    Cmd.none
+                                , send model2 <| NewReq initialNewReqBody
+                                ]
+
+                         else
+                            Cmd.none
+                        )
 
         SetDarkMode darkMode ->
             let
@@ -1385,7 +1444,7 @@ updateInternal msg model =
                 |> withNoCmd
 
         SetServerUrl serverUrl ->
-            { model | serverUrl = serverUrl }
+            { model | game = { game | serverUrl = serverUrl } }
                 |> withNoCmd
 
         SetGameid gameid ->
@@ -1417,7 +1476,7 @@ updateInternal msg model =
                             StatisticsReq { subscribe = False }
 
                     else if page == MainPage then
-                        ElmChat.restoreScroll model.chatSettings
+                        ElmChat.restoreScroll game.chatSettings
 
                     else
                         Cmd.none
@@ -1449,11 +1508,11 @@ updateInternal msg model =
                 |> withNoCmd
 
         ResetScore ->
-            if not <| model.isLocal then
+            if not <| game.isLocal then
                 model |> withNoCmd
 
             else
-                case model.interface of
+                case game.interface of
                     ServerInterface si ->
                         case si.state of
                             Nothing ->
@@ -1472,40 +1531,43 @@ updateInternal msg model =
                                                 }
                                         in
                                         { model
-                                            | gameState = gs
-                                            , interface =
-                                                ServerInterface
-                                                    { si
-                                                        | state =
-                                                            Just <|
-                                                                ServerInterface.updateGame
-                                                                    model.gameid
-                                                                    gs
-                                                                    state
-                                                    }
+                                            | game =
+                                                { game
+                                                    | gameState = gs
+                                                    , interface =
+                                                        ServerInterface
+                                                            { si
+                                                                | state =
+                                                                    Just <|
+                                                                        ServerInterface.updateGame
+                                                                            model.gameid
+                                                                            gs
+                                                                            state
+                                                            }
+                                                }
                                         }
                                             |> withNoCmd
 
         NewGame ->
             let
                 resigning =
-                    if not model.isLocal then
-                        model.player
+                    if not game.isLocal then
+                        game.player
 
                     else
                         gameState.whoseTurn
 
                 pid =
-                    if not model.isLocal then
-                        model.playerid
+                    if not game.isLocal then
+                        game.playerid
 
                     else
                         case resigning of
                             WhitePlayer ->
-                                model.playerid
+                                game.playerid
 
                             BlackPlayer ->
-                                model.otherPlayerid
+                                game.otherPlayerid
 
                 ( playerid, placement ) =
                     if gameState.winner == NoWinner then
@@ -1516,15 +1578,15 @@ updateInternal msg model =
                     else
                         let
                             player =
-                                if model.isLocal then
+                                if game.isLocal then
                                     WhitePlayer
 
                                 else
                                     -- This should probably be enforced
                                     -- by the server.
-                                    Types.otherPlayer model.player
+                                    Types.otherPlayer game.player
                         in
-                        ( model.playerid, ChooseNew player )
+                        ( game.playerid, ChooseNew player )
             in
             { model | requestedNew = True }
                 |> withCmd
@@ -1572,7 +1634,7 @@ updateInternal msg model =
                     if not isTestMode then
                         send model
                             (SetGameStateReq
-                                { playerid = model.playerid
+                                { playerid = game.playerid
                                 , gameState = { gs | winner = NoWinner }
                                 }
                             )
@@ -1581,7 +1643,7 @@ updateInternal msg model =
                         Cmd.none
             in
             { model
-                | gameState = gs
+                | game = { game | gameState = gs }
                 , lastTestMode =
                     if isTestMode then
                         Nothing
@@ -1623,24 +1685,30 @@ updateInternal msg model =
 
         EraseBoard ->
             { model
-                | gameState =
-                    { gameState
-                        | moves = []
-                        , newBoard = NewBoard.empty
-                        , selected = Nothing
-                        , legalMoves = Moves []
+                | game =
+                    { game
+                        | gameState =
+                            { gameState
+                                | moves = []
+                                , newBoard = NewBoard.empty
+                                , selected = Nothing
+                                , legalMoves = Moves []
+                            }
                     }
             }
                 |> withNoCmd
 
         InitialBoard ->
             { model
-                | gameState =
-                    { gameState
-                        | moves = []
-                        , newBoard = NewBoard.initial
-                        , selected = Nothing
-                        , legalMoves = Moves []
+                | game =
+                    { game
+                        | gameState =
+                            { gameState
+                                | moves = []
+                                , newBoard = NewBoard.initial
+                                , selected = Nothing
+                                , legalMoves = Moves []
+                            }
                     }
             }
                 |> withNoCmd
@@ -1652,10 +1720,13 @@ updateInternal msg model =
 
                 Just testMode ->
                     { model
-                        | gameState =
-                            { gameState
-                                | testMode =
-                                    Just { testMode | clear = testClear }
+                        | game =
+                            { game
+                                | gameState =
+                                    { gameState
+                                        | testMode =
+                                            Just { testMode | clear = testClear }
+                                    }
                             }
                     }
                         |> withNoCmd
@@ -1671,14 +1742,17 @@ updateInternal msg model =
                             testMode.piece
                     in
                     { model
-                        | gameState =
-                            { gameState
-                                | testMode =
-                                    Just
-                                        { testMode
-                                            | piece =
-                                                { testPiece | color = color }
-                                        }
+                        | game =
+                            { game
+                                | gameState =
+                                    { gameState
+                                        | testMode =
+                                            Just
+                                                { testMode
+                                                    | piece =
+                                                        { testPiece | color = color }
+                                                }
+                                    }
                             }
                     }
                         |> withNoCmd
@@ -1698,14 +1772,17 @@ updateInternal msg model =
                             testMode.piece
                     in
                     { model
-                        | gameState =
-                            { gameState
-                                | testMode =
-                                    Just
-                                        { testMode
-                                            | piece =
-                                                { testPiece | pieceType = pieceType }
-                                        }
+                        | game =
+                            { game
+                                | gameState =
+                                    { gameState
+                                        | testMode =
+                                            Just
+                                                { testMode
+                                                    | piece =
+                                                        { testPiece | pieceType = pieceType }
+                                                }
+                                    }
                             }
                     }
                         |> withNoCmd
@@ -1766,14 +1843,14 @@ updateInternal msg model =
                 |> withCmd
                     (send model
                         (PlayReq
-                            { playerid = model.playerid
+                            { playerid = game.playerid
                             , placement = ChooseUndoJump undoWhichJumps
                             }
                         )
                     )
 
         ChatUpdate chatSettings cmd ->
-            { model | chatSettings = chatSettings }
+            { model | game = { game | chatSettings = chatSettings } }
                 |> withCmds [ cmd, putChat chatSettings ]
 
         ChatSend line chatSettings ->
@@ -1782,9 +1859,9 @@ updateInternal msg model =
         ChatClear ->
             let
                 ( chatSettings, chatCmd ) =
-                    clearChatSettings False model.chatSettings
+                    clearChatSettings False game.chatSettings
             in
-            { model | chatSettings = chatSettings }
+            { model | game = { game | chatSettings = chatSettings } }
                 |> withCmd chatCmd
 
         PlaySound file ->
@@ -1801,9 +1878,12 @@ updateInternal msg model =
         SetZone zone ->
             let
                 chatSettings =
-                    model.chatSettings
+                    game.chatSettings
             in
-            { model | chatSettings = { chatSettings | zone = zone } }
+            { model
+                | game =
+                    { game | chatSettings = { chatSettings | zone = zone } }
+            }
                 |> withNoCmd
 
         WindowResize w h ->
@@ -1869,11 +1949,15 @@ chatSend line chatSettings model =
 
 chatSendInternal : String -> ChatSettings -> Model -> ( Model, Cmd Msg )
 chatSendInternal line chatSettings model =
-    { model | chatSettings = chatSettings }
+    let
+        game =
+            model.game
+    in
+    { model | game = { game | chatSettings = chatSettings } }
         |> withCmd
             (send model <|
                 ChatReq
-                    { playerid = model.playerid
+                    { playerid = model.game.playerid
                     , text = line
                     }
             )
@@ -1889,38 +1973,49 @@ makeWebSocketServer model =
     WebSocketFramework.makeServer
         (getCmdPort WebSocket.moduleName ())
         ED.messageEncoder
-        model.serverUrl
+        model.game.serverUrl
         Noop
 
 
 webSocketConnect : ConnectionReason -> Model -> ( Model, Cmd Msg )
 webSocketConnect reason model =
-    if model.isLocal then
+    let
+        game =
+            model.game
+    in
+    if game.isLocal then
         { model
-            | interface =
-                if model.interfaceIsProxy then
-                    model.interface
+            | game =
+                { game
+                    | interface =
+                        if game.interfaceIsProxy then
+                            game.interface
 
-                else
-                    proxyServer
-            , isLive = True
+                        else
+                            proxyServer
+                    , interfaceIsProxy = True
+                    , isLive = True
+                }
         }
             |> withNoCmd
 
     else
         { model
-            | interface =
-                if True then
-                    --model.interfaceIsProxy then
-                    makeWebSocketServer model
+            | game =
+                { game
+                    | interface =
+                        if True then
+                            --game.interfaceIsProxy then
+                            makeWebSocketServer model
 
-                else
-                    model.interface
-            , interfaceIsProxy = False
+                        else
+                            game.interface
+                    , interfaceIsProxy = False
+                }
             , connectionReason = Debug.log "webSocketConnect" reason
         }
             |> withCmd
-                (WebSocket.makeOpen model.serverUrl
+                (WebSocket.makeOpen game.serverUrl
                     |> webSocketSend
                 )
 
@@ -1937,11 +2032,15 @@ join model =
 
 disconnect : Model -> ( Model, Cmd Msg )
 disconnect model =
-    { model | isLive = False }
+    let
+        game =
+            model.game
+    in
+    { model | game = { game | isLive = False } }
         |> withCmd
-            (if model.isLive && not model.isLocal then
+            (if game.isLive && not game.isLocal then
                 send model <|
-                    LeaveReq { playerid = model.playerid }
+                    LeaveReq { playerid = game.playerid }
 
              else
                 Cmd.none
@@ -1950,14 +2049,17 @@ disconnect model =
 
 send : Model -> Message -> Cmd Msg
 send model message =
-    ServerInterface.send model.interface <| Debug.log "send" message
+    ServerInterface.send model.game.interface <| Debug.log "send" message
 
 
 doTestClick : Int -> Int -> Model -> ( Model, Cmd Msg )
 doTestClick row col model =
     let
+        game =
+            model.game
+
         gameState =
-            model.gameState
+            game.gameState
 
         board =
             gameState.newBoard
@@ -1969,12 +2071,15 @@ doTestClick row col model =
         Just testMode ->
             if testMode.clear then
                 { model
-                    | gameState =
-                        { gameState
-                            | newBoard =
-                                NewBoard.set (rc row col) Types.emptyPiece board
+                    | game =
+                        { game
+                            | gameState =
+                                { gameState
+                                    | newBoard =
+                                        NewBoard.set (rc row col) Types.emptyPiece board
+                                }
+                                    |> NewBoard.populateLegalMoves
                         }
-                            |> NewBoard.populateLegalMoves
                 }
                     |> withNoCmd
 
@@ -1997,7 +2102,8 @@ doTestClick row col model =
                             { gameState | selected = Just rowcol }
                 in
                 { model
-                    | gameState = gs |> NewBoard.populateLegalMoves
+                    | game =
+                        { game | gameState = gs |> NewBoard.populateLegalMoves }
                 }
                     |> withNoCmd
 
@@ -2005,8 +2111,11 @@ doTestClick row col model =
 doClick : Int -> Int -> Model -> ( Model, Cmd Msg )
 doClick row col model =
     let
+        game =
+            model.game
+
         gameState =
-            model.gameState
+            game.gameState
 
         rowCol =
             rc row col
@@ -2059,7 +2168,7 @@ doClick row col model =
     else if
         (selectedType == NoPiece)
             || (pieceType /= NoPiece)
-            || (not model.isLocal && player /= model.player)
+            || (not game.isLocal && player /= game.player)
     then
         delayedClick rowCol model
 
@@ -2180,8 +2289,11 @@ maybeDelayedClick model =
 delayedClick : RowCol -> Model -> ( Model, Cmd Msg )
 delayedClick rowCol model =
     let
+        game =
+            model.game
+
         gameState =
-            model.gameState
+            game.gameState
 
         withPlayReq playerid placement =
             withCmd <|
@@ -2193,7 +2305,7 @@ delayedClick rowCol model =
                     )
 
         withACmd =
-            withPlayReq model.playerid <|
+            withPlayReq game.playerid <|
                 let
                     piece =
                         NewBoard.get rowCol gameState.newBoard
@@ -2360,8 +2472,11 @@ mainPage bsize model =
         settings =
             model.settings
 
+        game =
+            model.game
+
         gameState =
-            model.gameState
+            game.gameState
 
         score =
             gameState.score
@@ -2373,8 +2488,8 @@ mainPage bsize model =
             gameState.players
 
         currentPlayer =
-            if not model.isLocal then
-                Just model.player
+            if not game.isLocal then
+                Just game.player
 
             else
                 Just gameState.whoseTurn
@@ -2391,7 +2506,7 @@ mainPage bsize model =
             model.chooseMoveOptionsUI
 
         ( playing, message, yourTurn ) =
-            if not model.isLive then
+            if not game.isLive then
                 ( False
                 , "Enter \"Your Name\" and either click \"Start Game\" or enter \"Game ID\" and click \"Join\""
                 , True
@@ -2419,7 +2534,7 @@ mainPage bsize model =
                                 playerName player model
 
                             name =
-                                if model.isLocal || player /= model.player then
+                                if game.isLocal || player /= game.player then
                                     rawName
 
                                 else
@@ -2444,8 +2559,8 @@ mainPage bsize model =
                                     )
 
                                 else if
-                                    not model.isLocal
-                                        && (gameState.whoseTurn /= model.player)
+                                    not game.isLocal
+                                        && (gameState.whoseTurn /= game.player)
                                 then
                                     let
                                         otherName =
@@ -2523,7 +2638,7 @@ mainPage bsize model =
                     else
                         span [ style "color" "red" ]
                             [ text <|
-                                playerName (Types.otherPlayer model.player)
+                                playerName (Types.otherPlayer game.player)
                                     model
                                     ++ " made a choice"
                             , br
@@ -2574,10 +2689,10 @@ mainPage bsize model =
                                     ( gameState.players.black, "black" )
 
                         label =
-                            if model.isLocal then
+                            if game.isLocal then
                                 color
 
-                            else if model.player == gameState.whoseTurn then
+                            else if game.player == gameState.whoseTurn then
                                 "You (" ++ name ++ "), " ++ color
 
                             else
@@ -2616,7 +2731,7 @@ mainPage bsize model =
 
               else
                 text ""
-            , if not model.isLocal && model.isLive then
+            , if not game.isLocal && game.isLive then
                 span []
                     [ if white == "" || black == "" then
                         text ""
@@ -2624,7 +2739,7 @@ mainPage bsize model =
                       else
                         let
                             chatSettings =
-                                model.chatSettings
+                                game.chatSettings
                                     |> updateChatAttributes bsize model.styleType
                         in
                         span []
@@ -2648,7 +2763,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                if model.player == WhitePlayer then
+                                if game.player == WhitePlayer then
                                     "You (" ++ white ++ ")"
 
                                 else
@@ -2661,7 +2776,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                if model.player == BlackPlayer then
+                                if game.player == BlackPlayer then
                                     "You (" ++ black ++ ")"
 
                                 else
@@ -2705,10 +2820,10 @@ mainPage bsize model =
                     gameState.score
 
                 yourWins =
-                    model.yourWins
+                    game.yourWins
 
                 player =
-                    model.player
+                    game.player
 
                 otherPlayer =
                     Types.otherPlayer player
@@ -2719,7 +2834,7 @@ mainPage bsize model =
               else
                 let
                     ( yourWinString, otherWinString ) =
-                        if model.isLocal then
+                        if game.isLocal then
                             ( "White won " ++ String.fromInt whiteWins
                             , "Black won " ++ String.fromInt blackWins
                             )
@@ -2748,7 +2863,7 @@ mainPage bsize model =
                     , text ", "
                     , text otherWinString
                     , text " "
-                    , if not model.isLocal then
+                    , if not game.isLocal then
                         text ""
 
                       else
@@ -2773,9 +2888,9 @@ mainPage bsize model =
             , b "Local: "
             , input
                 [ type_ "checkbox"
-                , checked model.isLocal
+                , checked game.isLocal
                 , onCheck SetIsLocal
-                , disabled <| not model.isLocal && model.isLive
+                , disabled <| not game.isLocal && game.isLive
                 ]
                 []
             , case model.notificationAvailable of
@@ -2826,7 +2941,7 @@ mainPage bsize model =
                     else
                         "New Game"
                 ]
-            , if not (model.isLocal || WhichServer.isLocal) then
+            , if not (game.isLocal || WhichServer.isLocal) then
                 text ""
 
               else
@@ -2915,12 +3030,12 @@ mainPage bsize model =
                                         ]
                                 ]
                     ]
-            , if model.isLocal then
+            , if game.isLocal then
                 text ""
 
               else
                 div [ align "center" ]
-                    [ if model.isLive then
+                    [ if game.isLive then
                         div [ align "center" ]
                             [ b "Game ID: "
                             , text model.gameid
@@ -3188,6 +3303,9 @@ th string =
 publicPage : Int -> Model -> Html Msg
 publicPage bsize model =
     let
+        game =
+            model.game
+
         settings =
             model.settings
 
@@ -3217,7 +3335,7 @@ publicPage bsize model =
                         ]
                 ]
             , p [ align "center" ]
-                [ if model.isLive then
+                [ if game.isLive then
                     p [ style "color" "red" ]
                         [ text "You're playing a game. What are you doing here?" ]
 
@@ -3238,7 +3356,7 @@ publicPage bsize model =
                             ]
                       ]
                     , List.map
-                        (renderPublicGameRow model.gameid name model.isLive)
+                        (renderPublicGameRow model.gameid name game.isLive)
                         model.publicGames
                     ]
             , playButton
@@ -3302,8 +3420,11 @@ movesPage bsize model =
         name =
             settings.name
 
+        game =
+            model.game
+
         gameState =
-            model.gameState
+            game.gameState
 
         moves =
             gameState.moves
@@ -3336,7 +3457,7 @@ movesPage bsize model =
             [ h2 [ align "center" ]
                 [ text "Moves" ]
             , p [] [ playButton ]
-            , if model.isLocal then
+            , if game.isLocal then
                 text ""
 
               else
@@ -3456,12 +3577,16 @@ playerString player =
 
 statisticsPage : Int -> Model -> Html Msg
 statisticsPage bsize model =
+    let
+        game =
+            model.game
+    in
     rulesDiv False
         [ rulesDiv True
             [ h2 [ align "center" ]
                 [ text "Statistics" ]
             , p [] [ playButton ]
-            , if model.isLocal then
+            , if game.isLocal then
                 p [] [ text "There are no live updates in local mode." ]
 
               else
@@ -3677,7 +3802,7 @@ putModel model =
             ED.encodeSavedModel savedModel
 
         playerid =
-            model.playerid
+            model.game.playerid
     in
     put pk.model <| Just value
 

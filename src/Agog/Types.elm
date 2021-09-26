@@ -303,22 +303,18 @@ emptySettings =
     }
 
 
-type alias SavedModel =
-    { page : Page
+type alias SavedModel msg =
+    { game : NamedGame msg
+    , page : Page
     , decoration : Decoration
     , otherDecoration : Decoration
     , firstSelection : Decoration
     , chooseFirst : Player
-    , player : Player
-    , gameState : GameState
-    , isLocal : Bool
-    , isLive : Bool
+    , lastTestMode : Maybe TestMode
     , gameid : String
-    , playerid : String
     , settings : Settings
     , styleType : StyleType
     , rotate : RotateBoard
-    , yourWins : Int
     , notificationsEnabled : Bool
     , soundEnabled : Bool
     }
@@ -734,6 +730,7 @@ type alias NamedGame msg =
     , yourWins : Int
 
     -- Not persistent
+    , interfaceIsProxy : Bool
     , interface : ServerInterface msg
     }
 
