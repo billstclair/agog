@@ -134,7 +134,7 @@ import Json.Decode as JD exposing (Decoder, Value)
 import Json.Encode as JE
 import List.Extra as LE
 import Markdown
-import PortFunnel.LocalStorage as LocalStorage
+import PortFunnel.LocalStorage as LocalStorage exposing (Label)
 import PortFunnel.Notification as Notification exposing (Permission(..))
 import PortFunnel.WebSocket as WebSocket exposing (Response(..))
 import PortFunnels exposing (FunnelDict, Handler(..), State)
@@ -223,10 +223,13 @@ chooseMoveOptionsUINo =
     }
 
 
+type alias Game =
+    NamedGame Msg
+
+
 type alias Model =
     { tick : Posix
-
-    -- game & gameDict will eventually be persisted separately from Model
+    , game : Game
     , gameDict : NamedGameDict Msg
     , connectionReason : ConnectionReason
     , funnelState : State
@@ -248,7 +251,7 @@ type alias Model =
     , soundFile : Maybe String
 
     -- persistent below here
-    , game : NamedGame Msg
+    , gamename : String
     , page : Page
     , decoration : Decoration
     , otherDecoration : Decoration
@@ -407,9 +410,10 @@ initialChatSettings =
     ElmChat.makeSettings ids.chatOutput 14 True ChatUpdate
 
 
-initialNamedGame : NamedGame Msg
+initialNamedGame : Game
 initialNamedGame =
-    { gamename = "default"
+    { gamename = Types.defaultGamename
+    , gameid = ""
     , gameState = Interface.emptyGameState (PlayerNames "" "")
     , isLocal = False
     , serverUrl = WhichServer.serverUrl
@@ -455,6 +459,7 @@ init flags url key =
             , lastTestMode = Nothing
 
             -- persistent fields
+            , gamename = initialNamedGame.gamename
             , page = MainPage
             , decoration = NoDecoration
             , otherDecoration = NoDecoration
@@ -527,88 +532,211 @@ storageHandler response state model =
                 Cmd.none
     in
     case response of
+        LocalStorage.ListKeysResponse { label, prefix, keys } ->
+            handleListKeysResponse label prefix keys model
+
         LocalStorage.GetResponse { label, key, value } ->
             case value of
                 Nothing ->
                     mdl |> withNoCmd
 
                 Just v ->
-                    handleGetResponse key v model
+                    handleGetResponse label key v model
 
         _ ->
             mdl |> withCmd cmd
 
 
-handleGetResponse : String -> Value -> Model -> ( Model, Cmd Msg )
-handleGetResponse key value model =
-    if key == pk.chat then
-        case
-            JD.decodeValue (ElmChat.settingsDecoder ChatUpdate) value
-        of
-            Err _ ->
+handleListKeysResponse : Label -> String -> List String -> Model -> ( Model, Cmd Msg )
+handleListKeysResponse label prefix keys model =
+    case label of
+        Nothing ->
+            model |> withNoCmd
+
+        Just lab ->
+            if lab == pk.game then
+                let
+                    getter key cmd =
+                        Cmd.batch
+                            [ cmd
+                            , getLabeled pk.game key
+                            ]
+                in
+                ( model, List.foldr getter Cmd.none keys )
+
+            else
                 model |> withNoCmd
 
-            Ok settings ->
+
+handleGetResponse : Label -> String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetResponse label key value model =
+    case label of
+        Just lab ->
+            if lab == pk.game then
+                handleGetGameResponse key value model
+
+            else if lab == pk.chat then
+                handleGetChatResponse key value model
+
+            else
+                model |> withNoCmd
+
+        Nothing ->
+            if key == pk.model then
                 let
-                    game =
-                        model.game
-
-                    chatSettings =
-                        { settings
-                            | id = ids.chatOutput
-                            , zone = game.chatSettings.zone
-                        }
+                    cmd =
+                        listKeysLabeled pk.game gamePrefix
                 in
-                { model
-                    | game =
-                        { game | chatSettings = chatSettings }
-                }
-                    |> withCmd (ElmChat.restoreScroll chatSettings)
+                case ED.decodeSavedModel value of
+                    Err e ->
+                        model |> withCmd cmd
 
-    else if key == pk.model then
+                    Ok savedModel ->
+                        let
+                            model2 =
+                                savedModelToModel savedModel model
+                        in
+                        model2 |> withCmd cmd
+
+            else
+                model |> withNoCmd
+
+
+updateGame : String -> (Game -> Game) -> Model -> ( Model, Maybe Game )
+updateGame gamename updater model =
+    if gamename == model.gamename then
         let
-            cmd =
-                get pk.chat
+            game2 =
+                updater model.game
         in
-        case
-            Debug.log "decodeSavedModel" <|
-                ED.decodeSavedModel initialChatSettings ChatUpdate proxyServer value
-        of
-            Err e ->
-                model |> withCmd cmd
+        ( { model | game = game2 }, Just game2 )
 
-            Ok savedModel ->
+    else
+        case Dict.get gamename model.gameDict of
+            Nothing ->
+                ( model, Nothing )
+
+            Just game ->
                 let
-                    model2 =
-                        savedModelToModel savedModel model
-
                     game2 =
-                        model2.game
-
-                    ( model3, cmd2 ) =
-                        if not game2.isLocal && game2.isLive && game2.playerid /= "" then
-                            model2
-                                |> webSocketConnect UpdateConnection
-
-                        else if not game2.isLocal && model2.page == PublicPage then
-                            { model2 | gameid = "" }
-                                |> webSocketConnect PublicGamesConnection
-
-                        else if not game2.isLocal && model2.page == StatisticsPage then
-                            { model2 | gameid = "" }
-                                |> webSocketConnect StatisticsConnection
-
-                        else if game2.isLocal then
-                            { model2 | gameid = "" }
-                                |> withCmd (initialNewReqCmd model2)
-
-                        else
-                            model2 |> withNoCmd
+                        updater game
                 in
-                model3 |> withCmds [ cmd, cmd2 ]
+                ( { model
+                    | gameDict =
+                        Dict.insert gamename game2 model.gameDict
+                  }
+                , Just game2
+                )
+
+
+handleGetGameResponse : String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetGameResponse key value model =
+    case gameKeyToName key of
+        Nothing ->
+            { model
+                | error = Just <| "Unrecognized game key: " ++ key
+            }
+                |> withNoCmd
+
+        Just gamename ->
+            case JD.decodeValue (ED.namedGameDecoder initialChatSettings proxyServer) value of
+                Err _ ->
+                    { model
+                        | error = Just <| "Couldn't decode game: " ++ gamename
+                    }
+                        |> withNoCmd
+
+                Ok game ->
+                    let
+                        ( model2, maybeGame ) =
+                            updateGame gamename (always game) model
+                    in
+                    case maybeGame of
+                        Nothing ->
+                            { model2
+                                | error = Just <| "Couldn't find game: " ++ gamename
+                            }
+                                |> withNoCmd
+
+                        Just game2 ->
+                            let
+                                getChatCmd =
+                                    getChat gamename
+                            in
+                            if gamename == model2.gamename then
+                                let
+                                    ( model3, cmd3 ) =
+                                        reconnectToGame game2 model2
+                                in
+                                model3 |> withCmds [ getChatCmd, cmd3 ]
+
+                            else
+                                -- TODO: reconnect to background games
+                                model2 |> withCmd getChatCmd
+
+
+reconnectToGame : Game -> Model -> ( Model, Cmd Msg )
+reconnectToGame game model =
+    if not game.isLocal && game.isLive && game.playerid /= "" then
+        model |> webSocketConnect UpdateConnection
+
+    else if not game.isLocal && model.page == PublicPage then
+        { model | gameid = "" }
+            |> webSocketConnect PublicGamesConnection
+
+    else if not game.isLocal && model.page == StatisticsPage then
+        { model | gameid = "" }
+            |> webSocketConnect StatisticsConnection
+
+    else if game.isLocal then
+        { model | gameid = "" }
+            |> withCmd (initialNewReqCmd model)
 
     else
         model |> withNoCmd
+
+
+handleGetChatResponse : String -> Value -> Model -> ( Model, Cmd Msg )
+handleGetChatResponse key value model =
+    case chatKeyToName key of
+        Nothing ->
+            { model
+                | error = Just <| "Unrecognized chat key: " ++ key
+            }
+                |> withNoCmd
+
+        Just gamename ->
+            case JD.decodeValue (ElmChat.settingsDecoder ChatUpdate) value of
+                Err _ ->
+                    { model
+                        | error = Just <| "Couldn't decode chat: " ++ gamename
+                    }
+                        |> withNoCmd
+
+                Ok settings ->
+                    let
+                        updater game =
+                            { game
+                                | chatSettings =
+                                    { settings
+                                        | id = ids.chatOutput
+                                        , zone = game.chatSettings.zone
+                                    }
+                            }
+
+                        ( model2, maybeGame ) =
+                            updateGame gamename updater model
+                    in
+                    case maybeGame of
+                        Nothing ->
+                            { model2
+                                | error = Just <| "Unfound game for chat: " ++ gamename
+                            }
+                                |> withNoCmd
+
+                        Just game2 ->
+                            model2
+                                |> withCmd (ElmChat.restoreScroll game2.chatSettings)
 
 
 initialNewReqCmd : Model -> Cmd Msg
@@ -621,9 +749,9 @@ initialNewReqCmd model =
             }
 
 
-modelToSavedModel : Model -> SavedModel Msg
+modelToSavedModel : Model -> SavedModel
 modelToSavedModel model =
-    { game = model.game
+    { gamename = model.gamename
     , page = model.page
     , decoration = model.decoration
     , otherDecoration = model.otherDecoration
@@ -639,10 +767,10 @@ modelToSavedModel model =
     }
 
 
-savedModelToModel : SavedModel Msg -> Model -> Model
+savedModelToModel : SavedModel -> Model -> Model
 savedModelToModel savedModel model =
     { model
-        | game = savedModel.game
+        | gamename = savedModel.gamename
         , page = savedModel.page
         , decoration = savedModel.decoration
         , otherDecoration = savedModel.otherDecoration
@@ -695,7 +823,7 @@ incomingMessage interface message mdl =
         NewRsp { gameid, playerid, player, name, gameState } ->
             let
                 ( chatSettings, chatCmd ) =
-                    clearChatSettings True game.chatSettings
+                    clearChatSettings game.gamename True game.chatSettings
             in
             { model
                 | gameid = gameid
@@ -728,7 +856,7 @@ incomingMessage interface message mdl =
         JoinRsp { gameid, playerid, player, gameState } ->
             let
                 ( chatSettings, chatCmd ) =
-                    clearChatSettings True game.chatSettings
+                    clearChatSettings game.gamename True game.chatSettings
 
                 game2 =
                     { game
@@ -1050,7 +1178,6 @@ setPage page =
 
 notificationHandler : Notification.Response -> State -> Model -> ( Model, Cmd Msg )
 notificationHandler response state mdl =
-    -- TODO
     let
         model =
             { mdl | funnelState = state }
@@ -1333,7 +1460,52 @@ update msg model =
 
               else
                 Cmd.none
+            , if model.started && model.game /= mdl.game then
+                putGame mdl.game
+
+              else
+                Cmd.none
+            , saveGameDict model mdl
             ]
+
+
+saveGameDict : Model -> Model -> Cmd Msg
+saveGameDict oldModel model =
+    let
+        oldDict =
+            oldModel.gameDict
+
+        dict =
+            model.gameDict
+
+        saver k game cmd =
+            let
+                batch _ =
+                    Cmd.batch [ cmd, putGame game ]
+            in
+            case Dict.get k oldDict of
+                Nothing ->
+                    batch ()
+
+                Just oldGame ->
+                    if game /= oldGame then
+                        batch ()
+
+                    else
+                        cmd
+
+        deleter k _ cmd =
+            case Dict.get k dict of
+                Just _ ->
+                    cmd
+
+                Nothing ->
+                    Cmd.batch [ cmd, put (gameKey k) Nothing ]
+
+        saves =
+            Dict.foldl saver Cmd.none dict
+    in
+    Dict.foldl deleter saves oldDict
 
 
 updateInternal : Msg -> Model -> ( Model, Cmd Msg )
@@ -1851,7 +2023,7 @@ updateInternal msg model =
 
         ChatUpdate chatSettings cmd ->
             { model | game = { game | chatSettings = chatSettings } }
-                |> withCmds [ cmd, putChat chatSettings ]
+                |> withCmds [ cmd, putChat game.gamename chatSettings ]
 
         ChatSend line chatSettings ->
             chatSend line chatSettings model
@@ -1859,7 +2031,7 @@ updateInternal msg model =
         ChatClear ->
             let
                 ( chatSettings, chatCmd ) =
-                    clearChatSettings False game.chatSettings
+                    clearChatSettings game.gamename False game.chatSettings
             in
             { model | game = { game | chatSettings = chatSettings } }
                 |> withCmd chatCmd
@@ -1924,8 +2096,8 @@ updateInternal msg model =
                     res
 
 
-clearChatSettings : Bool -> ChatSettings -> ( ChatSettings, Cmd Msg )
-clearChatSettings clearInput chatSettings =
+clearChatSettings : String -> Bool -> ChatSettings -> ( ChatSettings, Cmd Msg )
+clearChatSettings gamename clearInput chatSettings =
     let
         newSettings =
             { chatSettings
@@ -1938,7 +2110,7 @@ clearChatSettings clearInput chatSettings =
                         chatSettings.input
             }
     in
-    ( newSettings, putChat newSettings )
+    ( newSettings, putChat gamename newSettings )
 
 
 chatSend : String -> ChatSettings -> Model -> ( Model, Cmd Msg )
@@ -3807,11 +3979,28 @@ putModel model =
     put pk.model <| Just value
 
 
-putChat : ChatSettings -> Cmd Msg
-putChat settings =
+putChat : String -> ChatSettings -> Cmd Msg
+putChat gamename settings =
     ElmChat.settingsEncoder settings
         |> Just
-        |> put pk.chat
+        |> put (chatKey gamename)
+
+
+getChat : String -> Cmd Msg
+getChat gamename =
+    getLabeled pk.chat (chatKey gamename)
+
+
+putGame : Game -> Cmd Msg
+putGame game =
+    ED.encodeNamedGame game
+        |> Just
+        |> put (gameKey game.gamename)
+
+
+getGame : String -> Cmd Msg
+getGame gamename =
+    getLabeled pk.game (gameKey gamename)
 
 
 put : String -> Maybe Value -> Cmd Msg
@@ -3822,6 +4011,21 @@ put key value =
 get : String -> Cmd Msg
 get key =
     localStorageSend (LocalStorage.get key)
+
+
+getLabeled : String -> String -> Cmd Msg
+getLabeled label key =
+    localStorageSend (LocalStorage.getLabeled label key)
+
+
+listKeys : String -> Cmd Msg
+listKeys prefix =
+    localStorageSend (LocalStorage.listKeys prefix)
+
+
+listKeysLabeled : String -> String -> Cmd Msg
+listKeysLabeled label prefix =
+    localStorageSend (LocalStorage.listKeysLabeled label prefix)
 
 
 clear : Cmd Msg
@@ -3874,4 +4078,51 @@ funnelDict =
 pk =
     { model = "model"
     , chat = "chat"
+    , game = "game"
     }
+
+
+gamePrefix : String
+gamePrefix =
+    pk.game ++ "."
+
+
+gameKey : String -> String
+gameKey gamename =
+    gamePrefix ++ gamename
+
+
+gameKeyToName : String -> Maybe String
+gameKeyToName key =
+    let
+        len =
+            String.length gamePrefix
+    in
+    if String.left len key /= gamePrefix then
+        Nothing
+
+    else
+        Just <| String.dropLeft len key
+
+
+chatPrefix : String
+chatPrefix =
+    pk.chat ++ "."
+
+
+chatKey : String -> String
+chatKey gamename =
+    chatPrefix ++ gamename
+
+
+chatKeyToName : String -> Maybe String
+chatKeyToName key =
+    let
+        len =
+            String.length chatPrefix
+    in
+    if String.left len key /= chatPrefix then
+        Nothing
+
+    else
+        Just <| String.dropLeft len key

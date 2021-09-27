@@ -52,7 +52,6 @@ import Agog.Types as Types
         , Message(..)
         , MovesOrJumps(..)
         , NamedGame
-        , NamedGameDict
         , NewBoard
         , OneCorruptibleJump
         , OneJump
@@ -205,10 +204,10 @@ testModeDecoder =
         ]
 
 
-encodeSavedModel : SavedModel msg -> Value
+encodeSavedModel : SavedModel -> Value
 encodeSavedModel model =
     JE.object
-        [ ( "game", encodeNamedGame model.game )
+        [ ( "gamename", JE.string model.gamename )
         , ( "page", encodePage model.page )
         , ( "decoration", encodeDecoration model.decoration )
         , ( "otherDecoration", encodeDecoration model.otherDecoration )
@@ -224,101 +223,27 @@ encodeSavedModel model =
         ]
 
 
-decodeSavedModel : ChatSettings msg -> (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Value -> Result JD.Error (SavedModel msg)
-decodeSavedModel chatSettings chatUpdate proxyServer value =
-    JD.decodeValue (savedModelDecoder chatSettings chatUpdate proxyServer) value
+decodeSavedModel : Value -> Result JD.Error SavedModel
+decodeSavedModel value =
+    JD.decodeValue savedModelDecoder value
 
 
-type alias OldSavedModel =
-    { page : Page
-    , decoration : Decoration
-    , otherDecoration : Decoration
-    , firstSelection : Decoration
-    , chooseFirst : Player
-    , player : Player
-    , gameState : GameState
-    , isLocal : Bool
-    , isLive : Bool
-    , gameid : String
-    , playerid : String
-    , settings : Settings
-    , styleType : StyleType
-    , rotate : RotateBoard
-    , yourWins : Int
-    , notificationsEnabled : Bool
-    , soundEnabled : Bool
-    }
-
-
-savedModelDecoder : ChatSettings msg -> (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Decoder (SavedModel msg)
-savedModelDecoder chatSettings chatUpdate proxyServer =
-    JD.oneOf
-        [ JD.succeed SavedModel
-            |> required "game" (namedGameDecoder chatUpdate proxyServer)
-            |> optional "page" pageDecoder MainPage
-            |> required "decoration" decorationDecoder
-            |> optional "otherDecoration" decorationDecoder NoDecoration
-            |> required "firstSelection" decorationDecoder
-            |> required "chooseFirst" playerDecoder
-            |> optional "lastTestMode" (JD.nullable testModeDecoder) Nothing
-            |> optional "gameid" JD.string ""
-            |> optional "settings" settingsDecoder Types.emptySettings
-            |> optional "styleType" styleTypeDecoder LightStyle
-            |> optional "rotate" boardRotateDecoder RotateWhiteDown
-            |> optional "notificationsEnabled" JD.bool False
-            |> optional "soundEnabled" JD.bool False
-        , JD.succeed OldSavedModel
-            |> optional "page" pageDecoder MainPage
-            |> required "decoration" decorationDecoder
-            |> optional "otherDecoration" decorationDecoder NoDecoration
-            |> required "firstSelection" decorationDecoder
-            |> required "chooseFirst" playerDecoder
-            |> required "player" playerDecoder
-            |> required "gameState" gameStateDecoder
-            |> optional "isLocal" JD.bool False
-            |> optional "isLive" JD.bool False
-            |> optional "gameid" JD.string ""
-            |> optional "playerid" JD.string ""
-            |> optional "settings" settingsDecoder Types.emptySettings
-            |> optional "styleType" styleTypeDecoder LightStyle
-            |> optional "rotate" boardRotateDecoder RotateWhiteDown
-            |> optional "yourWins" JD.int 0
-            |> optional "notificationsEnabled" JD.bool False
-            |> optional "soundEnabled" JD.bool False
-            |> JD.andThen
-                (\{ page, decoration, otherDecoration, firstSelection, chooseFirst, player, gameState, isLocal, isLive, gameid, playerid, yourWins, settings, styleType, rotate, notificationsEnabled, soundEnabled } ->
-                    let
-                        game =
-                            NamedGame "default"
-                                gameState
-                                isLocal
-                                WhichServer.serverUrl
-                                ""
-                                chatSettings
-                                player
-                                playerid
-                                isLive
-                                yourWins
-                                True
-                                proxyServer
-                    in
-                    SavedModel
-                        game
-                        page
-                        decoration
-                        otherDecoration
-                        firstSelection
-                        chooseFirst
-                        Nothing
-                        gameid
-                        settings
-                        styleType
-                        rotate
-                        notificationsEnabled
-                        soundEnabled
-                        |> JD.succeed
-                )
-        ]
+savedModelDecoder : Decoder SavedModel
+savedModelDecoder =
+    JD.succeed SavedModel
+        |> optional "gamename" JD.string Types.defaultGamename
+        |> optional "page" pageDecoder MainPage
+        |> required "decoration" decorationDecoder
+        |> optional "otherDecoration" decorationDecoder NoDecoration
+        |> required "firstSelection" decorationDecoder
+        |> required "chooseFirst" playerDecoder
+        |> optional "lastTestMode" (JD.nullable testModeDecoder) Nothing
+        |> optional "gameid" JD.string ""
+        |> optional "settings" settingsDecoder Types.emptySettings
+        |> optional "styleType" styleTypeDecoder LightStyle
+        |> optional "rotate" boardRotateDecoder RotateWhiteDown
+        |> optional "notificationsEnabled" JD.bool False
+        |> optional "soundEnabled" JD.bool False
 
 
 encodePage : Page -> Value
@@ -2553,11 +2478,13 @@ encodeNamedGame : NamedGame msg -> Value
 encodeNamedGame game =
     JE.object
         [ ( "gamename", JE.string game.gamename )
+        , ( "gameid", JE.string game.gameid )
         , ( "gameState", encodeGameState True game.gameState )
         , ( "isLocal", JE.bool game.isLocal )
         , ( "serverUrl", JE.string game.serverUrl )
         , ( "otherPlayerid", JE.string game.otherPlayerid )
-        , ( "chatSettings", ElmChat.settingsEncoder game.chatSettings )
+
+        -- chatSettings are saved separately
         , ( "player", encodePlayer game.player )
         , ( "playerid", JE.string game.playerid )
         , ( "isLive", JE.bool game.isLive )
@@ -2565,15 +2492,16 @@ encodeNamedGame game =
         ]
 
 
-namedGameDecoder : (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Decoder (NamedGame msg)
-namedGameDecoder chatUpdate proxyServer =
+namedGameDecoder : ChatSettings msg -> ServerInterface msg -> Decoder (NamedGame msg)
+namedGameDecoder chatSettings proxyServer =
     JD.succeed NamedGame
         |> required "gamename" JD.string
+        |> required "gameid" JD.string
         |> required "gameState" gameStateDecoder
         |> required "isLocal" JD.bool
         |> required "serverUrl" JD.string
         |> required "otherPlayerid" JD.string
-        |> required "chatSettings" (ElmChat.settingsDecoder chatUpdate)
+        |> hardcoded chatSettings
         |> required "player" playerDecoder
         |> required "playerid" JD.string
         |> required "isLive" JD.bool
@@ -2581,13 +2509,3 @@ namedGameDecoder chatUpdate proxyServer =
         -- interfaceIsProxy
         |> hardcoded True
         |> hardcoded proxyServer
-
-
-encodeNamedGameDict : NamedGameDict msg -> Value
-encodeNamedGameDict dict =
-    JE.dict identity encodeNamedGame dict
-
-
-namedGameDictDecoder : (ChatSettings msg -> Cmd msg -> msg) -> ServerInterface msg -> Decoder (NamedGameDict msg)
-namedGameDictDecoder chatUpdate proxyServer =
-    JD.dict <| namedGameDecoder chatUpdate proxyServer

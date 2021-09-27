@@ -55,6 +55,7 @@ module Agog.Types exposing
     , WinReason(..)
     , Winner(..)
     , darkStyle
+    , defaultGamename
     , emptyPiece
     , emptyPrivateGameState
     , emptySettings
@@ -303,8 +304,8 @@ emptySettings =
     }
 
 
-type alias SavedModel msg =
-    { game : NamedGame msg
+type alias SavedModel =
+    { gamename : String
     , page : Page
     , decoration : Decoration
     , otherDecoration : Decoration
@@ -717,8 +718,14 @@ type alias ChatSettings msg =
     ElmChat.Settings msg
 
 
+defaultGamename : String
+defaultGamename =
+    "default"
+
+
 type alias NamedGame msg =
     { gamename : String
+    , gameid : String
     , gameState : GameState
     , isLocal : Bool
     , serverUrl : String
