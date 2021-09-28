@@ -438,7 +438,9 @@ init flags url key =
             { tick = Time.millisToPosix 0
             , game = initialNamedGame
             , gameDict = Dict.empty
-            , chatDict = Dict.empty
+            , chatDict =
+                [ ( initialNamedGame.gamename, initialChatSettings ) ]
+                    |> Dict.fromList
             , connectionReason = NoConnection
             , funnelState = initialFunnelState
             , key = key
@@ -662,19 +664,28 @@ handleGetGameResponse key value model =
 
                         Just game2 ->
                             let
+                                model3 =
+                                    -- Empty chat in case it's not in localStorage
+                                    { model2
+                                        | chatDict =
+                                            Dict.insert gamename
+                                                initialChatSettings
+                                                model2.chatDict
+                                    }
+
                                 getChatCmd =
                                     getChat gamename
                             in
-                            if gamename == model2.gamename then
+                            if gamename == model3.gamename then
                                 let
-                                    ( model3, cmd3 ) =
-                                        reconnectToGame game2 model2
+                                    ( model4, cmd4 ) =
+                                        reconnectToGame game2 model3
                                 in
-                                model3 |> withCmds [ getChatCmd, cmd3 ]
+                                model4 |> withCmds [ getChatCmd, cmd4 ]
 
                             else
                                 -- TODO: reconnect to background games
-                                model2 |> withCmd getChatCmd
+                                model3 |> withCmd getChatCmd
 
 
 reconnectToGame : Game -> Model -> ( Model, Cmd Msg )
