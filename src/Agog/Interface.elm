@@ -65,6 +65,7 @@ import WebSocketFramework.Types
         , PlayerId
         , Plist
         , ReqRsp(..)
+        , ServerInterface(..)
         , ServerState
         )
 
@@ -228,8 +229,42 @@ generalMessageProcessor isProxyServer state message =
     ( newState2, response )
 
 
+logInterfaceSeed : String -> Types.ServerInterface msg -> Types.ServerInterface msg
+logInterfaceSeed prefix (ServerInterface interface) =
+    case interface.state of
+        Nothing ->
+            ServerInterface interface
+
+        Just state ->
+            let
+                state2 =
+                    logSeed prefix state
+            in
+            ServerInterface interface
+
+
+logSeed : String -> Types.ServerState -> Types.ServerState
+logSeed prefix state =
+    let
+        label =
+            if prefix /= "" then
+                prefix ++ ", seed"
+
+            else
+                "seed"
+
+        seed =
+            Debug.log label state.seed
+    in
+    state
+
+
 generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessorInternal isProxyServer state message =
+    let
+        seed =
+            state.seed
+    in
     case message of
         NewReq { name, player, publicType, restoreState } ->
             if name == "" then
@@ -305,6 +340,9 @@ generalMessageProcessorInternal isProxyServer state message =
                                         state5.publicGames
                             }
                                 |> bumpStatistic .totalPublicConnections
+
+                    dicts =
+                        state6.dicts
                 in
                 ( state6
                 , Just <|
@@ -319,6 +357,10 @@ generalMessageProcessorInternal isProxyServer state message =
                 )
 
         JoinReq { gameid, name } ->
+            let
+                dicts =
+                    state.dicts
+            in
             case ServerInterface.getGame gameid state of
                 Nothing ->
                     errorRes message state "Unknown gameid"
