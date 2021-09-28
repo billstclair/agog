@@ -383,7 +383,14 @@ updateServerSeed maybeSeed serverInterface =
             in
             case interface.state of
                 Nothing ->
-                    serverInterface
+                    let
+                        state =
+                            WebSocketFramework.Types.emptyServerState Nothing
+                    in
+                    ServerInterface
+                        { interface
+                            | state = Just { state | seed = seed }
+                        }
 
                 Just state ->
                     ServerInterface
