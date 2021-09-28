@@ -2483,8 +2483,6 @@ encodeNamedGame game =
         , ( "isLocal", JE.bool game.isLocal )
         , ( "serverUrl", JE.string game.serverUrl )
         , ( "otherPlayerid", JE.string game.otherPlayerid )
-
-        -- chatSettings are saved separately
         , ( "player", encodePlayer game.player )
         , ( "playerid", JE.string game.playerid )
         , ( "isLive", JE.bool game.isLive )
@@ -2492,8 +2490,8 @@ encodeNamedGame game =
         ]
 
 
-namedGameDecoder : ChatSettings msg -> ServerInterface msg -> Decoder (NamedGame msg)
-namedGameDecoder chatSettings proxyServer =
+namedGameDecoder : ServerInterface msg -> Decoder (NamedGame msg)
+namedGameDecoder proxyServer =
     JD.succeed NamedGame
         |> required "gamename" JD.string
         |> required "gameid" JD.string
@@ -2501,7 +2499,6 @@ namedGameDecoder chatSettings proxyServer =
         |> required "isLocal" JD.bool
         |> required "serverUrl" JD.string
         |> required "otherPlayerid" JD.string
-        |> hardcoded chatSettings
         |> required "player" playerDecoder
         |> required "playerid" JD.string
         |> required "isLive" JD.bool

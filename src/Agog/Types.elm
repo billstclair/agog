@@ -730,7 +730,6 @@ type alias NamedGame msg =
     , isLocal : Bool
     , serverUrl : String
     , otherPlayerid : PlayerId
-    , chatSettings : ChatSettings msg
     , player : Player
     , playerid : PlayerId
     , isLive : Bool

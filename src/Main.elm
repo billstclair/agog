@@ -67,6 +67,7 @@ import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
 import DateFormat.Relative
 import Dict exposing (Dict)
+import Dict.Extra as DE
 import ElmChat exposing (LineSpec(..), defaultExtraAttributes)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (usLocale)
@@ -231,6 +232,7 @@ type alias Model =
     { tick : Posix
     , game : Game
     , gameDict : NamedGameDict Msg
+    , chatDict : Dict String ChatSettings
     , connectionReason : ConnectionReason
     , funnelState : State
     , key : Key
@@ -418,7 +420,6 @@ initialNamedGame =
     , isLocal = False
     , serverUrl = WhichServer.serverUrl
     , otherPlayerid = ""
-    , chatSettings = initialChatSettings
     , player = WhitePlayer
     , playerid = ""
     , isLive = False
@@ -437,6 +438,7 @@ init flags url key =
             { tick = Time.millisToPosix 0
             , game = initialNamedGame
             , gameDict = Dict.empty
+            , chatDict = Dict.empty
             , connectionReason = NoConnection
             , funnelState = initialFunnelState
             , key = key
@@ -639,7 +641,7 @@ handleGetGameResponse key value model =
                 |> withNoCmd
 
         Just gamename ->
-            case JD.decodeValue (ED.namedGameDecoder initialChatSettings proxyServer) value of
+            case JD.decodeValue (ED.namedGameDecoder proxyServer) value of
                 Err _ ->
                     { model
                         | error = Just <| "Couldn't decode game: " ++ gamename
@@ -696,6 +698,44 @@ reconnectToGame game model =
         model |> withNoCmd
 
 
+updateChat : String -> Model -> (ChatSettings -> ChatSettings) -> ( Model, Maybe ChatSettings )
+updateChat gamename model updater =
+    case Dict.get gamename model.chatDict of
+        Nothing ->
+            ( model, Nothing )
+
+        Just chat ->
+            let
+                chat2 =
+                    updater chat
+            in
+            ( { model
+                | chatDict =
+                    Dict.insert gamename chat2 model.chatDict
+              }
+            , Just chat2
+            )
+
+
+updateChat2 : String -> Model -> (ChatSettings -> ( ChatSettings, a )) -> ( Model, Maybe ( ChatSettings, a ) )
+updateChat2 gamename model updater =
+    case Dict.get gamename model.chatDict of
+        Nothing ->
+            ( model, Nothing )
+
+        Just chat ->
+            let
+                ( chat2, a ) =
+                    updater chat
+            in
+            ( { model
+                | chatDict =
+                    Dict.insert gamename chat2 model.chatDict
+              }
+            , Just ( chat2, a )
+            )
+
+
 handleGetChatResponse : String -> Value -> Model -> ( Model, Cmd Msg )
 handleGetChatResponse key value model =
     case chatKeyToName key of
@@ -715,28 +755,26 @@ handleGetChatResponse key value model =
 
                 Ok settings ->
                     let
-                        updater game =
-                            { game
-                                | chatSettings =
+                        ( model2, maybeChat ) =
+                            updateChat gamename
+                                model
+                                (\chat ->
                                     { settings
                                         | id = ids.chatOutput
-                                        , zone = game.chatSettings.zone
+                                        , zone = chat.zone
                                     }
-                            }
-
-                        ( model2, maybeGame ) =
-                            updateGame gamename updater model
+                                )
                     in
-                    case maybeGame of
+                    case maybeChat of
                         Nothing ->
                             { model2
-                                | error = Just <| "Unfound game for chat: " ++ gamename
+                                | error = Just <| "Unfound chat for game: " ++ gamename
                             }
                                 |> withNoCmd
 
-                        Just game2 ->
+                        Just chat2 ->
                             model2
-                                |> withCmd (ElmChat.restoreScroll game2.chatSettings)
+                                |> withCmd (ElmChat.restoreScroll chat2)
 
 
 initialNewReqCmd : Model -> Cmd Msg
@@ -800,6 +838,30 @@ playerName player model =
             players.black
 
 
+gameFromId : String -> Model -> Maybe Game
+gameFromId gameid model =
+    if model.game.gameid == gameid then
+        Just model.game
+
+    else
+        case DE.find (\_ game -> game.gameid == gameid) model.gameDict of
+            Nothing ->
+                Nothing
+
+            Just ( _, game ) ->
+                Just game
+
+
+withGameFromId : String -> Model -> (Game -> ( Model, Cmd Msg )) -> ( Model, Cmd Msg )
+withGameFromId gamename model thunk =
+    case gameFromId gamename model of
+        Nothing ->
+            model |> withNoCmd
+
+        Just game ->
+            thunk game
+
+
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
 incomingMessage interface message mdl =
     let
@@ -822,17 +884,16 @@ incomingMessage interface message mdl =
     case message of
         NewRsp { gameid, playerid, player, name, gameState } ->
             let
-                ( chatSettings, chatCmd ) =
-                    clearChatSettings game.gamename True game.chatSettings
+                ( model2, chatCmd ) =
+                    clearChatSettings game.gamename True model
             in
-            { model
+            { model2
                 | gameid = gameid
                 , connectionReason = JoinGameConnection
                 , decoration = gameState.private.decoration
                 , game =
                     { game
                         | gameState = gameState
-                        , chatSettings = chatSettings
                         , player = player
                         , playerid = playerid
                         , isLive = True
@@ -855,8 +916,8 @@ incomingMessage interface message mdl =
 
         JoinRsp { gameid, playerid, player, gameState } ->
             let
-                ( chatSettings, chatCmd ) =
-                    clearChatSettings game.gamename True game.chatSettings
+                ( model2, chatCmd ) =
+                    clearChatSettings game.gamename True model
 
                 game2 =
                     { game
@@ -869,7 +930,6 @@ incomingMessage interface message mdl =
                             else
                                 player
                         , yourWins = 0
-                        , chatSettings = chatSettings
                     }
 
                 game3 =
@@ -892,7 +952,7 @@ incomingMessage interface message mdl =
                             Just pid ->
                                 { game2 | playerid = pid }
             in
-            { model
+            { model2
                 | game = game3
                 , connectionReason = NoConnection
                 , decoration = gameState.private.decoration
@@ -1127,24 +1187,37 @@ incomingMessage interface message mdl =
                 |> withNoCmd
 
         ChatRsp { gameid, name, text } ->
-            let
-                ( chatSettings, cmd ) =
-                    ElmChat.addLineSpec game.chatSettings <|
-                        ElmChat.makeLineSpec text
-                            (Just name)
-                            (Just model.time)
-            in
-            { model | game = { game | chatSettings = chatSettings } }
-                |> withCmds
-                    [ cmd
+            withGameFromId gameid
+                model
+                (\game2 ->
+                    let
+                        ( model2, maybeTuple ) =
+                            updateChat2 game2.gamename
+                                model
+                                (\chat ->
+                                    ElmChat.addLineSpec chat <|
+                                        ElmChat.makeLineSpec text
+                                            (Just name)
+                                            (Just model.time)
+                                )
+                    in
+                    case maybeTuple of
+                        Nothing ->
+                            model2 |> withNoCmd
 
-                    -- Kluge. ElmChat is supposed to do this
-                    , Task.attempt (\_ -> Noop) <|
-                        Dom.setViewportOf ids.chatOutput 0 1000000
-                    , maybeSendNotification True
-                        ("You got an AGOG chat message from " ++ name)
-                        model
-                    ]
+                        Just ( _, cmd ) ->
+                            model2
+                                |> withCmds
+                                    [ cmd
+
+                                    -- Kluge. ElmChat is supposed to do this
+                                    , Task.attempt (\_ -> Noop) <|
+                                        Dom.setViewportOf ids.chatOutput 0 1000000
+                                    , maybeSendNotification True
+                                        ("You got an AGOG chat message from " ++ name)
+                                        model
+                                    ]
+                )
 
         _ ->
             model |> withNoCmd
@@ -1648,7 +1721,12 @@ updateInternal msg model =
                             StatisticsReq { subscribe = False }
 
                     else if page == MainPage then
-                        ElmChat.restoreScroll game.chatSettings
+                        case Dict.get game.gamename model.chatDict of
+                            Nothing ->
+                                Cmd.none
+
+                            Just chat ->
+                                ElmChat.restoreScroll chat
 
                     else
                         Cmd.none
@@ -2022,19 +2100,15 @@ updateInternal msg model =
                     )
 
         ChatUpdate chatSettings cmd ->
-            { model | game = { game | chatSettings = chatSettings } }
+            updateChat model.game.gamename model (always chatSettings)
+                |> Tuple.first
                 |> withCmds [ cmd, putChat game.gamename chatSettings ]
 
         ChatSend line chatSettings ->
             chatSend line chatSettings model
 
         ChatClear ->
-            let
-                ( chatSettings, chatCmd ) =
-                    clearChatSettings game.gamename False game.chatSettings
-            in
-            { model | game = { game | chatSettings = chatSettings } }
-                |> withCmd chatCmd
+            clearChatSettings game.gamename False model
 
         PlaySound file ->
             if not model.soundEnabled then
@@ -2049,12 +2123,12 @@ updateInternal msg model =
 
         SetZone zone ->
             let
-                chatSettings =
-                    game.chatSettings
+                mapper _ chat =
+                    { chat | zone = zone }
             in
             { model
-                | game =
-                    { game | chatSettings = { chatSettings | zone = zone } }
+                | chatDict =
+                    Dict.map mapper model.chatDict
             }
                 |> withNoCmd
 
@@ -2096,21 +2170,30 @@ updateInternal msg model =
                     res
 
 
-clearChatSettings : String -> Bool -> ChatSettings -> ( ChatSettings, Cmd Msg )
-clearChatSettings gamename clearInput chatSettings =
+clearChatSettings : String -> Bool -> Model -> ( Model, Cmd Msg )
+clearChatSettings gamename clearInput model =
     let
-        newSettings =
-            { chatSettings
-                | lines = []
-                , input =
-                    if clearInput then
-                        ""
+        ( model2, maybeChat ) =
+            updateChat gamename
+                model
+                (\chat ->
+                    { chat
+                        | lines = []
+                        , input =
+                            if clearInput then
+                                ""
 
-                    else
-                        chatSettings.input
-            }
+                            else
+                                chat.input
+                    }
+                )
     in
-    ( newSettings, putChat gamename newSettings )
+    case maybeChat of
+        Nothing ->
+            model2 |> withNoCmd
+
+        Just chat ->
+            model2 |> withCmd (putChat gamename chat)
 
 
 chatSend : String -> ChatSettings -> Model -> ( Model, Cmd Msg )
@@ -2122,12 +2205,12 @@ chatSend line chatSettings model =
 chatSendInternal : String -> ChatSettings -> Model -> ( Model, Cmd Msg )
 chatSendInternal line chatSettings model =
     let
-        game =
-            model.game
+        ( model2, _ ) =
+            updateChat model.game.gamename model (always chatSettings)
     in
-    { model | game = { game | chatSettings = chatSettings } }
+    model2
         |> withCmd
-            (send model <|
+            (send model2 <|
                 ChatReq
                     { playerid = model.game.playerid
                     , text = line
@@ -2909,25 +2992,30 @@ mainPage bsize model =
                         text ""
 
                       else
-                        let
-                            chatSettings =
-                                game.chatSettings
-                                    |> updateChatAttributes bsize model.styleType
-                        in
-                        span []
-                            [ ElmChat.styledInputBox [ id ids.chatInput ]
-                                []
-                                --width in chars
-                                40
-                                --id
-                                "Send"
-                                ChatSend
-                                chatSettings
-                            , text " "
-                            , button [ onClick ChatClear ]
-                                [ text "Clear" ]
-                            , ElmChat.chat chatSettings
-                            ]
+                        case Dict.get model.game.gamename model.chatDict of
+                            Nothing ->
+                                text ""
+
+                            Just chat ->
+                                let
+                                    chatSettings =
+                                        chat
+                                            |> updateChatAttributes bsize model.styleType
+                                in
+                                span []
+                                    [ ElmChat.styledInputBox [ id ids.chatInput ]
+                                        []
+                                        --width in chars
+                                        40
+                                        --id
+                                        "Send"
+                                        ChatSend
+                                        chatSettings
+                                    , text " "
+                                    , button [ onClick ChatClear ]
+                                        [ text "Clear" ]
+                                    , ElmChat.chat chatSettings
+                                    ]
                     , b "White: "
                     , text <|
                         case white of
