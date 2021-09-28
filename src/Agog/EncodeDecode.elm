@@ -25,6 +25,7 @@ module Agog.EncodeDecode exposing
     , messageDecoder
     , messageEncoder
     , messageEncoderWithPrivate
+    , messageToLogMessage
     , movesDecoder
     , namedGameDecoder
     , newBoardToString
@@ -49,6 +50,7 @@ import Agog.Types as Types
         , GameState
         , JumpSequence
         , Message(..)
+        , MessageForLog(..)
         , MovesOrJumps(..)
         , NamedGame
         , NewBoard
@@ -2441,3 +2443,123 @@ namedGameDecoder proxyServer =
         -- interfaceIsProxy
         |> hardcoded True
         |> hardcoded proxyServer
+
+
+messageToLogMessage : Message -> MessageForLog
+messageToLogMessage message =
+    let
+        gameStateString gameState =
+            JE.encode 0 (encodeGameState True gameState)
+    in
+    case message of
+        NewReq { name, player, publicType, restoreState } ->
+            NewReqLog
+                { name = name
+                , player = player
+                , publicType = publicType
+                , restoreState =
+                    case restoreState of
+                        Nothing ->
+                            Nothing
+
+                        Just gameState ->
+                            Just <| gameStateString gameState
+                }
+
+        NewRsp { gameid, playerid, player, name, publicType, gameState } ->
+            NewRspLog
+                { gameid = gameid
+                , playerid = playerid
+                , player = player
+                , name = name
+                , publicType = publicType
+                , gameState = gameStateString gameState
+                }
+
+        JoinReq rec ->
+            JoinReqLog rec
+
+        ReJoinReq rec ->
+            RejoinReqLog rec
+
+        JoinRsp { gameid, playerid, player, gameState } ->
+            JoinRspLog
+                { gameid = gameid
+                , playerid = playerid
+                , player = player
+                , gameState = gameStateString gameState
+                }
+
+        LeaveReq rec ->
+            LeaveReqLog rec
+
+        LeaveRsp rec ->
+            LeaveRspLog rec
+
+        SetGameStateReq { playerid, gameState } ->
+            SetGameStateReqLog
+                { playerid = playerid
+                , gameState = gameStateString gameState
+                }
+
+        UpdateReq rec ->
+            UpdateReqLog rec
+
+        UpdateRsp { gameid, gameState } ->
+            UpdateRspLog
+                { gameid = gameid
+                , gameState = gameStateString gameState
+                }
+
+        PlayReq rec ->
+            PlayReqLog rec
+
+        PlayRsp { gameid, gameState } ->
+            PlayRspLog
+                { gameid = gameid
+                , gameState = gameStateString gameState
+                }
+
+        ResignRsp { gameid, gameState, player } ->
+            ResignRspLog
+                { gameid = gameid
+                , gameState = gameStateString gameState
+                , player = player
+                }
+
+        AnotherGameRsp { gameid, gameState, player } ->
+            AnotherGameRspLog
+                { gameid = gameid
+                , gameState = gameStateString gameState
+                , player = player
+                }
+
+        GameOverRsp { gameid, gameState } ->
+            GameOverRspLog
+                { gameid = gameid
+                , gameState = gameStateString gameState
+                }
+
+        PublicGamesReq rec ->
+            PublicGamesReqLog rec
+
+        PublicGamesRsp rec ->
+            PublicGamesRspLog rec
+
+        PublicGamesUpdateRsp rec ->
+            PublicGamesUpdateRspLog rec
+
+        StatisticsReq rec ->
+            StatisticsReqLog rec
+
+        StatisticsRsp rec ->
+            StatisticsRspLog rec
+
+        ErrorRsp rec ->
+            ErrorRspLog rec
+
+        ChatReq rec ->
+            ChatReqLog rec
+
+        ChatRsp rec ->
+            ChatRspLog rec

@@ -632,28 +632,6 @@ handleGetResponse label key value model =
                 model |> withNoCmd
 
 
-logServerDicts : String -> ServerInterface -> Maybe (WebSocketFramework.Types.Dicts GameState Player)
-logServerDicts prefix interface =
-    let
-        (ServerInterface si) =
-            interface
-
-        label =
-            if prefix == "" then
-                "  dicts"
-
-            else
-                "  " ++ prefix ++ ", dicts"
-    in
-    Debug.log label <|
-        case si.state of
-            Nothing ->
-                Nothing
-
-            Just state ->
-                Just state.dicts
-
-
 updateGame : String -> (Game -> Game) -> Model -> ( Model, Maybe Game )
 updateGame gamename updater model =
     if gamename == model.gamename then
@@ -928,8 +906,8 @@ withGameFromId gameid model thunk =
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
 incomingMessage interface message mdl =
     let
-        msgString =
-            Debug.log "incomingMessage" <| ED.encodeMessageForLog message
+        messageLog =
+            Debug.log "incomingMessage" <| ED.messageToLogMessage message
 
         model =
             { mdl | reallyClearStorage = False }
@@ -948,23 +926,8 @@ incomingMessage interface message mdl =
 
                                 Just game ->
                                     Just { game | interface = interface }
-
-                        ( maybeUpdatedGame, modelCmd ) =
-                            incomingMessageInternal interface maybeGame2 message model
-
-                        maybeGame3 =
-                            case maybeUpdatedGame of
-                                Just game ->
-                                    if maybeGame2 == Nothing then
-                                        Just { game | interface = interface }
-
-                                    else
-                                        maybeUpdatedGame
-
-                                Nothing ->
-                                    maybeGame2
                     in
-                    ( maybeGame3, modelCmd )
+                    incomingMessageInternal interface maybeGame2 message model
     in
     case maybeGame of
         Nothing ->
@@ -1081,6 +1044,7 @@ incomingMessageInternal interface maybeGame message model =
                             else
                                 player
                         , yourWins = 0
+                        , interface = interface
                     }
 
                 game3 =
@@ -2482,7 +2446,11 @@ disconnect model =
 
 send : ServerInterface -> Message -> Cmd Msg
 send interface message =
-    ServerInterface.send interface <| Debug.log "send" message
+    let
+        logMessage =
+            Debug.log "send" <| ED.messageToLogMessage message
+    in
+    ServerInterface.send interface message
 
 
 doTestClick : Int -> Int -> Model -> ( Model, Cmd Msg )

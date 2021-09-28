@@ -18,6 +18,7 @@ module Agog.Types exposing
     , GameState
     , JumpSequence
     , Message(..)
+    , MessageForLog(..)
     , MovesOrJumps(..)
     , NamedGame
     , NamedGameDict
@@ -650,6 +651,106 @@ messageToGameid message =
 
         _ ->
             Nothing
+
+
+type MessageForLog
+    = NewReqLog
+        { name : String
+        , player : Player
+        , publicType : PublicType
+        , restoreState : Maybe String
+        }
+    | NewRspLog
+        { gameid : GameId
+        , playerid : PlayerId
+        , player : Player
+        , name : String
+        , publicType : PublicType
+        , gameState : String
+        }
+    | JoinReqLog
+        { gameid : GameId
+        , name : String
+        }
+    | RejoinReqLog
+        { gameid : GameId
+        , playerid : PlayerId
+        }
+    | JoinRspLog
+        { gameid : GameId
+        , playerid : Maybe PlayerId
+        , player : Player
+        , gameState : String
+        }
+    | LeaveReqLog { playerid : PlayerId }
+    | LeaveRspLog { gameid : GameId, player : Player }
+      -- Disallowed if Agog.WhichServer.allowGameState is False
+    | SetGameStateReqLog
+        { playerid : PlayerId
+        , gameState : String
+        }
+    | UpdateReqLog { playerid : PlayerId }
+    | UpdateRspLog
+        { gameid : String
+        , gameState : String
+        }
+      -- Game Play
+    | PlayReqLog
+        { playerid : PlayerId
+        , placement : Choice
+        }
+    | PlayRspLog
+        { gameid : GameId
+        , gameState : String
+        }
+    | ResignRspLog
+        { gameid : GameId
+        , gameState : String
+        , player : Player
+        }
+    | AnotherGameRspLog
+        { gameid : GameId
+        , gameState : String
+        , player : Player
+        }
+    | GameOverRspLog
+        { gameid : GameId
+        , gameState : String
+        }
+      -- Public games
+    | PublicGamesReqLog
+        { subscribe : Bool
+        , forName : String
+        , gameid : Maybe GameId
+        }
+    | PublicGamesRspLog { games : List PublicGame }
+    | PublicGamesUpdateRspLog
+        { added : List PublicGame
+        , removed : List String
+        }
+    | StatisticsReqLog
+        { subscribe : Bool
+        }
+    | StatisticsRspLog
+        { statistics : Maybe Statistics
+        , startTime : Maybe Int
+        , updateTime : Maybe Int
+        }
+      -- Errors
+    | ErrorRspLog
+        { request : String
+        , text : String
+        }
+      -- Chat
+    | ChatReqLog
+        { playerid : String
+        , text : String
+        }
+    | ChatRspLog
+        { gameid : String
+        , name : String
+        , text : String
+        }
 
 
 type alias ServerState =

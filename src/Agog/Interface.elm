@@ -261,10 +261,6 @@ logSeed prefix state =
 
 generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessorInternal isProxyServer state message =
-    let
-        seed =
-            state.seed
-    in
     case message of
         NewReq { name, player, publicType, restoreState } ->
             if name == "" then
@@ -340,9 +336,6 @@ generalMessageProcessorInternal isProxyServer state message =
                                         state5.publicGames
                             }
                                 |> bumpStatistic .totalPublicConnections
-
-                    dicts =
-                        state6.dicts
                 in
                 ( state6
                 , Just <|
@@ -357,10 +350,6 @@ generalMessageProcessorInternal isProxyServer state message =
                 )
 
         JoinReq { gameid, name } ->
-            let
-                dicts =
-                    state.dicts
-            in
             case ServerInterface.getGame gameid state of
                 Nothing ->
                     errorRes message state "Unknown gameid"
