@@ -825,11 +825,11 @@ savedModelToModel savedModel model =
     }
 
 
-playerName : Player -> Model -> String
-playerName player model =
+playerName : Player -> Game -> String
+playerName player game =
     let
         players =
-            model.game.gameState.players
+            game.gameState.players
     in
     case player of
         WhitePlayer ->
@@ -866,57 +866,121 @@ withGameFromId gameid model thunk =
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
 incomingMessage interface message mdl =
     let
-        g =
-            mdl.game
-
-        game =
-            -- This is where the state for local mode gets preserved.
-            { g | interface = interface }
-
-        model =
-            { mdl
-                | game = game
-                , reallyClearStorage = False
-            }
-
         msgString =
             Debug.log "incomingMessage" <| ED.encodeMessageForLog message
+
+        model =
+            { mdl | reallyClearStorage = False }
+
+        ( maybeGame, ( model2, cmd2 ) ) =
+            case Types.messageToGameid message of
+                Nothing ->
+                    incomingMessageInternal Nothing message model
+
+                Just gameid ->
+                    let
+                        maybeGame2 =
+                            case gameFromId gameid model of
+                                Nothing ->
+                                    Nothing
+
+                                Just game ->
+                                    Just { game | interface = interface }
+
+                        ( maybeUpdatedGame, modelCmd ) =
+                            incomingMessageInternal maybeGame2 message model
+
+                        maybeGame3 =
+                            case maybeUpdatedGame of
+                                Just game ->
+                                    if maybeGame2 == Nothing then
+                                        Just { game | interface = interface }
+
+                                    else
+                                        maybeUpdatedGame
+
+                                Nothing ->
+                                    maybeGame2
+                    in
+                    ( maybeGame3, modelCmd )
+    in
+    case maybeGame of
+        Nothing ->
+            model2 |> withCmd cmd2
+
+        Just game ->
+            updateGame game.gamename (always game) model2
+                |> Tuple.first
+                |> withCmd cmd2
+
+
+incomingMessageInternal : Maybe Game -> Message -> Model -> ( Maybe Game, ( Model, Cmd Msg ) )
+incomingMessageInternal maybeGame message model =
+    let
+        withRequiredGame gameid thunk =
+            case maybeGame of
+                Just game ->
+                    thunk game
+
+                Nothing ->
+                    ( Nothing
+                    , { model
+                        | error =
+                            Just <| "Bug: there is no game for gameid" ++ gameid
+                      }
+                        |> withNoCmd
+                    )
     in
     case message of
         NewRsp { gameid, playerid, player, name, gameState } ->
-            let
-                ( model2, chatCmd ) =
-                    clearChatSettings game.gamename True model
-            in
-            { model2
-                | gameid = gameid
-                , connectionReason = JoinGameConnection
-                , game =
-                    { game
-                        | gameid = gameid
-                        , gameState = gameState
-                        , player = player
-                        , playerid = playerid
-                        , isLive = True
-                        , yourWins = 0
-                    }
-            }
-                |> withCmds
-                    [ chatCmd
-                    , if not game.isLocal then
-                        Cmd.none
+            withRequiredGame gameid
+                (\game ->
+                    let
+                        model2 =
+                            { model
+                                | gameid = gameid
+                                , connectionReason = JoinGameConnection
+                            }
 
-                      else if player == WhitePlayer then
-                        send model <|
-                            JoinReq { gameid = gameid, name = "Black" }
+                        ( model3, chatCmd ) =
+                            clearChatSettings game.gamename True model2
+                    in
+                    ( Just
+                        { game
+                            | gameid = gameid
+                            , gameState = gameState
+                            , player = player
+                            , playerid = playerid
+                            , isLive = True
+                            , yourWins = 0
+                        }
+                    , model3
+                        |> withCmds
+                            [ chatCmd
+                            , if not game.isLocal then
+                                Cmd.none
 
-                      else
-                        send model <|
-                            JoinReq { gameid = gameid, name = "White" }
-                    ]
+                              else if player == WhitePlayer then
+                                send model3 <|
+                                    JoinReq { gameid = gameid, name = "Black" }
+
+                              else
+                                send model3 <|
+                                    JoinReq { gameid = gameid, name = "White" }
+                            ]
+                    )
+                )
 
         JoinRsp { gameid, playerid, player, gameState } ->
             let
+                game =
+                    case maybeGame of
+                        Just g ->
+                            g
+
+                        Nothing ->
+                            model.game
+
                 ( model2, chatCmd ) =
                     clearChatSettings game.gamename True model
 
@@ -954,181 +1018,191 @@ incomingMessage interface message mdl =
                             Just pid ->
                                 { game2 | playerid = pid }
             in
-            { model2
+            ( Just game3
+            , { model2
                 | game = game3
-                , connectionReason = NoConnection
-            }
+              }
                 |> withCmds
                     [ chatCmd
                     , setPage MainPage
-                    , maybeSendNotification False "The game is on!" model
+                    , maybeSendNotification False "The game is on!" model2
                     ]
+            )
 
         LeaveRsp { gameid, player } ->
-            let
-                name =
-                    playerName
-                        (Types.otherPlayer game.player)
-                        model
+            withRequiredGame gameid
+                (\game ->
+                    let
+                        name =
+                            playerName
+                                (Types.otherPlayer game.player)
+                                game
 
-                leftMsg =
-                    name ++ " left"
+                        leftMsg =
+                            name ++ " left"
 
-                game2 =
-                    { game
-                        | playerid = ""
-                        , otherPlayerid = ""
-                    }
+                        game2 =
+                            { game
+                                | gameid = ""
+                                , playerid = ""
+                                , otherPlayerid = ""
+                            }
 
-                model2 =
-                    { model
-                        | game = game2
-                        , gameid = ""
-                        , error =
-                            if player == game2.player then
-                                Nothing
+                        model2 =
+                            { model
+                                | error =
+                                    if player == game2.player then
+                                        Nothing
 
-                            else
-                                Just leftMsg
-                    }
-            in
-            if game2.isLocal then
-                model2 |> withNoCmd
+                                    else
+                                        Just leftMsg
+                            }
+                    in
+                    if game2.isLocal then
+                        ( Just game2, model2 |> withNoCmd )
 
-            else
-                { model2 | game = { game2 | isLive = False } }
-                    |> withCmds
-                        [ if player /= game2.player then
-                            maybeSendNotification True leftMsg model2
+                    else
+                        ( Just { game2 | isLive = False }
+                        , model2
+                            |> withCmds
+                                [ if player /= game2.player then
+                                    maybeSendNotification True leftMsg model2
 
-                          else
-                            Cmd.none
-
-                        --WebSocket.makeClose game.serverUrl
-                        --|> webSocketSend
-                        ]
+                                  else
+                                    Cmd.none
+                                ]
+                        )
+                )
 
         UpdateRsp { gameid, gameState } ->
-            { model
-                | game = { game | gameState = gameState }
-            }
-                |> withNoCmd
+            withRequiredGame gameid
+                (\game ->
+                    ( Just { game | gameState = gameState }
+                    , model |> withNoCmd
+                    )
+                )
 
         PlayRsp { gameid, gameState } ->
-            let
-                sound =
-                    if gameState.whoseTurn /= game.gameState.whoseTurn then
-                        Task.perform PlaySound <| Task.succeed "sounds/move.mp3"
+            withRequiredGame gameid
+                (\game ->
+                    let
+                        sound =
+                            if gameState.whoseTurn /= game.gameState.whoseTurn then
+                                Task.perform PlaySound <| Task.succeed "sounds/move.mp3"
 
-                    else if
-                        (gameState.jumps /= [])
-                            && (gameState.jumps /= game.gameState.jumps)
-                    then
-                        Task.perform PlaySound <| Task.succeed "sounds/jump.mp3"
+                            else if
+                                (gameState.jumps /= [])
+                                    && (gameState.jumps /= game.gameState.jumps)
+                            then
+                                Task.perform PlaySound <| Task.succeed "sounds/jump.mp3"
 
-                    else
-                        Cmd.none
-            in
-            if not game.isLocal then
-                let
-                    mdl2 =
-                        { model
-                            | game =
-                                { game
-                                    | gameState = gameState
-                                    , yourWins = computeYourWins gameState model
-                                }
-                        }
-                in
-                mdl2
-                    |> withCmds
-                        [ maybeSendNotification
-                            False
-                            "It's your turn in AGOG."
-                            mdl2
-                        , sound
-                        ]
-
-            else
-                { model
-                    | game = { game | gameState = gameState }
-                }
-                    |> withCmd sound
-
-        ResignRsp { gameid, gameState, player } ->
-            let
-                resignMsg =
-                    if game.player == player then
-                        "You resigned."
-
-                    else
-                        playerName player model ++ " resigned."
-
-                mdl2 =
-                    { model
-                        | game =
+                            else
+                                Cmd.none
+                    in
+                    if not game.isLocal then
+                        ( Just
                             { game
                                 | gameState = gameState
-                                , yourWins =
-                                    computeYourWins gameState model
+                                , yourWins = computeYourWins gameState model
                             }
-                        , error =
+                        , model
+                            |> withCmds
+                                [ maybeSendNotification
+                                    False
+                                    "It's your turn in AGOG."
+                                    model
+                                , sound
+                                ]
+                        )
+
+                    else
+                        ( Just { game | gameState = gameState }
+                        , model
+                            |> withCmd sound
+                        )
+                )
+
+        ResignRsp { gameid, gameState, player } ->
+            withRequiredGame gameid
+                (\game ->
+                    let
+                        resignMsg =
+                            if game.player == player then
+                                "You resigned."
+
+                            else
+                                playerName player game ++ " resigned."
+                    in
+                    ( Just
+                        { game
+                            | gameState = gameState
+                            , yourWins =
+                                computeYourWins gameState model
+                        }
+                    , { model
+                        | error =
                             if game.isLocal then
                                 Nothing
 
                             else
                                 Just resignMsg
-                    }
-            in
-            mdl2 |> withCmd (maybeSendNotification True resignMsg mdl2)
+                      }
+                        |> withCmd (maybeSendNotification True resignMsg model)
+                    )
+                )
 
         AnotherGameRsp { gameid, gameState, player } ->
-            let
-                ( error, msg ) =
-                    if not game.isLocal && not model.requestedNew then
-                        let
-                            m =
-                                playerName (Types.otherPlayer player)
-                                    { model
-                                        | game =
+            withRequiredGame gameid
+                (\game ->
+                    let
+                        ( error, msg ) =
+                            if not game.isLocal && not model.requestedNew then
+                                let
+                                    m =
+                                        playerName (Types.otherPlayer player)
                                             { game | gameState = gameState }
-                                    }
-                                    ++ " asked for a new game"
-                        in
-                        ( Just m, m )
+                                            ++ " asked for a new game"
+                                in
+                                ( Just m, m )
 
-                    else
-                        ( Nothing, "" )
+                            else
+                                ( Nothing, "" )
 
-                mdl2 =
-                    { model
-                        | game =
-                            { game
-                                | gameState = gameState
-                                , player = player
+                        mdl2 =
+                            { model
+                                | requestedNew = False
+                                , error = error
                             }
-                        , requestedNew = False
-                        , error = error
-                    }
 
-                cmd =
-                    if error == Nothing then
-                        Cmd.none
+                        cmd =
+                            if error == Nothing then
+                                Cmd.none
 
-                    else
-                        maybeSendNotification True msg mdl2
-            in
-            mdl2 |> withCmd cmd
+                            else
+                                maybeSendNotification True msg mdl2
+                    in
+                    ( Just
+                        { game
+                            | gameState = gameState
+                            , player = player
+                        }
+                    , mdl2 |> withCmd cmd
+                    )
+                )
 
         GameOverRsp { gameid, gameState } ->
-            { model
-                | game = { game | gameState = gameState }
-            }
-                |> withNoCmd
+            withRequiredGame gameid
+                (\game ->
+                    ( Just { game | gameState = gameState }
+                    , model |> withNoCmd
+                    )
+                )
 
         PublicGamesRsp { games } ->
-            { model | publicGames = games }
+            ( Nothing
+            , { model | publicGames = games }
                 |> withNoCmd
+            )
 
         PublicGamesUpdateRsp { added, removed } ->
             let
@@ -1137,27 +1211,32 @@ incomingMessage interface message mdl =
                         (\{ gameid } -> not <| List.member gameid removed)
                         model.publicGames
             in
-            { model | publicGames = List.concat [ games, added ] }
+            ( Nothing
+            , { model | publicGames = List.concat [ games, added ] }
                 |> withNoCmd
+            )
 
         StatisticsRsp { statistics, startTime, updateTime } ->
-            { model
+            ( Nothing
+            , { model
                 | statistics = statistics
                 , statisticsTimes = ( startTime, updateTime )
-            }
+              }
                 |> withNoCmd
+            )
 
         ErrorRsp { request, text } ->
-            { model | error = Just text }
+            ( Nothing
+            , { model | error = Just text }
                 |> withNoCmd
+            )
 
         ChatRsp { gameid, name, text } ->
-            withGameFromId gameid
-                model
-                (\game2 ->
+            withRequiredGame gameid
+                (\game ->
                     let
                         ( model2, maybeTuple ) =
-                            updateChat2 game2.gamename
+                            updateChat2 game.gamename
                                 model
                                 (\chat ->
                                     ElmChat.addLineSpec chat <|
@@ -1166,7 +1245,8 @@ incomingMessage interface message mdl =
                                             (Just model.time)
                                 )
                     in
-                    case maybeTuple of
+                    ( Nothing
+                    , case maybeTuple of
                         Nothing ->
                             model2 |> withNoCmd
 
@@ -1182,10 +1262,11 @@ incomingMessage interface message mdl =
                                         ("You got an AGOG chat message from " ++ name)
                                         model
                                     ]
+                    )
                 )
 
         _ ->
-            model |> withNoCmd
+            ( Nothing, model |> withNoCmd )
 
 
 computeYourWins : GameState -> Model -> Int
@@ -2750,7 +2831,7 @@ mainPage bsize model =
                     winString player reason =
                         let
                             rawName =
-                                playerName player model
+                                playerName player game
 
                             name =
                                 if game.isLocal || player /= game.player then
@@ -3055,10 +3136,10 @@ mainPage bsize model =
 
                         else
                             ( "You ("
-                                ++ playerName player model
+                                ++ playerName player game
                                 ++ ") won "
                                 ++ String.fromInt yourWins
-                            , playerName otherPlayer model
+                            , playerName otherPlayer game
                                 ++ " won "
                                 ++ String.fromInt (games - yourWins)
                             )
