@@ -29,7 +29,6 @@ import Agog.Types as Types
         ( Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
-        , Decoration(..)
         , GameState
         , JumpSequence
         , Message(..)
@@ -613,7 +612,6 @@ generalMessageProcessorInternal isProxyServer state message =
                                             PlayRsp
                                                 { gameid = gameid
                                                 , gameState = gs
-                                                , decoration = NoDecoration
                                                 }
                                         )
 
@@ -1041,7 +1039,6 @@ chooseMove state message gameid gameState player rowCol options =
                                     PlayRsp
                                         { gameid = gameid
                                         , gameState = gs3
-                                        , decoration = NoDecoration
                                         }
                                 )
 
@@ -1196,7 +1193,6 @@ chooseMove state message gameid gameState player rowCol options =
                                                 PlayRsp
                                                     { gameid = gameid
                                                     , gameState = gs4
-                                                    , decoration = NoDecoration
                                                     }
                                             )
 
@@ -1242,7 +1238,6 @@ chooseMove state message gameid gameState player rowCol options =
                                                 PlayRsp
                                                     { gameid = gameid
                                                     , gameState = gs2
-                                                    , decoration = NoDecoration
                                                     }
                                             )
 
@@ -1326,7 +1321,6 @@ chooseUndoJump state message gameid gameState undoWhichJumps =
                         PlayRsp
                             { gameid = gameid
                             , gameState = gs
-                            , decoration = NoDecoration
                             }
                     )
 

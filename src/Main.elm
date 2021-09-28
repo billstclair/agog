@@ -30,7 +30,6 @@ import Agog.Types as Types
         ( Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
-        , Decoration(..)
         , GameState
         , Message(..)
         , MovesOrJumps(..)
@@ -230,6 +229,7 @@ type alias Game =
 
 type alias Model =
     { tick : Posix
+    , zone : Zone
     , game : Game
     , gameDict : NamedGameDict Msg
     , chatDict : Dict String ChatSettings
@@ -255,9 +255,6 @@ type alias Model =
     -- persistent below here
     , gamename : String
     , page : Page
-    , decoration : Decoration
-    , otherDecoration : Decoration
-    , firstSelection : Decoration
     , chooseFirst : Player
     , lastTestMode : Maybe TestMode
     , gameid : String
@@ -285,7 +282,6 @@ type Msg
     = Noop
     | Tick Posix
     | IncomingMessage ServerInterface Message
-    | SetDecoration Decoration
     | SetChooseFirst Player
     | SetRotate RotateBoard
     | SetIsLocal Bool
@@ -436,6 +432,7 @@ init flags url key =
     let
         model =
             { tick = Time.millisToPosix 0
+            , zone = Time.utc
             , game = initialNamedGame
             , gameDict = Dict.empty
             , chatDict =
@@ -465,9 +462,6 @@ init flags url key =
             -- persistent fields
             , gamename = initialNamedGame.gamename
             , page = MainPage
-            , decoration = NoDecoration
-            , otherDecoration = NoDecoration
-            , firstSelection = NoDecoration
             , chooseFirst = WhitePlayer
             , gameid = ""
             , settings = Types.emptySettings
@@ -669,7 +663,9 @@ handleGetGameResponse key value model =
                                     { model2
                                         | chatDict =
                                             Dict.insert gamename
-                                                initialChatSettings
+                                                { initialChatSettings
+                                                    | zone = model2.zone
+                                                }
                                                 model2.chatDict
                                     }
 
@@ -779,7 +775,7 @@ handleGetChatResponse key value model =
                     case maybeChat of
                         Nothing ->
                             { model2
-                                | error = Just <| "Unfound chat for game: " ++ gamename
+                                | error = Debug.log "" (Just <| "Unfound chat for game: " ++ gamename)
                             }
                                 |> withNoCmd
 
@@ -802,9 +798,6 @@ modelToSavedModel : Model -> SavedModel
 modelToSavedModel model =
     { gamename = model.gamename
     , page = model.page
-    , decoration = model.decoration
-    , otherDecoration = model.otherDecoration
-    , firstSelection = model.firstSelection
     , chooseFirst = model.chooseFirst
     , lastTestMode = model.lastTestMode
     , gameid = model.gameid
@@ -821,9 +814,6 @@ savedModelToModel savedModel model =
     { model
         | gamename = savedModel.gamename
         , page = savedModel.page
-        , decoration = savedModel.decoration
-        , otherDecoration = savedModel.otherDecoration
-        , firstSelection = savedModel.firstSelection
         , chooseFirst = savedModel.chooseFirst
         , lastTestMode = savedModel.lastTestMode
         , gameid = savedModel.gameid
@@ -864,8 +854,8 @@ gameFromId gameid model =
 
 
 withGameFromId : String -> Model -> (Game -> ( Model, Cmd Msg )) -> ( Model, Cmd Msg )
-withGameFromId gamename model thunk =
-    case gameFromId gamename model of
+withGameFromId gameid model thunk =
+    case gameFromId gameid model of
         Nothing ->
             model |> withNoCmd
 
@@ -901,10 +891,10 @@ incomingMessage interface message mdl =
             { model2
                 | gameid = gameid
                 , connectionReason = JoinGameConnection
-                , decoration = gameState.private.decoration
                 , game =
                     { game
-                        | gameState = gameState
+                        | gameid = gameid
+                        , gameState = gameState
                         , player = player
                         , playerid = playerid
                         , isLive = True
@@ -932,7 +922,8 @@ incomingMessage interface message mdl =
 
                 game2 =
                     { game
-                        | gameState = gameState
+                        | gameid = gameid
+                        , gameState = gameState
                         , isLive = True
                         , player =
                             if playerid == Nothing then
@@ -966,7 +957,6 @@ incomingMessage interface message mdl =
             { model2
                 | game = game3
                 , connectionReason = NoConnection
-                , decoration = gameState.private.decoration
             }
                 |> withCmds
                     [ chatCmd
@@ -1021,13 +1011,10 @@ incomingMessage interface message mdl =
         UpdateRsp { gameid, gameState } ->
             { model
                 | game = { game | gameState = gameState }
-                , decoration = NoDecoration
-                , otherDecoration = NoDecoration
-                , firstSelection = NoDecoration
             }
                 |> withNoCmd
 
-        PlayRsp { gameid, gameState, decoration } ->
+        PlayRsp { gameid, gameState } ->
             let
                 sound =
                     if gameState.whoseTurn /= game.gameState.whoseTurn then
@@ -1044,22 +1031,6 @@ incomingMessage interface message mdl =
             in
             if not game.isLocal then
                 let
-                    ( idx, od ) =
-                        ( 0, NoDecoration )
-
-                    ( d, od2 ) =
-                        if idx < 0 then
-                            ( model.decoration
-                            , if model.decoration == NoDecoration then
-                                decoration
-
-                              else
-                                NoDecoration
-                            )
-
-                        else
-                            ( decoration, NoDecoration )
-
                     mdl2 =
                         { model
                             | game =
@@ -1067,8 +1038,6 @@ incomingMessage interface message mdl =
                                     | gameState = gameState
                                     , yourWins = computeYourWins gameState model
                                 }
-                            , decoration = d
-                            , otherDecoration = od2
                         }
                 in
                 mdl2
@@ -1081,14 +1050,8 @@ incomingMessage interface message mdl =
                         ]
 
             else
-                let
-                    ( newDecoration, firstSelection ) =
-                        ( NoDecoration, decoration )
-                in
                 { model
                     | game = { game | gameState = gameState }
-                    , decoration = newDecoration
-                    , firstSelection = firstSelection
                 }
                     |> withCmd sound
 
@@ -1109,9 +1072,6 @@ incomingMessage interface message mdl =
                                 , yourWins =
                                     computeYourWins gameState model
                             }
-                        , decoration = NoDecoration
-                        , otherDecoration = NoDecoration
-                        , firstSelection = NoDecoration
                         , error =
                             if game.isLocal then
                                 Nothing
@@ -1148,9 +1108,6 @@ incomingMessage interface message mdl =
                                 , player = player
                             }
                         , requestedNew = False
-                        , decoration = NoDecoration
-                        , otherDecoration = NoDecoration
-                        , firstSelection = NoDecoration
                         , error = error
                     }
 
@@ -1166,9 +1123,6 @@ incomingMessage interface message mdl =
         GameOverRsp { gameid, gameState } ->
             { model
                 | game = { game | gameState = gameState }
-                , decoration = NoDecoration
-                , otherDecoration = NoDecoration
-                , firstSelection = NoDecoration
             }
                 |> withNoCmd
 
@@ -1544,7 +1498,9 @@ update msg model =
 
               else
                 Cmd.none
-            , if model.started && model.game /= mdl.game then
+
+            -- Should really save explicitly when a change is made
+            , if model.started && (not <| Types.gamesEqual model.game mdl.game) then
                 putGame mdl.game
 
               else
@@ -1572,7 +1528,7 @@ saveGameDict oldModel model =
                     batch ()
 
                 Just oldGame ->
-                    if game /= oldGame then
+                    if not <| Types.gamesEqual game oldGame then
                         batch ()
 
                     else
@@ -1614,10 +1570,6 @@ updateInternal msg model =
 
         IncomingMessage interface message ->
             incomingMessage interface message model
-
-        SetDecoration decoration ->
-            { model | decoration = decoration }
-                |> withNoCmd
 
         SetChooseFirst player ->
             { model | chooseFirst = player }
@@ -2138,7 +2090,8 @@ updateInternal msg model =
                     { chat | zone = zone }
             in
             { model
-                | chatDict =
+                | zone = zone
+                , chatDict =
                     Dict.map mapper model.chatDict
             }
                 |> withNoCmd
@@ -2898,17 +2851,7 @@ mainPage bsize model =
             [ br
             , case model.error of
                 Nothing ->
-                    if model.otherDecoration == NoDecoration then
-                        text ""
-
-                    else
-                        span [ style "color" "red" ]
-                            [ text <|
-                                playerName (Types.otherPlayer game.player)
-                                    model
-                                    ++ " made a choice"
-                            , br
-                            ]
+                    text ""
 
                 Just err ->
                     span [ style "color" "red" ]
@@ -4080,8 +4023,7 @@ putModel model =
 
 putChat : String -> ChatSettings -> Cmd Msg
 putChat gamename settings =
-    ElmChat.settingsEncoder settings
-        |> Just
+    (Just <| ElmChat.settingsEncoder settings)
         |> put (chatKey gamename)
 
 
@@ -4092,8 +4034,7 @@ getChat gamename =
 
 putGame : Game -> Cmd Msg
 putGame game =
-    ED.encodeNamedGame game
-        |> Just
+    (Just <| ED.encodeNamedGame game)
         |> put (gameKey game.gamename)
 
 

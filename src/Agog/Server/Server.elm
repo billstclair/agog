@@ -4,8 +4,7 @@ import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
 import Agog.Types as Types
     exposing
-        ( Decoration(..)
-        , GameState
+        ( GameState
         , Message(..)
         , Player
         , PlayerNames

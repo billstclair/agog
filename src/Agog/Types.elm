@@ -15,7 +15,6 @@ module Agog.Types exposing
     , Choice(..)
     , ChooseMoveOption(..)
     , Color(..)
-    , Decoration(..)
     , GameState
     , JumpSequence
     , Message(..)
@@ -30,7 +29,6 @@ module Agog.Types exposing
     , OneSlideRecord
     , Page(..)
     , Piece
-    , PieceSelected
     , PieceType(..)
     , Player(..)
     , PlayerNames
@@ -59,6 +57,7 @@ module Agog.Types exposing
     , emptyPiece
     , emptyPrivateGameState
     , emptySettings
+    , gamesEqual
     , lightStyle
     , maybeMakeHulkOption
     , messageToGameid
@@ -182,18 +181,6 @@ winPlayer winner =
             Just BlackPlayer
 
 
-type alias PieceSelected =
-    { selected : ( Int, Int )
-    , moves : List ( Int, Int )
-    , jumps : List (List ( Int, Int ))
-    }
-
-
-type Decoration
-    = NoDecoration
-    | PieceSelectedDecoration PieceSelected
-
-
 type Page
     = MainPage
     | RulesPage
@@ -307,9 +294,6 @@ emptySettings =
 type alias SavedModel =
     { gamename : String
     , page : Page
-    , decoration : Decoration
-    , otherDecoration : Decoration
-    , firstSelection : Decoration
     , chooseFirst : Player
     , lastTestMode : Maybe TestMode
     , gameid : String
@@ -336,8 +320,7 @@ type alias SubscriptionSet =
 
 
 type alias PrivateGameState =
-    { decoration : Decoration
-    , subscribers : SubscriptionSet
+    { subscribers : SubscriptionSet
     , statisticsSubscribers : Set Socket
     , statisticsChanged : Bool
 
@@ -349,8 +332,7 @@ type alias PrivateGameState =
 
 emptyPrivateGameState : PrivateGameState
 emptyPrivateGameState =
-    { decoration = NoDecoration
-    , subscribers = Set.empty
+    { subscribers = Set.empty
     , statisticsSubscribers = Set.empty
     , statisticsChanged = False
     , startTime = Nothing
@@ -527,7 +509,6 @@ type Message
     | PlayRsp
         { gameid : GameId
         , gameState : GameState
-        , decoration : Decoration
         }
     | ResignRsp
         { gameid : GameId
@@ -637,6 +618,9 @@ messageToGameid message =
         NewRsp { gameid } ->
             Just gameid
 
+        ReJoinReq { gameid } ->
+            Just gameid
+
         JoinReq { gameid } ->
             Just gameid
 
@@ -739,6 +723,22 @@ type alias NamedGame msg =
     , interfaceIsProxy : Bool
     , interface : ServerInterface msg
     }
+
+
+{-| Should probably handle interface specially, since it's uncomparable
+-}
+gamesEqual : NamedGame msg -> NamedGame msg -> Bool
+gamesEqual g1 g2 =
+    (g1.gamename == g2.gamename)
+        && (g1.gameid == g2.gameid)
+        && (g1.gameState == g2.gameState)
+        && (g1.isLocal == g2.isLocal)
+        && (g1.serverUrl == g2.serverUrl)
+        && (g1.otherPlayerid == g2.otherPlayerid)
+        && (g1.player == g2.player)
+        && (g1.playerid == g2.playerid)
+        && (g1.isLive == g2.isLive)
+        && (g1.yourWins == g2.yourWins)
 
 
 type alias NamedGameDict msg =

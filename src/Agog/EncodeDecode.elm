@@ -46,7 +46,6 @@ import Agog.Types as Types
         , Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
-        , Decoration(..)
         , GameState
         , JumpSequence
         , Message(..)
@@ -60,7 +59,6 @@ import Agog.Types as Types
         , OneSlideRecord
         , Page(..)
         , Piece
-        , PieceSelected
         , PieceType(..)
         , Player(..)
         , PlayerNames
@@ -209,9 +207,6 @@ encodeSavedModel model =
     JE.object
         [ ( "gamename", JE.string model.gamename )
         , ( "page", encodePage model.page )
-        , ( "decoration", encodeDecoration model.decoration )
-        , ( "otherDecoration", encodeDecoration model.otherDecoration )
-        , ( "firstSelection", encodeDecoration model.firstSelection )
         , ( "chooseFirst", encodePlayer model.chooseFirst )
         , ( "lastTestMode", encodeMaybe encodeTestMode model.lastTestMode )
         , ( "gameid", JE.string model.gameid )
@@ -233,9 +228,6 @@ savedModelDecoder =
     JD.succeed SavedModel
         |> optional "gamename" JD.string Types.defaultGamename
         |> optional "page" pageDecoder MainPage
-        |> required "decoration" decorationDecoder
-        |> optional "otherDecoration" decorationDecoder NoDecoration
-        |> required "firstSelection" decorationDecoder
         |> required "chooseFirst" playerDecoder
         |> optional "lastTestMode" (JD.nullable testModeDecoder) Nothing
         |> optional "gameid" JD.string ""
@@ -296,53 +288,6 @@ pageDecoder =
                     _ ->
                         JD.fail <| "Unknown page: " ++ s
             )
-
-
-encodePieceSelected : PieceSelected -> Value
-encodePieceSelected { selected, moves, jumps } =
-    JE.object
-        [ ( "selected", encodeIntPair selected )
-        , ( "moves", JE.list encodeIntPair moves )
-        , ( "jumps", JE.list (\pairList -> JE.list encodeIntPair pairList) jumps )
-        ]
-
-
-pieceSelectedDecoder : Decoder PieceSelected
-pieceSelectedDecoder =
-    JD.succeed PieceSelected
-        |> required "selected" intPairDecoder
-        |> required "moves" (JD.list intPairDecoder)
-        |> required "jumps" (JD.list (JD.list intPairDecoder))
-
-
-encodeDecoration : Decoration -> Value
-encodeDecoration decoration =
-    case decoration of
-        NoDecoration ->
-            JE.string "NoDecoration"
-
-        PieceSelectedDecoration pieceSelected ->
-            JE.object [ ( "PieceSelectedDecoration", encodePieceSelected pieceSelected ) ]
-
-
-decorationDecoder : Decoder Decoration
-decorationDecoder =
-    JD.oneOf
-        [ JD.string
-            |> JD.andThen
-                (\s ->
-                    if s == "NoDecoration" then
-                        JD.succeed NoDecoration
-
-                    else
-                        JD.fail <| "Unknown Decoration: " ++ s
-                )
-        , JD.field "PieceSelectedDecoration" pieceSelectedDecoder
-            |> JD.andThen
-                (\pieceSelected ->
-                    JD.succeed <| PieceSelectedDecoration pieceSelected
-                )
-        ]
 
 
 encodePlayer : Player -> Value
@@ -773,15 +718,9 @@ playerNamesDecoder =
 
 
 encodePrivateGameState : PrivateGameState -> Value
-encodePrivateGameState { decoration, subscribers, statisticsSubscribers, statisticsChanged, startTime, updateTime } =
+encodePrivateGameState { subscribers, statisticsSubscribers, statisticsChanged, startTime, updateTime } =
     List.concat
-        [ case decoration of
-            NoDecoration ->
-                []
-
-            _ ->
-                [ ( "decoration", encodeDecoration decoration ) ]
-        , case Set.toList subscribers of
+        [ case Set.toList subscribers of
             [] ->
                 []
 
@@ -853,7 +792,6 @@ socketSetDecoder =
 privateGameStateDecoder : Decoder PrivateGameState
 privateGameStateDecoder =
     JD.succeed PrivateGameState
-        |> optional "decoration" decorationDecoder NoDecoration
         |> optional "subscribers" subscribersDecoder Set.empty
         |> optional "statisticsSubscribers" socketSetDecoder Set.empty
         |> optional "statisticsChanged" JD.bool False
@@ -1977,11 +1915,10 @@ messageEncoderInternal includePrivate message =
               ]
             )
 
-        PlayRsp { gameid, gameState, decoration } ->
+        PlayRsp { gameid, gameState } ->
             ( Rsp "play"
             , [ ( "gameid", JE.string gameid )
               , ( "gameState", encodeGameState includePrivate gameState )
-              , ( "decoration", encodeDecoration decoration )
               ]
             )
 
@@ -2247,16 +2184,14 @@ updateRspDecoder =
 playRspDecoder : Decoder Message
 playRspDecoder =
     JD.succeed
-        (\gameid gameState decoration ->
+        (\gameid gameState ->
             PlayRsp
                 { gameid = gameid
                 , gameState = gameState
-                , decoration = decoration
                 }
         )
         |> required "gameid" JD.string
         |> required "gameState" gameStateDecoder
-        |> required "decoration" decorationDecoder
 
 
 resignRspDecoder : Decoder Message
