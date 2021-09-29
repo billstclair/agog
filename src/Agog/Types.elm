@@ -480,6 +480,7 @@ type Message
     | JoinReq
         { gameid : GameId
         , name : String
+        , isRestore : Bool
         }
     | ReJoinReq
         { gameid : GameId
@@ -490,6 +491,7 @@ type Message
         , playerid : Maybe PlayerId
         , player : Player
         , gameState : GameState
+        , wasRestored : Bool
         }
     | LeaveReq { playerid : PlayerId }
     | LeaveRsp { gameid : GameId, player : Player }
@@ -669,10 +671,12 @@ type MessageForLog
         , name : String
         , publicType : PublicType
         , gameState : String
+        , wasRestored : Bool
         }
     | JoinReqLog
         { gameid : GameId
         , name : String
+        , isRestore : Bool
         }
     | RejoinReqLog
         { gameid : GameId
@@ -683,6 +687,7 @@ type MessageForLog
         , playerid : Maybe PlayerId
         , player : Player
         , gameState : String
+        , wasRestored : Bool
         }
     | LeaveReqLog { playerid : PlayerId }
     | LeaveRspLog { gameid : GameId, player : Player }

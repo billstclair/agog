@@ -1858,10 +1858,11 @@ messageEncoderInternal includePrivate message =
               ]
             )
 
-        JoinReq { gameid, name } ->
+        JoinReq { gameid, name, isRestore } ->
             ( Req "join"
             , [ ( "gameid", JE.string gameid )
               , ( "name", JE.string name )
+              , ( "isRestore", JE.bool isRestore )
               ]
             )
 
@@ -1872,12 +1873,13 @@ messageEncoderInternal includePrivate message =
               ]
             )
 
-        JoinRsp { gameid, playerid, player, gameState } ->
+        JoinRsp { gameid, playerid, player, gameState, wasRestored } ->
             ( Rsp "join"
             , [ ( "gameid", JE.string gameid )
               , ( "playerid", encodeMaybe JE.string playerid )
               , ( "player", encodePlayer player )
               , ( "gameState", encodeGameState includePrivate gameState )
+              , ( "wasRestored", JE.bool wasRestored )
               ]
             )
 
@@ -2039,14 +2041,16 @@ newReqDecoder =
 joinReqDecoder : Decoder Message
 joinReqDecoder =
     JD.succeed
-        (\gameid name ->
+        (\gameid name isRestore ->
             JoinReq
                 { gameid = gameid
                 , name = name
+                , isRestore = isRestore
                 }
         )
         |> required "gameid" JD.string
         |> required "name" JD.string
+        |> optional "isRestore" JD.bool False
 
 
 rejoinReqDecoder : Decoder Message
@@ -2149,18 +2153,20 @@ newRspDecoder =
 joinRspDecoder : Decoder Message
 joinRspDecoder =
     JD.succeed
-        (\gameid playerid player gameState ->
+        (\gameid playerid player gameState wasRestored ->
             JoinRsp
                 { gameid = gameid
                 , playerid = playerid
                 , player = player
                 , gameState = gameState
+                , wasRestored = wasRestored
                 }
         )
         |> required "gameid" JD.string
         |> required "playerid" (JD.nullable JD.string)
         |> required "player" playerDecoder
         |> required "gameState" gameStateDecoder
+        |> optional "wasRestored" JD.bool False
 
 
 leaveRspDecoder : Decoder Message
@@ -2473,7 +2479,7 @@ messageToLogMessage message =
                 , maybeGameid = maybeGameid
                 }
 
-        NewRsp { gameid, playerid, player, name, publicType, gameState } ->
+        NewRsp { gameid, playerid, player, name, publicType, gameState, wasRestored } ->
             NewRspLog
                 { gameid = gameid
                 , playerid = playerid
@@ -2481,6 +2487,7 @@ messageToLogMessage message =
                 , name = name
                 , publicType = publicType
                 , gameState = gameStateString gameState
+                , wasRestored = wasRestored
                 }
 
         JoinReq rec ->
@@ -2489,12 +2496,13 @@ messageToLogMessage message =
         ReJoinReq rec ->
             RejoinReqLog rec
 
-        JoinRsp { gameid, playerid, player, gameState } ->
+        JoinRsp { gameid, playerid, player, gameState, wasRestored } ->
             JoinRspLog
                 { gameid = gameid
                 , playerid = playerid
                 , player = player
                 , gameState = gameStateString gameState
+                , wasRestored = wasRestored
                 }
 
         LeaveReq rec ->

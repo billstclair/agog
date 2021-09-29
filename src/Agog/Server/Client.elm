@@ -324,6 +324,7 @@ validMessages model =
         [ JoinReq
             { gameid = gameid
             , name = "Chris"
+            , isRestore = False
             }
         , newReq
         ]

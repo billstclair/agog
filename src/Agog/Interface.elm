@@ -381,7 +381,7 @@ generalMessageProcessorInternal isProxyServer state message =
                         }
                 )
 
-        JoinReq { gameid, name } ->
+        JoinReq { gameid, name, isRestore } ->
             case ServerInterface.getGame gameid state of
                 Nothing ->
                     errorRes message state "Unknown gameid"
@@ -442,6 +442,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                 , playerid = Just playerid
                                 , player = player
                                 , gameState = gameState2
+                                , wasRestored = isRestore
                                 }
                         )
 
