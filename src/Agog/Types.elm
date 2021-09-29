@@ -466,6 +466,7 @@ type Message
         , player : Player
         , publicType : PublicType
         , restoreState : Maybe GameState
+        , maybeGameid : Maybe GameId
         }
     | NewRsp
         { gameid : GameId
@@ -474,6 +475,7 @@ type Message
         , name : String
         , publicType : PublicType
         , gameState : GameState
+        , wasRestored : Bool
         }
     | JoinReq
         { gameid : GameId
@@ -658,6 +660,7 @@ type MessageForLog
         , player : Player
         , publicType : PublicType
         , restoreState : Maybe String
+        , maybeGameid : Maybe GameId
         }
     | NewRspLog
         { gameid : GameId
@@ -809,7 +812,7 @@ defaultGamename =
 
 type alias NamedGame msg =
     { gamename : String
-    , gameid : String
+    , gameid : GameId
     , gameState : GameState
     , isLocal : Bool
     , serverUrl : String

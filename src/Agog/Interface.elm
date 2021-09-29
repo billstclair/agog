@@ -57,7 +57,7 @@ import Debug
 import Dict exposing (Dict)
 import List.Extra as LE
 import WebSocketFramework exposing (decodePlist, unknownMessage)
-import WebSocketFramework.EncodeDecode as WFED
+import WebSocketFramework.EncodeDecode as WSFED
 import WebSocketFramework.ServerInterface as ServerInterface
 import WebSocketFramework.Types
     exposing
@@ -94,7 +94,7 @@ errorRes message state text =
     ( state
     , Just <|
         ErrorRsp
-            { request = WFED.encodeMessage ED.messageEncoder message
+            { request = WSFED.encodeMessage ED.messageEncoder message
             , text = text
             }
     )
@@ -271,8 +271,25 @@ logSeed prefix state =
 generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessorInternal isProxyServer state message =
     case message of
-        NewReq { name, player, publicType, restoreState } ->
-            if name == "" then
+        NewReq { name, player, publicType, restoreState, maybeGameid } ->
+            let
+                gameidError =
+                    case maybeGameid of
+                        Nothing ->
+                            ""
+
+                        Just gameid ->
+                            case ServerInterface.getGame gameid state of
+                                Nothing ->
+                                    ""
+
+                                Just _ ->
+                                    "Can't restore existing gameid"
+            in
+            if gameidError /= "" then
+                errorRes message state gameidError
+
+            else if name == "" then
                 errorRes message state "Blank name not allowed."
 
             else
@@ -300,7 +317,12 @@ generalMessageProcessorInternal isProxyServer state message =
                                 }
 
                     ( gameid, state2 ) =
-                        ServerInterface.newGameid state
+                        case maybeGameid of
+                            Nothing ->
+                                ServerInterface.newGameid state
+
+                            Just gid ->
+                                ( gid, state )
 
                     ( playerid, state3 ) =
                         ServerInterface.newPlayerid state2
@@ -355,6 +377,7 @@ generalMessageProcessorInternal isProxyServer state message =
                         , name = name
                         , publicType = publicType
                         , gameState = gameState
+                        , wasRestored = maybeGameid /= Nothing
                         }
                 )
 

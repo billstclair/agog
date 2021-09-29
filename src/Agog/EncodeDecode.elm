@@ -1834,7 +1834,7 @@ messageEncoderWithPrivate =
 messageEncoderInternal : Bool -> Message -> ( ReqRsp, Plist )
 messageEncoderInternal includePrivate message =
     case message of
-        NewReq { name, player, publicType, restoreState } ->
+        NewReq { name, player, publicType, restoreState, maybeGameid } ->
             ( Req "new"
             , [ ( "name", JE.string name )
               , ( "player", encodePlayer player )
@@ -1842,10 +1842,11 @@ messageEncoderInternal includePrivate message =
               , ( "restoreState"
                 , encodeMaybe (encodeGameState includePrivate) restoreState
                 )
+              , ( "maybeGameid", encodeMaybe JE.string maybeGameid )
               ]
             )
 
-        NewRsp { gameid, playerid, player, name, publicType, gameState } ->
+        NewRsp { gameid, playerid, player, name, publicType, gameState, wasRestored } ->
             ( Rsp "new"
             , [ ( "gameid", JE.string gameid )
               , ( "playerid", JE.string playerid )
@@ -1853,6 +1854,7 @@ messageEncoderInternal includePrivate message =
               , ( "name", JE.string name )
               , ( "publicType", encodePublicType publicType )
               , ( "gameState", encodeGameState includePrivate gameState )
+              , ( "wasRestored", JE.bool wasRestored )
               ]
             )
 
@@ -2018,18 +2020,20 @@ messageEncoderInternal includePrivate message =
 newReqDecoder : Decoder Message
 newReqDecoder =
     JD.succeed
-        (\name player publicType restoreState ->
+        (\name player publicType restoreState maybeGameid ->
             NewReq
                 { name = name
                 , player = player
                 , publicType = publicType
                 , restoreState = restoreState
+                , maybeGameid = maybeGameid
                 }
         )
         |> required "name" JD.string
         |> required "player" playerDecoder
         |> required "publicType" publicTypeDecoder
         |> required "restoreState" (JD.nullable gameStateDecoder)
+        |> optional "maybeGameid" (JD.nullable JD.string) Nothing
 
 
 joinReqDecoder : Decoder Message
@@ -2122,7 +2126,7 @@ chatReqDecoder =
 newRspDecoder : Decoder Message
 newRspDecoder =
     JD.succeed
-        (\gameid playerid player name publicType gameState ->
+        (\gameid playerid player name publicType gameState wasRestored ->
             NewRsp
                 { gameid = gameid
                 , playerid = playerid
@@ -2130,6 +2134,7 @@ newRspDecoder =
                 , name = name
                 , publicType = publicType
                 , gameState = gameState
+                , wasRestored = wasRestored
                 }
         )
         |> required "gameid" JD.string
@@ -2138,6 +2143,7 @@ newRspDecoder =
         |> required "name" JD.string
         |> required "publicType" publicTypeDecoder
         |> required "gameState" gameStateDecoder
+        |> optional "wasRestored" JD.bool False
 
 
 joinRspDecoder : Decoder Message
@@ -2452,7 +2458,7 @@ messageToLogMessage message =
             JE.encode 0 (encodeGameState True gameState)
     in
     case message of
-        NewReq { name, player, publicType, restoreState } ->
+        NewReq { name, player, publicType, restoreState, maybeGameid } ->
             NewReqLog
                 { name = name
                 , player = player
@@ -2464,6 +2470,7 @@ messageToLogMessage message =
 
                         Just gameState ->
                             Just <| gameStateString gameState
+                , maybeGameid = maybeGameid
                 }
 
         NewRsp { gameid, playerid, player, name, publicType, gameState } ->

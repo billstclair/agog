@@ -1,7 +1,7 @@
 ---------------------------------------------------------------------
 --
 -- Main.elm
--- AGoG top-level
+-- AGOG top-level
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
@@ -10,6 +10,21 @@
 ----------------------------------------------------------------------
 ---
 --- TODO:
+---
+--- Recover from client when server had forgotten the game.
+--- Eventually want cryptographic security here, so that someone who
+--- grabbed the gameid from the public board can't snarf a game.
+--- Mix gameid with secret and give to only the real players.
+--- Or mint a new gameid when the second player joins,
+--- so that the gameid is no longer public.
+--- That is addable at a later date.
+---
+--- After the recovery code works, errors from the server during gameplay
+--- may be unfound playerid, because the server was restarted.
+--- ErrorRsp needs to encode this as other than "unknown playerid" in the
+--- text. Instead of the encoded request, it would be good to have an actual
+--- error field. This could also be solved by persisting the gamedicts on
+--- the server, but I'd rather not.
 ---
 --- Zooming the screen should make the board bigger, but not fit.
 --- This means that sizing should depend on screen size, not browser
@@ -197,6 +212,7 @@ type ConnectionReason
     | PublicGamesConnection
     | StatisticsConnection
     | UpdateConnection
+    | RestoreGameConnection Game
 
 
 type alias ChatSettings =
@@ -522,6 +538,7 @@ type alias NewReqBody =
     , player : Player
     , publicType : PublicType
     , restoreState : Maybe GameState
+    , maybeGameid : Maybe GameId
     }
 
 
@@ -531,6 +548,7 @@ initialNewReqBody =
     , player = WhitePlayer
     , publicType = NotPublic
     , restoreState = Nothing
+    , maybeGameid = Nothing
     }
 
 
@@ -891,7 +909,21 @@ playerName player game =
             players.black
 
 
-gameFromId : String -> Model -> Maybe Game
+gameFromPlayerId : PlayerId -> Model -> Maybe Game
+gameFromPlayerId playerid model =
+    if model.game.playerid == playerid then
+        Just model.game
+
+    else
+        case DE.find (\_ game -> game.playerid == playerid) model.gameDict of
+            Nothing ->
+                Nothing
+
+            Just ( _, game ) ->
+                Just game
+
+
+gameFromId : GameId -> Model -> Maybe Game
 gameFromId gameid model =
     -- Don't use model.gameid here. That field is for the UI.
     if model.game.gameid == gameid then
@@ -982,76 +1014,84 @@ incomingMessageInternal interface maybeGame message model =
                     )
     in
     case message of
-        NewRsp { gameid, playerid, player, name, gameState } ->
-            case maybeGame of
-                Just game ->
-                    let
-                        returnedGame =
-                            if
-                                (model.game.gamename == game.gamename)
-                                    && game.isLocal
-                            then
-                                -- Otherwise, there's no way out in the UI.
-                                Just { game | isLive = False }
+        NewRsp { gameid, playerid, player, name, gameState, wasRestored } ->
+            if maybeGame /= Nothing && not wasRestored then
+                case maybeGame of
+                    Nothing ->
+                        -- Can't happen
+                        ( Nothing, model |> withNoCmd )
 
-                            else
-                                Nothing
-                    in
-                    ( returnedGame
-                    , { model
-                        | error =
-                            -- This is actually remotely possible, if the
-                            -- remote server happens to randomly generate a
-                            -- gameid that matches a local one (or vice-versa).
-                            -- TODO: prefix local gameid so it CAN'T match.
-                            -- Add existing local game ids to the proxy
-                            -- dictionary, so that they won't be reused.
-                            -- Maybe those should be options for WebSocketFramework
-                            Just <| "Bug: NewRsp found existing gameid: " ++ gameid
-                      }
-                        |> withNoCmd
-                    )
+                    Just game ->
+                        let
+                            returnedGame =
+                                if
+                                    (model.game.gamename == game.gamename)
+                                        && game.isLocal
+                                then
+                                    -- Otherwise, there's no way out in the UI.
+                                    Just { game | isLive = False }
 
-                Nothing ->
-                    let
-                        game =
-                            model.game
+                                else
+                                    Nothing
+                        in
+                        ( returnedGame
+                        , { model
+                            | error =
+                                -- This is actually remotely possible, if the
+                                -- remote server happens to randomly generate a
+                                -- gameid that matches a local one (or vice-versa).
+                                -- TODO: make isLocal an arg to gameFromId
+                                Just <| "Bug: NewRsp found existing gameid: " ++ gameid
+                          }
+                            |> withNoCmd
+                        )
 
-                        model2 =
-                            { model
-                                | connectionReason = JoinGameConnection
-                            }
+            else
+                let
+                    game =
+                        case maybeGame of
+                            Nothing ->
+                                model.game
 
-                        ( model3, chatCmd ) =
-                            clearChatSettings game.gamename True model2
+                            Just g ->
+                                g
 
-                        game2 =
-                            { game
-                                | gameid = gameid
-                                , gameState = gameState
-                                , player = player
-                                , playerid = playerid
-                                , isLive = True
-                                , yourWins = 0
-                                , interface = interface
-                            }
-                    in
-                    ( Just game2
-                    , model3
-                        |> withCmds
-                            [ chatCmd
-                            , if not game.isLocal then
-                                Cmd.none
+                    model2 =
+                        -- Why is this here?
+                        { model
+                            | connectionReason = JoinGameConnection
+                        }
 
-                              else if player == WhitePlayer then
-                                send interface <|
-                                    JoinReq { gameid = gameid, name = "Black" }
+                    ( model3, chatCmd ) =
+                        clearChatSettings game.gamename True model2
 
-                              else
-                                send interface <|
-                                    JoinReq { gameid = gameid, name = "White" }
-                            ]
-                    )
+                    game2 =
+                        { game
+                            | gameid = gameid
+                            , gameState = gameState
+                            , player = player
+                            , playerid = playerid
+                            , isLive = True
+                            , yourWins = 0
+                            , interface = interface
+                        }
+                in
+                ( Just game2
+                , model3
+                    |> withCmds
+                        [ chatCmd
+                        , if not game.isLocal then
+                            Cmd.none
+
+                          else if player == WhitePlayer then
+                            send interface <|
+                                JoinReq { gameid = gameid, name = "Black" }
+
+                          else
+                            send interface <|
+                                JoinReq { gameid = gameid, name = "White" }
+                        ]
+                )
 
         JoinRsp { gameid, playerid, player, gameState } ->
             let
@@ -1310,8 +1350,37 @@ incomingMessageInternal interface maybeGame message model =
 
         ErrorRsp { request, text } ->
             ( Nothing
-            , { model | error = Just text }
-                |> withNoCmd
+            , case WSFED.decodeMessage ED.messageDecoder request of
+                Ok (UpdateReq { playerid }) ->
+                    -- Server has forgotten the game.
+                    -- Restore it.
+                    case gameFromPlayerId playerid model of
+                        Nothing ->
+                            { model
+                                | error =
+                                    Just "Bug: Can't restore game."
+                            }
+                                |> withNoCmd
+
+                        Just game ->
+                            webSocketConnect (RestoreGameConnection game) model
+
+                Ok (NewReq { maybeGameid }) ->
+                    case maybeGameid of
+                        Nothing ->
+                            { model | error = Just text }
+                                |> withNoCmd
+
+                        Just _ ->
+                            { model
+                                | error =
+                                    Just "Can't restore game. The other player must have done so. Try reloading the page."
+                            }
+                                |> withNoCmd
+
+                _ ->
+                    { model | error = Just text }
+                        |> withNoCmd
             )
 
         ChatRsp { gameid, name, text } ->
@@ -1554,6 +1623,7 @@ socketHandler response state mdl =
                                                 forName ->
                                                     PublicFor forName
                                     , restoreState = Nothing
+                                    , maybeGameid = Nothing
                                     }
 
                         JoinGameConnection ->
@@ -1568,7 +1638,7 @@ socketHandler response state mdl =
                                 PublicGamesReq
                                     { subscribe = model.page == PublicPage
                                     , forName = model.settings.name
-                                    , gameid = Just model.gameid
+                                    , gameid = Just model.game.gameid
                                     }
 
                         StatisticsConnection ->
@@ -1581,6 +1651,16 @@ socketHandler response state mdl =
                             send interface <|
                                 UpdateReq
                                     { playerid = game.playerid }
+
+                        RestoreGameConnection localGame ->
+                            send interface <|
+                                NewReq
+                                    { name = model.settings.name
+                                    , player = model.chooseFirst
+                                    , publicType = NotPublic
+                                    , restoreState = Just localGame.gameState
+                                    , maybeGameid = Just localGame.gameid
+                                    }
                     )
 
         _ ->
