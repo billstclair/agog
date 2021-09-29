@@ -34,7 +34,6 @@ import Agog.Types as Types
         , Message(..)
         , MovesOrJumps(..)
         , NamedGame
-        , NamedGameDict
         , NewBoard
         , OneMove
         , Page(..)
@@ -232,7 +231,7 @@ type alias Model =
     , zone : Zone
     , seed : Maybe Seed
     , game : Game
-    , gameDict : NamedGameDict Msg
+    , gameDict : Dict String Game
     , chatDict : Dict String ChatSettings
     , connectionReason : ConnectionReason
     , funnelState : State
@@ -292,6 +291,7 @@ type Msg
     | SetForName String
     | SetServerUrl String
     | SetGameid String
+    | SetGameName String
     | SetPage Page
     | SetHideTitle Bool
     | ResetScore
@@ -641,12 +641,13 @@ handleGetResponse label key value model =
 
 updateGame : String -> (Game -> Game) -> Model -> ( Model, Maybe Game )
 updateGame gamename updater model =
-    if gamename == model.gamename then
+    if gamename == model.game.gamename then
         let
             game =
                 updater model.game
         in
         ( { model
+            -- TODO: This may be the wrong time to change the displayed gameid
             | gameid = game.gameid
             , game = game
           }
@@ -656,6 +657,10 @@ updateGame gamename updater model =
     else
         case Dict.get gamename model.gameDict of
             Nothing ->
+                let
+                    name =
+                        Debug.log "updateGame, game not found" gamename
+                in
                 ( model, Nothing )
 
             Just game ->
@@ -888,6 +893,7 @@ playerName player game =
 
 gameFromId : String -> Model -> Maybe Game
 gameFromId gameid model =
+    -- Don't use model.gameid here. That field is for the UI.
     if model.game.gameid == gameid then
         Just model.game
 
@@ -946,9 +952,18 @@ incomingMessage interface message mdl =
                     updateGame game.gamename (always game) model2
             in
             model3
-                |> withCmd cmd2
+                |> withCmds [ cmd2, putGame game ]
 
 
+{-| Do the work for `incomingMessage`.
+
+If `maybeGame` is not not `Nothing`, then a game with its `gameid` was found.
+If the `Maybe Game` in the result is not `Nothing`, then the `Game` was changed,
+and needs to be persisted by `incomingMessage`. Otherwise, it was NOT changed.
+
+It is expected that the game's `gamename` is NOT changed. That can be done from the UI, but only `SetGameName` knows how to do what is necessary.
+
+-}
 incomingMessageInternal : ServerInterface -> Maybe Game -> Message -> Model -> ( Maybe Game, ( Model, Cmd Msg ) )
 incomingMessageInternal interface maybeGame message model =
     let
@@ -968,63 +983,75 @@ incomingMessageInternal interface maybeGame message model =
     in
     case message of
         NewRsp { gameid, playerid, player, name, gameState } ->
-            {-
-               case maybeGame of
-                   Just _ ->
-                       ( Nothing
-                       , { model
-                           | error =
-                               Just <| "Bug: NewRsp found existing gameid: " ++ gameid
-                         }
-                           |> withNoCmd
-                       )
+            case maybeGame of
+                Just game ->
+                    let
+                        returnedGame =
+                            if
+                                (model.game.gamename == game.gamename)
+                                    && game.isLocal
+                            then
+                                -- Otherwise, there's no way out in the UI.
+                                Just { game | isLive = False }
 
-                   Nothing ->
-            -}
-            let
-                game =
-                    case maybeGame of
-                        Just g ->
-                            g
+                            else
+                                Nothing
+                    in
+                    ( returnedGame
+                    , { model
+                        | error =
+                            -- This is actually remotely possible, if the
+                            -- remote server happens to randomly generate a
+                            -- gameid that matches a local one (or vice-versa).
+                            -- TODO: prefix local gameid so it CAN'T match.
+                            -- Add existing local game ids to the proxy
+                            -- dictionary, so that they won't be reused.
+                            -- Maybe those should be options for WebSocketFramework
+                            Just <| "Bug: NewRsp found existing gameid: " ++ gameid
+                      }
+                        |> withNoCmd
+                    )
 
-                        Nothing ->
+                Nothing ->
+                    let
+                        game =
                             model.game
 
-                model2 =
-                    { model
-                        | connectionReason = JoinGameConnection
-                    }
+                        model2 =
+                            { model
+                                | connectionReason = JoinGameConnection
+                            }
 
-                ( model3, chatCmd ) =
-                    clearChatSettings game.gamename True model2
+                        ( model3, chatCmd ) =
+                            clearChatSettings game.gamename True model2
 
-                game2 =
-                    { game
-                        | gameid = gameid
-                        , gameState = gameState
-                        , player = player
-                        , playerid = playerid
-                        , isLive = True
-                        , yourWins = 0
-                        , interface = interface
-                    }
-            in
-            ( Just game2
-            , model3
-                |> withCmds
-                    [ chatCmd
-                    , if not game.isLocal then
-                        Cmd.none
+                        game2 =
+                            { game
+                                | gameid = gameid
+                                , gameState = gameState
+                                , player = player
+                                , playerid = playerid
+                                , isLive = True
+                                , yourWins = 0
+                                , interface = interface
+                            }
+                    in
+                    ( Just game2
+                    , model3
+                        |> withCmds
+                            [ chatCmd
+                            , if not game.isLocal then
+                                Cmd.none
 
-                      else if player == WhitePlayer then
-                        send interface <|
-                            JoinReq { gameid = gameid, name = "Black" }
+                              else if player == WhitePlayer then
+                                send interface <|
+                                    JoinReq { gameid = gameid, name = "Black" }
 
-                      else
-                        send interface <|
-                            JoinReq { gameid = gameid, name = "White" }
-                    ]
-            )
+                              else
+                                send interface <|
+                                    JoinReq { gameid = gameid, name = "White" }
+                            ]
+                    )
 
         JoinRsp { gameid, playerid, player, gameState } ->
             let
@@ -1644,60 +1671,7 @@ update msg model =
 
               else
                 Cmd.none
-
-            -- Should really save explicitly when a change is made
-            , if model.started && doSave then
-                Cmd.batch
-                    [ if not <| Types.gamesEqual model.game mdl.game then
-                        putGame mdl.game
-
-                      else
-                        Cmd.none
-                    , saveGameDict model mdl
-                    ]
-
-              else
-                Cmd.none
             ]
-
-
-saveGameDict : Model -> Model -> Cmd Msg
-saveGameDict oldModel model =
-    let
-        oldDict =
-            oldModel.gameDict
-
-        dict =
-            model.gameDict
-
-        saver k game cmd =
-            let
-                batch _ =
-                    Cmd.batch [ cmd, putGame game ]
-            in
-            case Dict.get k oldDict of
-                Nothing ->
-                    batch ()
-
-                Just oldGame ->
-                    if not <| Types.gamesEqual game oldGame then
-                        batch ()
-
-                    else
-                        cmd
-
-        deleter k _ cmd =
-            case Dict.get k dict of
-                Just _ ->
-                    cmd
-
-                Nothing ->
-                    Cmd.batch [ cmd, put (gameKey k) Nothing ]
-
-        saves =
-            Dict.foldl saver Cmd.none dict
-    in
-    Dict.foldl deleter saves oldDict
 
 
 updateInternal : Msg -> Model -> ( Model, Cmd Msg )
@@ -1837,8 +1811,15 @@ updateInternal msg model =
                 |> withNoCmd
 
         SetGameid gameid ->
+            -- model's gameid property is only for the UI.
+            -- It is not changeable there if a game is in progress.
             { model | gameid = gameid }
                 |> withNoCmd
+
+        SetGameName gamename ->
+            -- TODO, part of the UI for multiple simultaneous games.
+            -- Remember to delete the old entry from `model.gameDict`.
+            model |> withNoCmd
 
         SetPage page ->
             let

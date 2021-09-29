@@ -21,7 +21,6 @@ module Agog.Types exposing
     , MessageForLog(..)
     , MovesOrJumps(..)
     , NamedGame
-    , NamedGameDict
     , NewBoard
     , OneCorruptibleJump
     , OneJump
@@ -840,7 +839,3 @@ gamesEqual g1 g2 =
         && (g1.playerid == g2.playerid)
         && (g1.isLive == g2.isLive)
         && (g1.yourWins == g2.yourWins)
-
-
-type alias NamedGameDict msg =
-    Dict String (NamedGame msg)

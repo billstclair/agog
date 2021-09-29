@@ -225,8 +225,17 @@ generalMessageProcessor isProxyServer state message =
 
             else
                 setStatisticsChanged True newState
+
+        newState3 =
+            if isProxyServer then
+                -- Prevent garbage accumulation.
+                -- This is only processed by the real server.
+                { newState2 | changes = Nothing }
+
+            else
+                newState2
     in
-    ( newState2, response )
+    ( newState3, response )
 
 
 logInterfaceSeed : String -> Types.ServerInterface msg -> Types.ServerInterface msg
