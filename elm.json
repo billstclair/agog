@@ -8,6 +8,7 @@
         "direct": {
             "Janiczek/cmd-extra": "1.1.0",
             "NoRedInk/elm-json-decode-pipeline": "1.0.0",
+            "avh4/elm-fifo": "1.0.4",
             "billstclair/elm-chat": "3.0.2",
             "billstclair/elm-localstorage": "7.2.0",
             "billstclair/elm-port-funnel": "1.2.0",
