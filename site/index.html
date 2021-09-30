@@ -28,6 +28,14 @@
           }
       );                                
 
+      // From https://stackoverflow.com/a/54119854
+      // Fixes delay in Safari.
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      var audioCtx = null;
+      if (AudioContext) {
+          audioCtx = new AudioContext();
+      }
+
       var sounds = {};
       var files = ['jump.mp3', 'move.mp3'];
       for (var i = 0; i < files.length; i++) {
