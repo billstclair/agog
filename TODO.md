@@ -8,3 +8,7 @@
 1. Handicapping
 1. S3 persistence
 1. Watchers, can chat, but don't play.
+
+## Maybe
+
+1. Custom color schemes
