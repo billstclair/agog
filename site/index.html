@@ -30,11 +30,13 @@
 
       // From https://stackoverflow.com/a/54119854
       // Fixes delay in Safari.
+      /*  // Unfortunately, this makes it turn off music, always.
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       var audioCtx = null;
       if (AudioContext) {
           audioCtx = new AudioContext();
-      }
+          }
+      */
 
       var sounds = {};
       var files = ['jump.mp3', 'move.mp3'];
