@@ -1,5 +1,6 @@
 # AGOG TODO
 
+1. Highlight last move. Square moved from and to? Piece itself? Play.
 1. Multiple simultaneous games. Alerts for activity in off-screen games.
 1. Saved games, named in database
 1. Game replay, play/pause/rewind/step/goto move

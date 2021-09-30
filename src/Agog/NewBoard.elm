@@ -53,6 +53,8 @@ import Agog.Types as Types
         , NewBoard
         , OneCorruptibleJump
         , OneJump
+        , OneMove
+        , OneMoveSequence(..)
         , Piece
         , PieceType(..)
         , Player(..)
@@ -562,28 +564,10 @@ render style size tagger sizer player rotated gameState =
                 List.concat
                     [ drawRows style delta rotated
                     , drawCols style delta rotated sizer board
-                    , drawRects style selected jumperLocations legalMoves jumps board rotated delta
+                    , drawRects style selected jumperLocations legalMoves jumps (List.head gameState.moves) board rotated delta
                     , drawClickRects style delta rotated tagger
                     ]
             ]
-        ]
-
-
-arrowMarker : Style -> Svg msg
-arrowMarker style =
-    marker
-        [ Attributes.id "arrow"
-        , viewBox "0 0 10 10"
-        , refX "5"
-        , refY "5"
-        , markerWidth "4"
-        , markerHeight "4"
-        , orient "auto-start-reverse"
-        , stroke style.arrowColor
-        , fill style.arrowColor
-        ]
-        [ path [ d "M 0 0 L 10 5 L 0 10 z" ]
-            []
         ]
 
 
@@ -673,8 +657,8 @@ indices =
     [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
 
-drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> NewBoard -> Bool -> Int -> List (Svg msg)
-drawRects style selected jumperLocations legalMoves jumps board rotated delta =
+drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> Maybe OneMove -> NewBoard -> Bool -> Int -> List (Svg msg)
+drawRects style selected jumperLocations legalMoves jumps maybeLastMove board rotated delta =
     let
         docol f rowidx colidx res =
             f delta rowidx colidx
@@ -686,6 +670,7 @@ drawRects style selected jumperLocations legalMoves jumps board rotated delta =
     (List.foldr (dorow (drawShadeRect style)) [] indices
         |> removeBlankGs
     )
+        ++ highlightLastMove style selected maybeLastMove delta
         ++ drawHighlights style selected jumperLocations legalMoves delta
         ++ (drawSomeRemovedPieces style rotated WhiteColor delta <|
                 (23 - countColor WhiteColor board)
@@ -697,6 +682,64 @@ drawRects style selected jumperLocations legalMoves jumps board rotated delta =
                 |> removeBlankGs
            )
         ++ drawJumps style board jumps delta
+
+
+highlightLastMove : Style -> Maybe RowCol -> Maybe OneMove -> Int -> List (Svg msg)
+highlightLastMove style selected maybeLastMove delta =
+    case selected of
+        Just _ ->
+            []
+
+        Nothing ->
+            case maybeLastMove of
+                Nothing ->
+                    []
+
+                Just oneMove ->
+                    case oneMove.sequence of
+                        OneResign ->
+                            []
+
+                        OneSlide { from, to, makeHulk } ->
+                            [ drawHighlight style.lastMoveFromColor delta from
+                            , drawHighlight style.lastMoveToColor delta to
+                            ]
+                                ++ (case makeHulk of
+                                        Nothing ->
+                                            []
+
+                                        Just hulkPos ->
+                                            [ drawHighlight style.lastMoveToColor delta hulkPos ]
+                                   )
+
+                        OneJumpSequence jumps ->
+                            let
+                                mapper : OneCorruptibleJump -> List (Svg msg) -> List (Svg msg)
+                                mapper { from, over, to, corrupted } res =
+                                    if res == [] then
+                                        [ drawHighlight style.lastMoveFromColor
+                                            delta
+                                            from
+                                        , drawHighlight style.lastMoveToColor
+                                            delta
+                                            to
+                                        ]
+                                            ++ (if corrupted then
+                                                    [ drawHighlight style.lastMoveToColor
+                                                        delta
+                                                        over
+                                                    ]
+
+                                                else
+                                                    []
+                                               )
+                                            ++ res
+
+                                    else
+                                        drawHighlight style.lastMoveToColor delta to
+                                            :: res
+                            in
+                            List.foldl mapper [] jumps
 
 
 drawHighlight : String -> Int -> RowCol -> Svg msg

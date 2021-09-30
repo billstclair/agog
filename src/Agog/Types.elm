@@ -211,13 +211,12 @@ type alias Style =
     , pathColor : String
     , alreadyFilledColor : String
     , arrowColor : String
-    , highlightOpacity : String
-    , compassColor : String
-    , compassOpacity : String
     , shadeColor : String
     , selectedColor : String
     , moveColor : String
     , corruptedHulkXColor : String
+    , lastMoveFromColor : String
+    , lastMoveToColor : String
     }
 
 
@@ -228,13 +227,12 @@ lightStyle =
     , pathColor = "orange"
     , alreadyFilledColor = "red"
     , arrowColor = "green"
-    , highlightOpacity = "0.3"
-    , compassColor = "black"
-    , compassOpacity = "0.5"
     , shadeColor = "lightgray"
     , selectedColor = "black"
     , moveColor = "blue"
     , corruptedHulkXColor = "red"
+    , lastMoveFromColor = "lightslategray"
+    , lastMoveToColor = "turquoise"
     }
 
 
@@ -245,13 +243,12 @@ darkStyle =
     , pathColor = "purple"
     , alreadyFilledColor = "red"
     , arrowColor = "green"
-    , highlightOpacity = "0.4"
-    , compassColor = "white"
-    , compassOpacity = "0.3"
     , shadeColor = "lightgray"
     , selectedColor = "orange"
     , moveColor = "green"
     , corruptedHulkXColor = "red"
+    , lastMoveFromColor = "gold"
+    , lastMoveToColor = "lightgreen"
     }
 
 
