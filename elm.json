@@ -10,7 +10,7 @@
             "NoRedInk/elm-json-decode-pipeline": "1.0.0",
             "avh4/elm-fifo": "1.0.4",
             "billstclair/elm-chat": "3.0.2",
-            "billstclair/elm-localstorage": "7.2.0",
+            "billstclair/elm-localstorage": "7.3.0",
             "billstclair/elm-port-funnel": "1.2.0",
             "billstclair/elm-svg-button": "3.0.0",
             "billstclair/elm-websocket-client": "4.1.0",
