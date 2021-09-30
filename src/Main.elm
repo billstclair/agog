@@ -246,7 +246,6 @@ type alias Game =
 type alias Model =
     { tick : Posix
     , zone : Zone
-    , seed : Maybe Seed
     , game : Game
     , gameDict : Dict String Game
     , chatDict : Dict String ChatSettings
@@ -502,6 +501,25 @@ isConnectionReasonQueueEmpty model =
     model.connectionReasonQueue == Fifo.empty
 
 
+zeroTick : Posix
+zeroTick =
+    Time.millisToPosix 0
+
+
+makeSeed : Posix -> Seed
+makeSeed posix =
+    Random.initialSeed (Time.posixToMillis posix)
+
+
+modelSeed : Model -> Maybe Seed
+modelSeed model =
+    if model.tick == zeroTick then
+        Nothing
+
+    else
+        Just <| makeSeed model.tick
+
+
 init : Value -> url -> Key -> ( Model, Cmd Msg )
 init flags url key =
     let
@@ -509,9 +527,8 @@ init flags url key =
             initialGame Nothing
 
         model =
-            { tick = Time.millisToPosix 0
+            { tick = zeroTick
             , zone = Time.utc
-            , seed = Nothing
             , game = game
             , gameDict = Dict.empty
             , chatDict =
@@ -604,7 +621,7 @@ storageHandler response state model =
             }
 
         cmd =
-            if mdl.started && not model.started && model.seed /= Nothing then
+            if mdl.started && not model.started && model.tick /= zeroTick then
                 get pk.model
 
             else
@@ -729,7 +746,7 @@ handleGetGameResponse key value model =
 
         Just gamename ->
             case
-                JD.decodeValue (ED.namedGameDecoder <| proxyServer model.seed)
+                JD.decodeValue (ED.namedGameDecoder <| proxyServer (modelSeed model))
                     value
             of
                 Err _ ->
@@ -1789,7 +1806,7 @@ update msg model =
                     False
 
                 Tick _ ->
-                    model.seed == Nothing
+                    model.tick == zeroTick
 
                 Click _ ->
                     cmd == Cmd.none
@@ -1862,27 +1879,21 @@ updateInternal msg model =
             model |> withNoCmd
 
         Tick posix ->
-            let
-                seed =
-                    Just <|
-                        Random.initialSeed (Time.posixToMillis posix)
-            in
             { model
                 | tick = posix
-                , seed = seed
                 , game =
-                    case model.seed of
-                        Just _ ->
-                            game
+                    if model.tick /= zeroTick then
+                        game
 
-                        Nothing ->
-                            { game
-                                | interface =
-                                    updateServerSeed seed game.interface
-                            }
+                    else
+                        { game
+                            | interface =
+                                updateServerSeed (Just <| makeSeed posix)
+                                    game.interface
+                        }
             }
                 |> withCmd
-                    (if model.seed == Nothing && model.started then
+                    (if model.tick == zeroTick && model.started then
                         -- This is also done by storageHandler,
                         -- but only if the seed has been
                         -- initialized.
@@ -1911,7 +1922,7 @@ updateInternal msg model =
                 let
                     interface =
                         if isLocal then
-                            proxyServer model.seed
+                            proxyServer <| modelSeed model
 
                         else
                             game.interface
@@ -2345,19 +2356,16 @@ updateInternal msg model =
 
         ClearStorage ->
             let
-                notificationAvailable =
-                    model.notificationAvailable
-
                 ( mdl, cmd ) =
                     init JE.null "url" model.key
             in
             { mdl
                 | started = True
-                , notificationAvailable = notificationAvailable
+                , windowSize = model.windowSize
+                , notificationAvailable = model.notificationAvailable
+                , tick = model.tick
             }
-                -- I don't know why cmd is necessary here,
-                -- but without it you get a black screen.
-                |> withCmds [ cmd, clear ]
+                |> withCmds [ clearStorage ]
 
         Click ( row, col ) ->
             if gameState.testMode /= Nothing then
@@ -2558,7 +2566,7 @@ webSocketConnect reason model =
                             game.interface
 
                         else
-                            proxyServer model.seed
+                            proxyServer <| modelSeed model
                     , interfaceIsProxy = True
                     , isLive = True
                 }
@@ -4422,8 +4430,8 @@ listKeysLabeled label prefix =
     localStorageSend (LocalStorage.listKeysLabeled label prefix)
 
 
-clear : Cmd Msg
-clear =
+clearStorage : Cmd Msg
+clearStorage =
     localStorageSend (LocalStorage.clear "")
 
 
