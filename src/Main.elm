@@ -350,7 +350,7 @@ type Msg
     | VisibilityChange Bool
     | HandleUrlRequest UrlRequest
     | HandleUrlChange Url
-    | CallSocketHandler Response
+    | DoConnectedResponse
     | Process Value
 
 
@@ -738,6 +738,15 @@ mapGames updater model =
         { model2 | gameDict = gameDict }
 
 
+lookupGame : GameName -> Model -> Maybe Game
+lookupGame gamename model =
+    if gamename == model.game.gamename then
+        Just model.game
+
+    else
+        Dict.get gamename model.gameDict
+
+
 updateGame : String -> (Game -> Game) -> Model -> ( Model, Maybe Game )
 updateGame gamename updater model =
     if gamename == model.game.gamename then
@@ -1002,33 +1011,30 @@ playerName player game =
             players.black
 
 
-gameFromPlayerId : PlayerId -> Model -> Maybe Game
-gameFromPlayerId playerid model =
-    if model.game.playerid == playerid then
+findGame : (Game -> Bool) -> Model -> Maybe Game
+findGame predicate model =
+    if predicate model.game then
         Just model.game
 
     else
-        case DE.find (\_ game -> game.playerid == playerid) model.gameDict of
+        case
+            DE.find (\_ game -> predicate game) model.gameDict
+        of
             Nothing ->
                 Nothing
 
             Just ( _, game ) ->
                 Just game
+
+
+gameFromPlayerId : PlayerId -> Model -> Maybe Game
+gameFromPlayerId playerid model =
+    findGame (.playerid >> (==) playerid) model
 
 
 gameFromId : GameId -> Model -> Maybe Game
 gameFromId gameid model =
-    -- Don't use model.gameid here. That field is for the UI.
-    if model.game.gameid == gameid then
-        Just model.game
-
-    else
-        case DE.find (\_ game -> game.gameid == gameid) model.gameDict of
-            Nothing ->
-                Nothing
-
-            Just ( _, game ) ->
-                Just game
+    findGame (.gameid >> (==) gameid) model
 
 
 withGameFromId : String -> Model -> (Game -> ( Model, Cmd Msg )) -> ( Model, Cmd Msg )
@@ -1664,9 +1670,6 @@ socketHandler response state mdl =
     let
         model =
             { mdl | funnelState = state }
-
-        game =
-            model.game
     in
     case response of
         ErrorResponse error ->
@@ -1692,11 +1695,20 @@ socketHandler response state mdl =
                         |> withNoCmd
 
                 Ok message ->
-                    { model | error = Nothing }
-                        |> withCmd
-                            (Task.perform (IncomingMessage game.interface) <|
-                                Task.succeed message
-                            )
+                    case findGame (.isLocal >> not) model of
+                        Nothing ->
+                            { model
+                                | error =
+                                    Just "Bug: Can't find a non-local game for an incoming message."
+                            }
+                                |> withNoCmd
+
+                        Just game ->
+                            { model | error = Nothing }
+                                |> withCmd
+                                    (Task.perform (IncomingMessage game.interface) <|
+                                        Task.succeed message
+                                    )
 
         ClosedResponse { expected, reason } ->
             { model
@@ -1719,125 +1731,145 @@ socketHandler response state mdl =
                 |> withNoCmd
 
         ConnectedResponse crrec ->
-            let
-                interface =
-                    game.interface
-
-                ( maybeConnectionSpec, model2 ) =
-                    removeConnectionSpec model
-            in
-            { model2 | error = Nothing }
-                |> withCmds
-                    [ if isConnectionSpecQueueEmpty mdl then
-                        Cmd.none
-
-                      else
-                        Task.perform CallSocketHandler
-                            (Task.succeed <| ConnectedResponse crrec)
-                    , case maybeConnectionSpec of
-                        Nothing ->
-                            Cmd.none
-
-                        Just { gamename, connectionReason } ->
-                            case Debug.log "ConnectedResponse, connectionReason" connectionReason of
-                                StartGameConnection ->
-                                    let
-                                        settings =
-                                            model.settings
-                                    in
-                                    send interface <|
-                                        NewReq
-                                            { name = model.settings.name
-                                            , player = model.chooseFirst
-                                            , publicType =
-                                                if not settings.isPublic then
-                                                    NotPublic
-
-                                                else
-                                                    case settings.forName of
-                                                        "" ->
-                                                            EntirelyPublic
-
-                                                        forName ->
-                                                            PublicFor forName
-                                            , restoreState = Nothing
-                                            , maybeGameid = Nothing
-                                            }
-
-                                JoinGameConnection ->
-                                    send interface <|
-                                        JoinReq
-                                            { gameid = model.gameid
-                                            , name = model.settings.name
-                                            , isRestore = False
-                                            }
-
-                                PublicGamesConnection ->
-                                    send interface <|
-                                        PublicGamesReq
-                                            { subscribe = model.page == PublicPage
-                                            , forName = model.settings.name
-                                            , gameid = Just model.game.gameid
-                                            }
-
-                                StatisticsConnection ->
-                                    send interface <|
-                                        StatisticsReq
-                                            { subscribe = model.page == StatisticsPage
-                                            }
-
-                                UpdateConnection playerid ->
-                                    send interface <|
-                                        UpdateReq
-                                            { playerid = playerid }
-
-                                RestoreGameConnection localGame ->
-                                    let
-                                        player =
-                                            localGame.player
-
-                                        name =
-                                            playerName player localGame
-                                    in
-                                    if name == "" then
-                                        Cmd.none
-
-                                    else
-                                        send interface <|
-                                            NewReq
-                                                { name = name
-                                                , player = player
-                                                , publicType = NotPublic
-                                                , restoreState = Just localGame.gameState
-                                                , maybeGameid = Just localGame.gameid
-                                                }
-
-                                JoinRestoredGameConnection gameid ->
-                                    -- Errors are generated in ErrorRsp handler,
-                                    -- before it generates the Cmd that gets here.
-                                    case gameFromId gameid model of
-                                        Nothing ->
-                                            Cmd.none
-
-                                        Just localGame ->
-                                            let
-                                                name =
-                                                    playerName localGame.player localGame
-                                            in
-                                            if name == "" then
-                                                Cmd.none
-
-                                            else
-                                                send interface <|
-                                                    JoinReq
-                                                        { gameid = gameid
-                                                        , name = name
-                                                        , isRestore = True
-                                                        }
-                    ]
+            connectedResponse model
 
         _ ->
             model |> withNoCmd
+
+
+connectedResponse : Model -> ( Model, Cmd Msg )
+connectedResponse model =
+    let
+        ( maybeConnectionSpec, model2 ) =
+            removeConnectionSpec model
+    in
+    { model2 | error = Nothing }
+        |> withCmds
+            [ if isConnectionSpecQueueEmpty model2 then
+                Cmd.none
+
+              else
+                Task.perform identity <|
+                    Task.succeed DoConnectedResponse
+            , case maybeConnectionSpec of
+                Nothing ->
+                    Cmd.none
+
+                Just { gamename, connectionReason } ->
+                    case lookupGame gamename model of
+                        Nothing ->
+                            let
+                                name =
+                                    Debug.log "connectedResponse: can't find gamname" gamename
+                            in
+                            Cmd.none
+
+                        Just game ->
+                            processConnectionReason game connectionReason model2
+            ]
+
+
+processConnectionReason : Game -> ConnectionReason -> Model -> Cmd Msg
+processConnectionReason game connectionReason model =
+    let
+        interface =
+            game.interface
+    in
+    case Debug.log "processConnectionReason" connectionReason of
+        StartGameConnection ->
+            let
+                settings =
+                    model.settings
+            in
+            send interface <|
+                NewReq
+                    { name = model.settings.name
+                    , player = model.chooseFirst
+                    , publicType =
+                        if not settings.isPublic then
+                            NotPublic
+
+                        else
+                            case settings.forName of
+                                "" ->
+                                    EntirelyPublic
+
+                                forName ->
+                                    PublicFor forName
+                    , restoreState = Nothing
+                    , maybeGameid = Nothing
+                    }
+
+        JoinGameConnection ->
+            send interface <|
+                JoinReq
+                    { gameid = model.gameid
+                    , name = model.settings.name
+                    , isRestore = False
+                    }
+
+        PublicGamesConnection ->
+            send interface <|
+                PublicGamesReq
+                    { subscribe = model.page == PublicPage
+                    , forName = model.settings.name
+                    , gameid = Just model.game.gameid
+                    }
+
+        StatisticsConnection ->
+            send interface <|
+                StatisticsReq
+                    { subscribe = model.page == StatisticsPage
+                    }
+
+        UpdateConnection playerid ->
+            send interface <|
+                UpdateReq
+                    { playerid = playerid }
+
+        RestoreGameConnection localGame ->
+            let
+                player =
+                    localGame.player
+
+                name =
+                    playerName player localGame
+            in
+            if name == "" then
+                Cmd.none
+
+            else
+                send interface <|
+                    NewReq
+                        { name = name
+                        , player = player
+                        , publicType = NotPublic
+                        , restoreState = Just localGame.gameState
+                        , maybeGameid = Just localGame.gameid
+                        }
+
+        JoinRestoredGameConnection gameid ->
+            -- Errors are generated in ErrorRsp handler,
+            -- before it generates the Cmd that gets here.
+            case gameFromId gameid model of
+                Nothing ->
+                    Cmd.none
+
+                Just localGame ->
+                    let
+                        name =
+                            playerName localGame.player localGame
+                    in
+                    if name == "" then
+                        Cmd.none
+
+                    else
+                        send interface <|
+                            JoinReq
+                                { gameid = gameid
+                                , name = name
+                                , isRestore = True
+                                }
 
 
 focusId : String -> Cmd Msg
@@ -2542,8 +2574,8 @@ updateInternal msg model =
         HandleUrlChange url ->
             model |> withNoCmd
 
-        CallSocketHandler response ->
-            socketHandler response model.funnelState model
+        DoConnectedResponse ->
+            connectedResponse model
 
         Process value ->
             case
