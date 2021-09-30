@@ -231,11 +231,7 @@ lightStyle =
     , selectedColor = "black"
     , moveColor = "blue"
     , corruptedHulkXColor = "red"
-
-    -- "lightslategray"
     , lastMoveFromColor = "gold"
-
-    -- "turquoise"
     , lastMoveToColor = "lightgreen"
     }
 

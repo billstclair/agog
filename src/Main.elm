@@ -211,9 +211,15 @@ type ConnectionReason
     | JoinGameConnection
     | PublicGamesConnection
     | StatisticsConnection
-    | UpdateConnection
+    | UpdateConnection PlayerId
     | RestoreGameConnection Game
     | JoinRestoredGameConnection GameId
+
+
+type alias ConnectionSpec =
+    { gamename : GameName
+    , connectionReason : ConnectionReason
+    }
 
 
 type alias ChatSettings =
@@ -249,7 +255,7 @@ type alias Model =
     , game : Game
     , gameDict : Dict String Game
     , chatDict : Dict String ChatSettings
-    , connectionReasonQueue : Fifo ConnectionReason
+    , connectionSpecQueue : Fifo ConnectionSpec
     , funnelState : State
     , key : Key
     , windowSize : ( Int, Int )
@@ -294,6 +300,10 @@ isPlaying model =
     game.isLive && white /= "" && black /= ""
 
 
+type alias GameName =
+    String
+
+
 type Msg
     = Noop
     | Tick Posix
@@ -307,7 +317,7 @@ type Msg
     | SetForName String
     | SetServerUrl String
     | SetGameid String
-    | SetGameName String
+    | SetGameName GameName
     | SetPage Page
     | SetHideTitle Bool
     | ResetScore
@@ -479,26 +489,26 @@ initialGame seed =
     }
 
 
-insertConnectionReason : ConnectionReason -> Model -> Model
-insertConnectionReason reason model =
+insertConnectionSpec : ConnectionSpec -> Model -> Model
+insertConnectionSpec spec model =
     { model
-        | connectionReasonQueue =
-            Fifo.insert reason model.connectionReasonQueue
+        | connectionSpecQueue =
+            Fifo.insert spec model.connectionSpecQueue
     }
 
 
-removeConnectionReason : Model -> ( Maybe ConnectionReason, Model )
-removeConnectionReason model =
+removeConnectionSpec : Model -> ( Maybe ConnectionSpec, Model )
+removeConnectionSpec model =
     let
-        ( reason, queue ) =
-            Fifo.remove model.connectionReasonQueue
+        ( spec, queue ) =
+            Fifo.remove model.connectionSpecQueue
     in
-    ( reason, { model | connectionReasonQueue = queue } )
+    ( spec, { model | connectionSpecQueue = queue } )
 
 
-isConnectionReasonQueueEmpty : Model -> Bool
-isConnectionReasonQueueEmpty model =
-    model.connectionReasonQueue == Fifo.empty
+isConnectionSpecQueueEmpty : Model -> Bool
+isConnectionSpecQueueEmpty model =
+    model.connectionSpecQueue == Fifo.empty
 
 
 zeroTick : Posix
@@ -534,7 +544,7 @@ init flags url key =
             , chatDict =
                 [ ( game.gamename, initialChatSettings ) ]
                     |> Dict.fromList
-            , connectionReasonQueue = Fifo.empty
+            , connectionSpecQueue = Fifo.empty
             , funnelState = initialFunnelState
             , key = key
             , windowSize = ( 0, 0 )
@@ -698,6 +708,36 @@ handleGetResponse label key value model =
                 model |> withNoCmd
 
 
+mapGames : (Game -> Maybe Game) -> Model -> Model
+mapGames updater model =
+    let
+        model2 =
+            case updater model.game of
+                Nothing ->
+                    model
+
+                Just game2 ->
+                    { model | game = game2 }
+
+        ( dictChanged, gameDict ) =
+            let
+                folder name game ( changed, dict ) =
+                    case updater game of
+                        Nothing ->
+                            ( changed, dict )
+
+                        Just game2 ->
+                            ( True, Dict.insert name game2 dict )
+            in
+            Dict.foldl folder ( False, model.gameDict ) model.gameDict
+    in
+    if not dictChanged then
+        model2
+
+    else
+        { model2 | gameDict = gameDict }
+
+
 updateGame : String -> (Game -> Game) -> Model -> ( Model, Maybe Game )
 updateGame gamename updater model =
     if gamename == model.game.gamename then
@@ -797,20 +837,32 @@ handleGetGameResponse key value model =
 
 reconnectToGame : Game -> Model -> ( Model, Cmd Msg )
 reconnectToGame game model =
+    let
+        gamename =
+            game.gamename
+    in
     if not game.isLocal && game.isLive && game.playerid /= "" then
-        model |> webSocketConnect UpdateConnection
+        model
+            |> webSocketConnect
+                (ConnectionSpec gamename <| UpdateConnection game.playerid)
 
-    else if not game.isLocal && model.page == PublicPage then
-        { model | gameid = "" }
-            |> webSocketConnect PublicGamesConnection
+    else if gamename == model.game.gamename then
+        if game.isLocal then
+            { model | gameid = "" }
+                |> withCmd (initialNewReqCmd game model)
 
-    else if not game.isLocal && model.page == StatisticsPage then
-        { model | gameid = "" }
-            |> webSocketConnect StatisticsConnection
+        else if model.page == PublicPage then
+            { model | gameid = "" }
+                |> webSocketConnect
+                    (ConnectionSpec gamename PublicGamesConnection)
 
-    else if game.isLocal then
-        { model | gameid = "" }
-            |> withCmd (initialNewReqCmd model)
+        else if model.page == StatisticsPage then
+            { model | gameid = "" }
+                |> webSocketConnect
+                    (ConnectionSpec gamename StatisticsConnection)
+
+        else
+            model |> withNoCmd
 
     else
         model |> withNoCmd
@@ -895,9 +947,9 @@ handleGetChatResponse key value model =
                                 |> withCmd (ElmChat.restoreScroll chat2)
 
 
-initialNewReqCmd : Model -> Cmd Msg
-initialNewReqCmd model =
-    send model.game.interface <|
+initialNewReqCmd : Game -> Model -> Cmd Msg
+initialNewReqCmd game model =
+    send game.interface <|
         NewReq
             { initialNewReqBody
                 | restoreState =
@@ -1419,7 +1471,11 @@ incomingMessageInternal interface maybeGame message model =
                                 |> withNoCmd
 
                         Just game ->
-                            webSocketConnect (RestoreGameConnection game) model
+                            webSocketConnect
+                                (ConnectionSpec game.gamename <|
+                                    RestoreGameConnection game
+                                )
+                                model
 
                 Ok (NewReq { maybeGameid }) ->
                     case maybeGameid of
@@ -1438,7 +1494,9 @@ incomingMessageInternal interface maybeGame message model =
 
                                         _ ->
                                             webSocketConnect
-                                                (JoinRestoredGameConnection gameid)
+                                                (ConnectionSpec restoredGame.gamename <|
+                                                    JoinRestoredGameConnection gameid
+                                                )
                                                 model
 
                 _ ->
@@ -1642,8 +1700,7 @@ socketHandler response state mdl =
 
         ClosedResponse { expected, reason } ->
             { model
-                | game = { game | isLive = False }
-                , connectionReasonQueue = Fifo.empty
+                | connectionSpecQueue = Fifo.empty
                 , error =
                     if Debug.log "ClosedResponse, expected" expected then
                         model.error
@@ -1651,6 +1708,14 @@ socketHandler response state mdl =
                     else
                         Just <| "Connection unexpectedly closed: " ++ reason
             }
+                |> mapGames
+                    (\g ->
+                        if g.isLocal then
+                            Nothing
+
+                        else
+                            Just { g | isLive = False }
+                    )
                 |> withNoCmd
 
         ConnectedResponse crrec ->
@@ -1658,22 +1723,22 @@ socketHandler response state mdl =
                 interface =
                     game.interface
 
-                ( maybeConnectionReason, model2 ) =
-                    removeConnectionReason model
+                ( maybeConnectionSpec, model2 ) =
+                    removeConnectionSpec model
             in
             { model2 | error = Nothing }
                 |> withCmds
-                    [ if isConnectionReasonQueueEmpty mdl then
+                    [ if isConnectionSpecQueueEmpty mdl then
                         Cmd.none
 
                       else
                         Task.perform CallSocketHandler
                             (Task.succeed <| ConnectedResponse crrec)
-                    , case maybeConnectionReason of
+                    , case maybeConnectionSpec of
                         Nothing ->
                             Cmd.none
 
-                        Just connectionReason ->
+                        Just { gamename, connectionReason } ->
                             case Debug.log "ConnectedResponse, connectionReason" connectionReason of
                                 StartGameConnection ->
                                     let
@@ -1721,10 +1786,10 @@ socketHandler response state mdl =
                                             { subscribe = model.page == StatisticsPage
                                             }
 
-                                UpdateConnection ->
+                                UpdateConnection playerid ->
                                     send interface <|
                                         UpdateReq
-                                            { playerid = game.playerid }
+                                            { playerid = playerid }
 
                                 RestoreGameConnection localGame ->
                                     let
@@ -1927,23 +1992,26 @@ updateInternal msg model =
                         else
                             game.interface
 
+                    game2 =
+                        { game
+                            | isLocal = isLocal
+                            , isLive = False
+                            , playerid = ""
+                            , otherPlayerid = ""
+                            , interface = interface
+                            , interfaceIsProxy = isLocal
+                        }
+
                     model2 =
                         { model
-                            | game =
-                                { game
-                                    | isLocal = isLocal
-                                    , isLive = False
-                                    , playerid = ""
-                                    , otherPlayerid = ""
-                                    , interface = interface
-                                    , interfaceIsProxy = isLocal
-                                }
+                            | game = game2
                             , gameid = ""
                         }
                 in
                 model2
-                    |> withCmd
-                        (if isLocal && not game.isLocal then
+                    |> withCmds
+                        [ putGame game2
+                        , if isLocal && not game.isLocal then
                             Cmd.batch
                                 [ if game.isLive then
                                     send interface <|
@@ -1954,9 +2022,9 @@ updateInternal msg model =
                                 , send interface <| NewReq initialNewReqBody
                                 ]
 
-                         else
+                          else
                             Cmd.none
-                        )
+                        ]
 
         SetDarkMode darkMode ->
             let
@@ -2010,10 +2078,14 @@ updateInternal msg model =
 
                 ( mdl2, cmd ) =
                     if page == PublicPage then
-                        webSocketConnect PublicGamesConnection mdl
+                        webSocketConnect
+                            (ConnectionSpec mdl.gamename PublicGamesConnection)
+                            mdl
 
                     else if page == StatisticsPage then
-                        webSocketConnect StatisticsConnection mdl
+                        webSocketConnect
+                            (ConnectionSpec mdl.gamename StatisticsConnection)
+                            mdl
 
                     else
                         ( mdl, Cmd.none )
@@ -2551,8 +2623,8 @@ makeWebSocketServer model =
         Noop
 
 
-webSocketConnect : ConnectionReason -> Model -> ( Model, Cmd Msg )
-webSocketConnect reason model =
+webSocketConnect : ConnectionSpec -> Model -> ( Model, Cmd Msg )
+webSocketConnect spec model =
     let
         game =
             model.game
@@ -2587,7 +2659,7 @@ webSocketConnect reason model =
                     , interfaceIsProxy = False
                 }
         }
-            |> insertConnectionReason (Debug.log "webSocketConnect" reason)
+            |> insertConnectionSpec (Debug.log "webSocketConnect" spec)
             |> withCmd
                 (WebSocket.makeOpen game.serverUrl
                     |> webSocketSend
@@ -2596,12 +2668,12 @@ webSocketConnect reason model =
 
 startGame : Model -> ( Model, Cmd Msg )
 startGame model =
-    webSocketConnect StartGameConnection model
+    webSocketConnect (ConnectionSpec model.gamename StartGameConnection) model
 
 
 join : Model -> ( Model, Cmd Msg )
 join model =
-    webSocketConnect JoinGameConnection model
+    webSocketConnect (ConnectionSpec model.gamename JoinGameConnection) model
 
 
 disconnect : Model -> ( Model, Cmd Msg )
