@@ -1639,7 +1639,7 @@ socketHandler response state mdl =
         ConnectedResponse crrec ->
             let
                 interface =
-                    model.game.interface
+                    game.interface
 
                 ( maybeConnectionReason, model2 ) =
                     removeConnectionReason model
@@ -1657,7 +1657,7 @@ socketHandler response state mdl =
                             Cmd.none
 
                         Just connectionReason ->
-                            case connectionReason of
+                            case Debug.log "ConnectedResponse, connectionReason" connectionReason of
                                 StartGameConnection ->
                                     let
                                         settings =
@@ -2345,12 +2345,19 @@ updateInternal msg model =
 
         ClearStorage ->
             let
+                notificationAvailable =
+                    model.notificationAvailable
+
                 ( mdl, cmd ) =
                     init JE.null "url" model.key
             in
-            { mdl | started = True }
-                --, cmd, initialNewReqCmd mdl ]
-                |> withCmds [ clear ]
+            { mdl
+                | started = True
+                , notificationAvailable = notificationAvailable
+            }
+                -- I don't know why cmd is necessary here,
+                -- but without it you get a black screen.
+                |> withCmds [ cmd, clear ]
 
         Click ( row, col ) ->
             if gameState.testMode /= Nothing then
