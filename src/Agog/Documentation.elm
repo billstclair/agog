@@ -60,42 +60,59 @@ maybeFooterParagraph maybeFooter =
                 [ footerParagraph ]
 
 
-rules : msg -> Maybe (Html msg) -> Html msg
-rules setHomePageMsg maybeFooter =
+docPage : msg -> Maybe (Html msg) -> String -> List ( String, String ) -> Html msg
+docPage setHomePageMsg maybeFooter title sections =
     let
         playButton =
             playButtonHtml setHomePageMsg
+
+        renderSection ( heading, body ) =
+            [ rulesDiv False
+                [ h3 [ align "center" ]
+                    [ text heading ]
+                , Markdown.toHtml [] body
+                ]
+            , playButton
+            ]
     in
     rulesDiv False
-        [ rulesDiv False
+        [ rulesDiv False <|
             [ h2 [ align "center" ]
-                [ text "Rules" ]
+                [ text title ]
+            , rulesDiv False
+                [ Markdown.toHtml [] "Click any \"Play\" button to return to the game." ]
             , playButton
-            , h3 [ align "center" ]
-                [ text "STORY" ]
-            , Markdown.toHtml [] """ 
+            ]
+                ++ (List.map renderSection sections
+                        |> List.concat
+                   )
+                ++ [ maybeFooterParagraph maybeFooter ]
+        ]
+
+
+rules : msg -> Maybe (Html msg) -> Html msg
+rules setHomePageMsg maybeFooter =
+    docPage setHomePageMsg
+        maybeFooter
+        "Rules"
+        [ ( "STORY"
+          , """ 
 _In a secret complex deep in the mountains, the Ancient Guild of Golemancy plies its trade, creating life where before was only base matter. Two journeyman golemancers feverishly prepare their master works, for there is but one position available among the Golemancery Elect. Both know that if they could but obtain their rival’s research, they would surely be able to create the greater work. The night before their creations are to be judged, each plots to infiltrate the other’s sanctum of knowledge, using their legion of early prototypes to subtly outmaneuver the other._
                                   
 _In __A•G•O•G__, players attempt to be first reach their opponent’s sanctum, or failing that, to take their opponent captive and in so doing keep them from completing their masterpiece. If one of your golems manages to enter their sanctum, they may bring you back some sundry inventions with which to better equip your remaining creations, but your eyes alone will know what to look for within their volumes of research. Will you have what it takes to outwit your rival and take your place among the Masters of Golemancy?_
 """
-            ]
-        , playButton
-        , rulesDiv False
-            [ h3 [ align "center" ]
-                [ text "SETUP" ]
-            , Markdown.toHtml [] """
+          )
+        , ( "SETUP"
+          , """
 __A•G•O•G__ is a game of subtle strategy for two players. Played on a standard 8x8 checkers board, players sit at opposite dark-colored corner squares. The square closest to each player is their "sanctum." One player’s units are white and the other’s are black.
                                   
 Each player starts with 20 golems, shaped like checkers pieces, and 1 journeyman golemancer (journeyman for short), comprised of a stack of 3 checkers: white-black-white for White; black-white-black for Black. The journeyman starts on the player’s sanctum with the golems filling the 5 rows of squares in front of them, leaving the three middle rows unoccupied between the two players’ ranks.
                                   
 White goes first. On their turn, the acting player must move one unit or make a capture with one unit. Players alternate turns until one of them is victorious.
 """
-            ]
-        , playButton
-        , rulesDiv False
-            [ h3 [ align "center" ]
-                [ text "UNITS" ]
-            , Markdown.toHtml [] """
+          )
+        , ( "UNITS"
+          , """
 All unit movement in __A•G•O•G__ is orthogonal relative to the squares; diagonal relative to the players. Units can only move forward (towards the enemy sanctum), but can capture enemy units forward or backward.
                                   
 Units capture by jumping over an enemy unit and landing on an unoccupied square beyond them. Units cannot jump over more than one enemy at a time, and cannot move or jump off the edge of the board. If a unit making a capture lands on a square from which they can make another capture, they are compelled to do so and continue the capturing sequence until they land on a square from which no further captures are available. Captured units are immediately removed from play. All jumped units remain on the board until the sequence is complete, and no unit can be jumped twice in the sequence.
@@ -116,12 +133,9 @@ The journeymen move and capture the same as golems. However, when jumping over a
                                   
 Corrupted hulks behave the same as regular hulks of their color, including being able to promote to regular hulks if they end the turn on the enemy sanctum (in this scenario, the acting player discards the bottom stacked enemy golem from play). However, a corrupted hulk cannot be corrupted again and must be captured if jumped by the enemy journeyman.
 """
-            ]
-        , playButton
-        , rulesDiv False
-            [ h3 [ align "center" ]
-                [ text "WINNING" ]
-            , Markdown.toHtml [] """
+          )
+        , ( "WINNING"
+          , """
 A player wins immediately under any of the following conditions:
                                   
 1. Win by Capture: The player captures the enemy journeyman.
@@ -131,12 +145,9 @@ A player wins immediately under any of the following conditions:
 
 Draws are not possible in __A•G•O•G__.
 """
-            ]
-        , playButton
-        , rulesDiv False
-            [ h3 [ align "center" ]
-                [ text "SCOREKEEPING" ]
-            , Markdown.toHtml [] """
+          )
+        , ( "SCOREKEEPING"
+          , """
 If desired, players may keep a game record while playing. Each pair of turns for White and Black is denoted with a numbered move, with White’s turn recorded on the left and Black’s on the right. The board is labelled with coordinates the same as a chess board, with the squares to White’s right labelled alphabetically "a" through "h" and the squares to White’s left labelled numerically "1" through "8". The units and actions are labelled as follows:
                                   
 * The journeyman is denoted as "J".
@@ -154,35 +165,22 @@ When a unit ends its move on the enemy sanctum and the acting player chooses to 
 
 If White wins, record "1-0". If Black wins, record "0-1".
 """
-            ]
-        , playButton
-        , rulesDiv False
-            [ h3 [ align "center" ]
-                [ text "HANDICAPPING" ]
-            , Markdown.toHtml [] """
+          )
+        , ( "HANDICAPPING"
+          , """
 If players of differing skill levels wish to play an even game, the stronger player can be given a handicap by removing 1 or more of their golems from the board before play starts. The handicapped player always plays Black, and the golems must be removed such that the remaining forces are symmetrically arranged and are removed from the squares closest to the center of the board. For example, for a handicap of 1 remove the golem on f6; for a handicap of 2, remove the golems on e6 and f5; for a handicap of 3 remove the golems on e6, f5, and f6, etc. If the weaker player wins the majority of their games at a particular handicap, reduce the handicap by 1.
 """
-            ]
-        , playButton
-        , maybeFooterParagraph maybeFooter
+          )
         ]
 
 
 instructions : msg -> Maybe (Html msg) -> Html msg
 instructions setHomePageMsg maybeFooter =
-    let
-        playButton =
-            playButtonHtml setHomePageMsg
-    in
-    rulesDiv False
-        [ rulesDiv False
-            [ h2 [ align "center" ]
-                [ text "Instructions" ]
-            , playButton
-            , rulesDiv False
-                [ h3 [ align "center" ]
-                    [ text "GENERAL" ]
-                , Markdown.toHtml [] """
+    docPage setHomePageMsg
+        maybeFooter
+        "Instructions"
+        [ ( "GENERAL"
+          , """
 The green text below the __A•G•O•G__ board is instructions about what you are expected to do (or wait for). If there was a problem, an error message will appear in red between the board and the green line.
 
 At night, you may prefer to display the screen in "Dark Mode". Check that box to do that. Uncheck to return to the default appearance.
@@ -197,12 +195,9 @@ Your game state is remembered in your browser's "Local Storage" database. If you
 
 Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local").
 """
-                ]
-            , playButton
-            , rulesDiv False
-                [ h3 [ align "center" ]
-                    [ text "SERVER CONNECTION" ]
-                , Markdown.toHtml [] """
+          )
+        , ( "SERVER CONNECTION"
+          , """
 This implementation of __A•G•O•G__ is a networked, two-player game. It communicates through a server, running on agog.ninja.
 
 Before you can play games, you need to connect through that server to your opponent. Do this by entering "Your Name" and clicking "Start Game". This will display a "Game ID". Copy that, and text it to your opponent. The other player fills in "Your Name", pastes the Game ID, and clicks "Join". The initiating player is white initially. Colors swap with each subsequent game.
@@ -211,12 +206,9 @@ Alternatively, the initiating player can check the "Public" box before clicking 
 
 To join a public game, enter "Your Name", go to the "Public" page, and click on the underlined GameId.
 """
-                ]
-            , playButton
-            , rulesDiv False
-                [ h3 [ align "center" ]
-                    [ text "GAME PLAY" ]
-                , Markdown.toHtml [] """
+          )
+        , ( "GAME PLAY"
+          , """
 When it's your turn, click on the piece you want to move, then click on the empty square you want to move it to. When you have pieces that can jump, they will be highlighted, and you will only be able to move one of them. When you have jumps, the jump destinations will be highlighted, until you've made all the jumps you can.
 
 If you move a golem, hulk, or corrupted hulk into the other player's sanctum, you will be asked whether you want to convert it to a hulk. You may do that by clicking on one of your golems. You may skip the conversion by clicking on an empty square.
@@ -227,12 +219,9 @@ You may resign on your turn by clicking the "Resign" button.
 
 When the game is over, either player may click the "New Game" button to start another game, with the white/black assignments reversed.
 """
-                ]
-            , playButton
-            , rulesDiv False
-                [ h3 [ align "center" ]
-                    [ text "MOVE RECORDING" ]
-                , Markdown.toHtml [] """
+          )
+        , ( "MOVE RECORDING"
+          , """
 The previous four moves will be shown in the "Moves" line. They are encoded with ALL the information, more verbose than the standard move encoding described in the "SCOREKEEPING" section of the "Rules" page. If the move begins with an "n", then it is NOT unique, meaning that another piece could have moved to the same destination.
 
 A move is encoded with a letter for the piece, the from location, a dash, and the to location. White pieces get upper-case letters and black pieces get lower-case letters. For example, an opening move of a white golem from d3 to d4 is encoded as nGd3-d4.
@@ -243,21 +232,25 @@ The final move of the game ends with a win indicator, this is the "%" character,
 
 Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format.
 """
-                ]
-            , playButton
-            , rulesDiv False
-                [ h3 [ align "center" ]
-                    [ text "LOCAL MODE" ]
-                , Markdown.toHtml [] """
+          )
+        , ( "MULTIPLE GAMES"
+          , """
+You can play multiple simultaneous games. Each of them will be remembered, and each of them will be restored when you visit agog.ninja again from the same browser (global persistence is on the TODO list).
+
+Multiple games are controlled via the line in the user interface beginning with "Game name". It will normally show the name of the current game, which is "default" by default. If you change that, and press the "Rename" button, it will give the game that new name. If you clear it, the "Rename" button becomes "Delete" (unless there is only one game).
+
+To the right of the "Rename" button is a select pop-up containing "-- New Game --" and each of your named games. To create a new game, with the "Game name" you typed, choose "-- New Game --". To switch to another named game, select it from the list.
+"""
+          )
+        , ( "LOCAL MODE"
+          , """
 Sometimes you want to play a game locally, without going through the server (except to fetch the HTML and JavaScript for the game itself). You may do this by checking the "Local" checkbox between games. You will then control both players.
 
 Local mode has another feature, "Test Mode". Enable that by checking the "Test Mode" check box. This provides "Erase Board!" and "Initial Setup" buttons, a "Remove clicked" checkbox, which, when checked, causes a click on a piece to remove it from the board, a "Test piece" popup, which allows you to choose a piece type, and "White" & "Black" radio buttons, which choose the piece color. When you click on an empty square on the board, that piece will appear there. Unchecking "Test mode" returns to game play.
 """
-                , playButton
-                , rulesDiv False
-                    [ h3 [ align "center" ]
-                        [ text "STATISTICS" ]
-                    , Markdown.toHtml [] """
+          )
+        , ( "STATISTICS"
+          , """
 The __A•G•O•G__ server keeps track of some statistics about games. These are shown on the "Statistics" page, available from the "Statistics" link at the bottom of the page. It displays a table containing counts for the following:
 
 1. Finished Games
@@ -283,9 +276,5 @@ If "Finished Games" is greater than 0, then a "White Wins" percentage and an "Av
 
 The statistics page currently shows only statistics since the last time the server was started.
 """
-                    ]
-                ]
-            , playButton
-            ]
-        , maybeFooterParagraph maybeFooter
+          )
         ]

@@ -3871,7 +3871,7 @@ mainPage bsize model =
                             "Type a non-blank \"Game name\" that does not yet exist."
 
                         else
-                            "Make a new game named " ++ model.gamename
+                            "Make a new game named \"" ++ model.gamename ++ "\""
                     ]
                     [ text "-- New Game --" ]
                     :: foldrGames
