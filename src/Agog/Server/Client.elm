@@ -299,6 +299,7 @@ newReq =
         , player = WhitePlayer
         , publicType = NotPublic
         , restoreState = Nothing
+        , gamename = "foo"
         , maybeGameid = Nothing
         }
 

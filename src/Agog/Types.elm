@@ -467,6 +467,7 @@ type Message
         { name : String
         , player : Player
         , publicType : PublicType
+        , gamename : String
         , restoreState : Maybe GameState
         , maybeGameid : Maybe GameId
         }
@@ -476,6 +477,7 @@ type Message
         , player : Player
         , name : String
         , publicType : PublicType
+        , gamename : String
         , gameState : GameState
         , wasRestored : Bool
         }
@@ -663,6 +665,7 @@ type MessageForLog
         { name : String
         , player : Player
         , publicType : PublicType
+        , gamename : String
         , restoreState : Maybe String
         , maybeGameid : Maybe GameId
         }
@@ -672,6 +675,7 @@ type MessageForLog
         , player : Player
         , name : String
         , publicType : PublicType
+        , gamename : String
         , gameState : String
         , wasRestored : Bool
         }

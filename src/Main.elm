@@ -594,24 +594,26 @@ type alias NewReqBody =
     { name : String
     , player : Player
     , publicType : PublicType
+    , gamename : String
     , restoreState : Maybe GameState
     , maybeGameid : Maybe GameId
     }
 
 
-initialNewReqBody : NewReqBody
-initialNewReqBody =
+initialNewReqBody : String -> NewReqBody
+initialNewReqBody gamename =
     { name = "White"
     , player = WhitePlayer
     , publicType = NotPublic
+    , gamename = gamename
     , restoreState = Nothing
     , maybeGameid = Nothing
     }
 
 
-initialNewReq : Message
-initialNewReq =
-    NewReq initialNewReqBody
+initialNewReq : String -> Message
+initialNewReq gamename =
+    NewReq <| initialNewReqBody gamename
 
 
 getViewport : Viewport -> Msg
@@ -973,8 +975,12 @@ handleGetChatResponse key value model =
 initialNewReqCmd : Game -> Model -> Cmd Msg
 initialNewReqCmd game model =
     send game.interface <|
+        let
+            req =
+                initialNewReqBody game.gamename
+        in
         NewReq
-            { initialNewReqBody
+            { req
                 | restoreState =
                     Just game.gameState
             }
@@ -1133,7 +1139,7 @@ incomingMessageInternal interface maybeGame message model =
                     )
     in
     case message of
-        NewRsp { gameid, playerid, player, name, gameState, wasRestored } ->
+        NewRsp { gameid, playerid, player, name, gamename, gameState, wasRestored } ->
             if maybeGame /= Nothing && not wasRestored then
                 case maybeGame of
                     Nothing ->
@@ -1166,137 +1172,143 @@ incomingMessageInternal interface maybeGame message model =
                         )
 
             else
-                let
-                    game =
-                        case maybeGame of
-                            Nothing ->
-                                model.game
+                case lookupGame gamename model of
+                    Nothing ->
+                        ( Nothing
+                        , { model
+                            | error =
+                                Just <| "Can't find game named \"" ++ gamename ++ "\""
+                          }
+                            |> withNoCmd
+                        )
 
-                            Just g ->
-                                g
+                    Just game ->
+                        let
+                            ( model2, chatCmd ) =
+                                if not wasRestored then
+                                    clearChatSettings game.gamename True model
 
-                    ( model2, chatCmd ) =
-                        if not wasRestored then
-                            clearChatSettings game.gamename True model
+                                else
+                                    model |> withNoCmd
 
-                        else
-                            model |> withNoCmd
+                            game2 =
+                                { game
+                                    | gameid = gameid
+                                    , gameState = gameState
+                                    , player = player
+                                    , playerid = playerid
+                                    , isLive = True
+                                    , yourWins = 0
+                                    , interface = interface
+                                }
 
-                    game2 =
-                        { game
-                            | gameid = gameid
-                            , gameState = gameState
-                            , player = player
-                            , playerid = playerid
-                            , isLive = True
-                            , yourWins = 0
-                            , interface = interface
-                        }
+                            model3 =
+                                if game.gamename == model.game.gamename then
+                                    { model2 | gameid = gameid }
 
-                    model3 =
-                        if game.gamename == model.game.gamename then
-                            { model2 | gameid = gameid }
+                                else
+                                    model2
+                        in
+                        ( Just game2
+                        , model3
+                            |> withCmds
+                                [ chatCmd
+                                , if not game.isLocal then
+                                    Cmd.none
 
-                        else
-                            model2
-                in
-                ( Just game2
-                , model3
-                    |> withCmds
-                        [ chatCmd
-                        , if not game.isLocal then
-                            Cmd.none
+                                  else if player == WhitePlayer then
+                                    send interface <|
+                                        JoinReq
+                                            { gameid = gameid
+                                            , name = "Black"
+                                            , isRestore = False
+                                            }
 
-                          else if player == WhitePlayer then
-                            send interface <|
-                                JoinReq
-                                    { gameid = gameid
-                                    , name = "Black"
-                                    , isRestore = False
-                                    }
-
-                          else
-                            send interface <|
-                                JoinReq
-                                    { gameid = gameid
-                                    , name = "White"
-                                    , isRestore = False
-                                    }
-                        ]
-                )
+                                  else
+                                    send interface <|
+                                        JoinReq
+                                            { gameid = gameid
+                                            , name = "White"
+                                            , isRestore = False
+                                            }
+                                ]
+                        )
 
         JoinRsp { gameid, playerid, player, gameState, wasRestored } ->
-            let
-                game =
-                    case maybeGame of
-                        Just g ->
-                            g
+            case maybeGame of
+                Nothing ->
+                    ( Nothing
+                    , { model
+                        | error =
+                            Just <| "JoinRsp found no game for id: " ++ gameid
+                      }
+                        |> withNoCmd
+                    )
 
-                        Nothing ->
-                            model.game
-
-                ( model2, chatCmd ) =
-                    if not wasRestored then
-                        clearChatSettings game.gamename True model
-
-                    else
-                        model |> withNoCmd
-
-                game2 =
-                    { game
-                        | gameid = gameid
-                        , gameState = gameState
-                        , isLive = True
-                        , player =
-                            if playerid == Nothing then
-                                game.player
+                Just game ->
+                    let
+                        ( model2, chatCmd ) =
+                            if not wasRestored then
+                                clearChatSettings game.gamename True model
 
                             else
-                                player
-                        , yourWins = 0
-                        , interface = interface
-                    }
+                                model |> withNoCmd
 
-                game3 =
-                    if game2.isLocal then
-                        { game2
-                            | otherPlayerid =
+                        game2 =
+                            { game
+                                | gameid = gameid
+                                , gameState = gameState
+                                , isLive = True
+                                , player =
+                                    if playerid == Nothing then
+                                        game.player
+
+                                    else
+                                        player
+                                , yourWins = 0
+                                , interface = interface
+                            }
+
+                        game3 =
+                            if game2.isLocal then
+                                { game2
+                                    | otherPlayerid =
+                                        case playerid of
+                                            Just p ->
+                                                p
+
+                                            Nothing ->
+                                                ""
+                                }
+
+                            else
                                 case playerid of
-                                    Just p ->
-                                        p
-
                                     Nothing ->
-                                        ""
-                        }
+                                        game2
 
-                    else
-                        case playerid of
-                            Nothing ->
-                                game2
+                                    Just pid ->
+                                        { game2 | playerid = pid }
 
-                            Just pid ->
-                                { game2 | playerid = pid }
+                        ( model3, _ ) =
+                            updateGame game3.gamename (always game3) model2
 
-                ( model3, _ ) =
-                    updateGame game3.gamename (always game3) model2
+                        msg =
+                            if game3.gamename == model.gamename then
+                                "The game is on!"
 
-                msg =
-                    if game3.gamename == model.gamename then
-                        "The game is on!"
-
-                    else
-                        playerName player game3
-                            ++ " joined hidden game "
-                            ++ game3.gamename
-            in
-            ( Just game3
-            , model3
-                |> withCmds
-                    [ chatCmd
-                    , setPage MainPage
-                    , maybeSendNotification game3 False msg model2
-                    ]
-            )
+                            else
+                                playerName player game3
+                                    ++ " joined hidden game "
+                                    ++ game3.gamename
+                    in
+                    ( Just game3
+                    , model3
+                        |> withCmds
+                            [ chatCmd
+                            , setPage MainPage
+                            , maybeSendNotification game3 False msg model2
+                            ]
+                    )
 
         LeaveRsp { gameid, player } ->
             withRequiredGame gameid
@@ -1833,6 +1845,7 @@ processConnectionReason game connectionReason model =
 
                                 forName ->
                                     PublicFor forName
+                    , gamename = game.gamename
                     , restoreState = Nothing
                     , maybeGameid = Nothing
                     }
@@ -1881,6 +1894,7 @@ processConnectionReason game connectionReason model =
                         { name = name
                         , player = player
                         , publicType = NotPublic
+                        , gamename = localGame.gamename
                         , restoreState = Just localGame.gameState
                         , maybeGameid = Just localGame.gameid
                         }

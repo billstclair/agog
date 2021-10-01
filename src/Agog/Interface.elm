@@ -271,7 +271,7 @@ logSeed prefix state =
 generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessorInternal isProxyServer state message =
     case message of
-        NewReq { name, player, publicType, restoreState, maybeGameid } ->
+        NewReq { name, player, publicType, gamename, restoreState, maybeGameid } ->
             let
                 gameidError =
                     case maybeGameid of
@@ -376,6 +376,7 @@ generalMessageProcessorInternal isProxyServer state message =
                         , player = player
                         , name = name
                         , publicType = publicType
+                        , gamename = gamename
                         , gameState = gameState
                         , wasRestored = maybeGameid /= Nothing
                         }
