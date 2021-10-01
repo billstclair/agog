@@ -8,6 +8,7 @@
 1. Handicapping
 1. S3 persistence
 1. Watchers, can chat, but don't play.
+1. Automatic dark mode. User sets times. Default to 7am-8pm light
 
 ## Maybe
 

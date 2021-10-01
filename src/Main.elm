@@ -318,6 +318,8 @@ type Msg
     | SetServerUrl String
     | SetGameid String
     | SetGameName GameName
+    | SwitchGame GameName
+    | RenameGame
     | SetPage Page
     | SetHideTitle Bool
     | ResetScore
@@ -708,6 +710,16 @@ handleGetResponse label key value model =
                 model |> withNoCmd
 
 
+foldrGames : (Game -> a -> a) -> a -> Model -> a
+foldrGames folder a model =
+    (( model.game.gamename, model.game )
+        :: Dict.toList model.gameDict
+    )
+        |> List.sortBy Tuple.first
+        |> List.map Tuple.second
+        |> List.foldr folder a
+
+
 mapGames : (Game -> Maybe Game) -> Model -> Model
 mapGames updater model =
     let
@@ -806,42 +818,34 @@ handleGetGameResponse key value model =
 
                 Ok game ->
                     let
-                        ( model2, maybeGame ) =
-                            updateGame gamename (always game) model
-                    in
-                    case maybeGame of
-                        Nothing ->
-                            { model2
-                                | error = Just <| "Couldn't find game: " ++ gamename
-                            }
-                                |> withNoCmd
-
-                        Just game2 ->
-                            let
-                                model3 =
-                                    -- Empty chat in case it's not in localStorage
-                                    { model2
-                                        | chatDict =
-                                            Dict.insert gamename
-                                                { initialChatSettings
-                                                    | zone = model2.zone
-                                                }
-                                                model2.chatDict
-                                    }
-
-                                getChatCmd =
-                                    getChat gamename
-                            in
-                            if gamename == model3.gamename then
-                                let
-                                    ( model4, cmd4 ) =
-                                        reconnectToGame game2 model3
-                                in
-                                model4 |> withCmds [ getChatCmd, cmd4 ]
+                        model2 =
+                            if gamename == model.gamename then
+                                { model | game = game }
 
                             else
-                                -- TODO: reconnect to background games
-                                model3 |> withCmd getChatCmd
+                                { model
+                                    | gameDict =
+                                        Dict.insert gamename game model.gameDict
+                                }
+
+                        model3 =
+                            -- Empty chat in case it's not in localStorage
+                            { model2
+                                | chatDict =
+                                    Dict.insert gamename
+                                        { initialChatSettings
+                                            | zone = model2.zone
+                                        }
+                                        model2.chatDict
+                            }
+
+                        getChatCmd =
+                            getChat gamename
+
+                        ( model4, cmd4 ) =
+                            reconnectToGame game model3
+                    in
+                    model4 |> withCmds [ getChatCmd, cmd4 ]
 
 
 reconnectToGame : Game -> Model -> ( Model, Cmd Msg )
@@ -853,6 +857,7 @@ reconnectToGame game model =
     if not game.isLocal && game.isLive && game.playerid /= "" then
         model
             |> webSocketConnect
+                game
                 (ConnectionSpec gamename <| UpdateConnection game.playerid)
 
     else if gamename == model.game.gamename then
@@ -863,11 +868,13 @@ reconnectToGame game model =
         else if model.page == PublicPage then
             { model | gameid = "" }
                 |> webSocketConnect
+                    game
                     (ConnectionSpec gamename PublicGamesConnection)
 
         else if model.page == StatisticsPage then
             { model | gameid = "" }
                 |> webSocketConnect
+                    game
                     (ConnectionSpec gamename StatisticsConnection)
 
         else
@@ -962,7 +969,7 @@ initialNewReqCmd game model =
         NewReq
             { initialNewReqBody
                 | restoreState =
-                    Just model.game.gameState
+                    Just game.gameState
             }
 
 
@@ -1092,7 +1099,7 @@ If `maybeGame` is not not `Nothing`, then a game with its `gameid` was found.
 If the `Maybe Game` in the result is not `Nothing`, then the `Game` was changed,
 and needs to be persisted by `incomingMessage`. Otherwise, it was NOT changed.
 
-It is expected that the game's `gamename` is NOT changed. That can be done from the UI, but only `SetGameName` knows how to do what is necessary.
+It is expected that the game's `gamename` is NOT changed. That can be done from the UI, but only `RenameGame` knows how to do what is necessary.
 
 -}
 incomingMessageInternal : ServerInterface -> Maybe Game -> Message -> Model -> ( Maybe Game, ( Model, Cmd Msg ) )
@@ -1478,6 +1485,7 @@ incomingMessageInternal interface maybeGame message model =
 
                         Just game ->
                             webSocketConnect
+                                game
                                 (ConnectionSpec game.gamename <|
                                     RestoreGameConnection game
                                 )
@@ -1500,6 +1508,7 @@ incomingMessageInternal interface maybeGame message model =
 
                                         _ ->
                                             webSocketConnect
+                                                restoredGame
                                                 (ConnectionSpec restoredGame.gamename <|
                                                     JoinRestoredGameConnection gameid
                                                 )
@@ -2051,7 +2060,7 @@ updateInternal msg model =
 
                                   else
                                     Cmd.none
-                                , send interface <| NewReq initialNewReqBody
+                                , initialNewReqCmd game2 model
                                 ]
 
                           else
@@ -2093,15 +2102,133 @@ updateInternal msg model =
                 |> withNoCmd
 
         SetGameid gameid ->
-            -- model's gameid property is only for the UI.
-            -- It is not changeable there if a game is in progress.
             { model | gameid = gameid }
                 |> withNoCmd
 
         SetGameName gamename ->
-            -- TODO, part of the UI for multiple simultaneous games.
-            -- Remember to delete the old entry from `model.gameDict`.
-            model |> withNoCmd
+            { model | gamename = gamename }
+                |> withNoCmd
+
+        SwitchGame gamename ->
+            if gamename == game.gamename then
+                model |> withNoCmd
+
+            else if gamename == "" then
+                -- New Game
+                let
+                    newGamename =
+                        model.gamename
+
+                    newChat =
+                        { initialChatSettings | zone = model.zone }
+
+                    newGame =
+                        let
+                            agame =
+                                initialGame (Just <| makeSeed model.tick)
+                        in
+                        { agame | gamename = newGamename }
+                in
+                case lookupGame newGamename model of
+                    Just _ ->
+                        model |> withNoCmd
+
+                    Nothing ->
+                        { model
+                            | game = newGame
+                            , gameDict =
+                                Dict.insert game.gamename game model.gameDict
+                            , chatDict =
+                                Dict.insert newGamename newChat model.chatDict
+                        }
+                            |> withCmds
+                                [ putGame newGame
+                                , putChat newGamename newChat
+                                ]
+
+            else
+                case Dict.get gamename model.gameDict of
+                    Nothing ->
+                        { model
+                            | error =
+                                Just <| "Bug: can't find game named " ++ gamename
+                        }
+                            |> withNoCmd
+
+                    Just newGame ->
+                        { model
+                            | gamename = gamename
+                            , game = newGame
+                            , gameDict =
+                                Dict.remove gamename model.gameDict
+                                    |> Dict.insert model.game.gamename model.game
+                        }
+                            |> withNoCmd
+
+        RenameGame ->
+            let
+                newGamename =
+                    model.gamename
+
+                oldGamename =
+                    game.gamename
+
+                chatDict =
+                    model.chatDict
+
+                gameDict =
+                    model.gameDict
+
+                chat =
+                    case Dict.get oldGamename chatDict of
+                        Just achat ->
+                            achat
+
+                        Nothing ->
+                            { initialChatSettings | zone = model.zone }
+            in
+            if newGamename == "" then
+                -- Delete game
+                if not game.isLocal && game.isLive then
+                    model |> withNoCmd
+
+                else
+                    case List.head <| Dict.toList gameDict of
+                        Nothing ->
+                            model |> withNoCmd
+
+                        Just ( nextName, nextGame ) ->
+                            { model
+                                | gamename = nextName
+                                , game = nextGame
+                                , gameDict = Dict.remove nextName gameDict
+                                , chatDict = Dict.remove oldGamename chatDict
+                            }
+                                |> withCmds
+                                    [ put (gameKey oldGamename) Nothing
+                                    , put (chatKey oldGamename) Nothing
+                                    ]
+
+            else if Nothing /= lookupGame model.gamename model then
+                model |> withNoCmd
+
+            else
+                let
+                    renamedGame =
+                        { game | gamename = newGamename }
+                in
+                { model
+                    | game = renamedGame
+                    , chatDict =
+                        Dict.remove oldGamename chatDict
+                            |> Dict.insert newGamename chat
+                }
+                    |> withCmds
+                        [ put (gameKey oldGamename) Nothing
+                        , putGame renamedGame
+                        , put (chatKey oldGamename) Nothing
+                        , putChat newGamename chat
+                        ]
 
         SetPage page ->
             let
@@ -2111,11 +2238,13 @@ updateInternal msg model =
                 ( mdl2, cmd ) =
                     if page == PublicPage then
                         webSocketConnect
+                            model.game
                             (ConnectionSpec mdl.gamename PublicGamesConnection)
                             mdl
 
                     else if page == StatisticsPage then
                         webSocketConnect
+                            model.game
                             (ConnectionSpec mdl.gamename StatisticsConnection)
                             mdl
 
@@ -2655,12 +2784,8 @@ makeWebSocketServer model =
         Noop
 
 
-webSocketConnect : ConnectionSpec -> Model -> ( Model, Cmd Msg )
-webSocketConnect spec model =
-    let
-        game =
-            model.game
-    in
+webSocketConnect : Game -> ConnectionSpec -> Model -> ( Model, Cmd Msg )
+webSocketConnect game spec model =
     if game.isLocal then
         { model
             | game =
@@ -2700,12 +2825,16 @@ webSocketConnect spec model =
 
 startGame : Model -> ( Model, Cmd Msg )
 startGame model =
-    webSocketConnect (ConnectionSpec model.gamename StartGameConnection) model
+    webSocketConnect model.game
+        (ConnectionSpec model.gamename StartGameConnection)
+        model
 
 
 join : Model -> ( Model, Cmd Msg )
 join model =
-    webSocketConnect (ConnectionSpec model.gamename JoinGameConnection) model
+    webSocketConnect model.game
+        (ConnectionSpec model.gamename JoinGameConnection)
+        model
 
 
 disconnect : Model -> ( Model, Cmd Msg )
@@ -3618,6 +3747,103 @@ mainPage bsize model =
                     else
                         "New Game"
                 ]
+            , br
+            , b "Game name: "
+            , input
+                [ onInput SetGameName
+                , value model.gamename
+                , size 20
+                ]
+                []
+            , text " "
+            , let
+                delete =
+                    model.gamename == ""
+
+                cantDelete =
+                    delete
+                        && model.game.isLive
+                        && not model.game.isLocal
+
+                onlyGame =
+                    delete && Dict.isEmpty model.gameDict
+
+                isCurrent =
+                    model.gamename == model.game.gamename
+
+                exists =
+                    Nothing /= lookupGame model.gamename model
+              in
+              button
+                [ disabled <| isCurrent || cantDelete || onlyGame || exists
+                , title <|
+                    if isCurrent then
+                        "Rename to the same name? Nope."
+
+                    else if cantDelete then
+                        "You may not delete an active network game."
+
+                    else if onlyGame then
+                        "You may not delete the only game."
+
+                    else if delete then
+                        "Delete the current game."
+
+                    else if exists then
+                        "You may not rename to an existing name."
+
+                    else
+                        "Rename the current game."
+                , onClick RenameGame
+                ]
+                [ text <|
+                    if delete then
+                        "Delete"
+
+                    else
+                        "Rename"
+                ]
+            , text " "
+            , select
+                [ onInput SwitchGame ]
+              <|
+                let
+                    cantMakeNew =
+                        (model.gamename == "")
+                            || (Nothing /= lookupGame model.gamename model)
+                in
+                option
+                    [ value ""
+                    , disabled cantMakeNew
+                    , title <|
+                        if cantMakeNew then
+                            "Type a non-blank \"Game name\" that does not yet exist."
+
+                        else
+                            "Make a new game named " ++ model.gamename
+                    ]
+                    [ text "-- New Game --" ]
+                    :: foldrGames
+                        (\agame res ->
+                            let
+                                isCurrent =
+                                    agame.gamename == game.gamename
+                            in
+                            option
+                                [ value agame.gamename
+                                , selected isCurrent
+                                , title <|
+                                    if isCurrent then
+                                        "This is the current game."
+
+                                    else
+                                        "Switch to this game."
+                                ]
+                                [ text agame.gamename ]
+                                :: res
+                        )
+                        []
+                        model
             , if not (game.isLocal || WhichServer.isLocal) then
                 text ""
 
