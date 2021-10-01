@@ -208,7 +208,7 @@ type alias ServerInterface =
 
 type ConnectionReason
     = StartGameConnection
-    | JoinGameConnection
+    | JoinGameConnection GameId
     | PublicGamesConnection
     | StatisticsConnection
     | UpdateConnection PlayerId
@@ -342,7 +342,7 @@ type Msg
     | CorruptJumpedUI (AskYesNo ())
     | MakeHulkUI (AskYesNo RowCol)
     | SendUndoJumps UndoWhichJumps
-    | ChatUpdate ChatSettings (Cmd Msg)
+    | ChatUpdate String ChatSettings (Cmd Msg)
     | ChatSend String ChatSettings
     | ChatClear
     | PlaySound String
@@ -467,9 +467,13 @@ updateChatAttributes bsize styleType settings =
     }
 
 
-initialChatSettings : ChatSettings
-initialChatSettings =
-    ElmChat.makeSettings ids.chatOutput 14 True ChatUpdate
+initialChatSettings : String -> Zone -> ChatSettings
+initialChatSettings gamename zone =
+    let
+        settings =
+            ElmChat.makeSettings ids.chatOutput 14 True (ChatUpdate gamename)
+    in
+    { settings | zone = zone }
 
 
 initialGame : Maybe Seed -> Game
@@ -544,7 +548,7 @@ init flags url key =
             , game = game
             , gameDict = Dict.empty
             , chatDict =
-                [ ( game.gamename, initialChatSettings ) ]
+                [ ( game.gamename, initialChatSettings game.gamename Time.utc ) ]
                     |> Dict.fromList
             , connectionSpecQueue = Fifo.empty
             , funnelState = initialFunnelState
@@ -670,7 +674,7 @@ handleListKeysResponse label prefix keys model =
                             , getLabeled pk.game key
                             ]
                 in
-                ( model, List.foldr getter Cmd.none keys )
+                ( model, List.foldr getter Cmd.none <| Debug.log "Getting games" keys )
 
             else
                 model |> withNoCmd
@@ -700,11 +704,8 @@ handleGetResponse label key value model =
                         model |> withCmd cmd
 
                     Ok savedModel ->
-                        let
-                            model2 =
-                                savedModelToModel savedModel model
-                        in
-                        model2 |> withCmd cmd
+                        savedModelToModel savedModel model
+                            |> withCmd cmd
 
             else
                 model |> withNoCmd
@@ -720,8 +721,8 @@ foldrGames folder a model =
         |> List.foldr folder a
 
 
-mapGames : (Game -> Maybe Game) -> Model -> Model
-mapGames updater model =
+updateAllGames : (Game -> Maybe Game) -> Model -> Model
+updateAllGames updater model =
     let
         model2 =
             case updater model.game of
@@ -766,11 +767,7 @@ updateGame gamename updater model =
             game =
                 updater model.game
         in
-        ( { model
-            -- TODO: This may be the wrong time to change the displayed gameid
-            | gameid = game.gameid
-            , game = game
-          }
+        ( { model | game = game }
         , Just game
         )
 
@@ -798,7 +795,7 @@ updateGame gamename updater model =
 
 handleGetGameResponse : String -> Value -> Model -> ( Model, Cmd Msg )
 handleGetGameResponse key value model =
-    case gameKeyToName key of
+    case Debug.log "handleGetGameResponse, gamename" <| gameKeyToName key of
         Nothing ->
             { model
                 | error = Just <| "Unrecognized game key: " ++ key
@@ -817,35 +814,45 @@ handleGetGameResponse key value model =
                         |> withNoCmd
 
                 Ok game ->
-                    let
-                        model2 =
-                            if gamename == model.gamename then
-                                { model | game = game }
+                    if game.gamename /= gamename then
+                        { model
+                            | error =
+                                Just <|
+                                    "Bug: Loaded "
+                                        ++ gamename
+                                        ++ " from localStorage. Got "
+                                        ++ game.gamename
+                        }
+                            |> withNoCmd
 
-                            else
-                                { model
-                                    | gameDict =
-                                        Dict.insert gamename game model.gameDict
+                    else
+                        let
+                            model2 =
+                                if gamename == model.game.gamename then
+                                    { model | game = game }
+
+                                else
+                                    { model
+                                        | gameDict =
+                                            Dict.insert gamename game model.gameDict
+                                    }
+
+                            model3 =
+                                -- Empty chat in case it's not in localStorage
+                                { model2
+                                    | chatDict =
+                                        Dict.insert gamename
+                                            (initialChatSettings gamename model2.zone)
+                                            model2.chatDict
                                 }
 
-                        model3 =
-                            -- Empty chat in case it's not in localStorage
-                            { model2
-                                | chatDict =
-                                    Dict.insert gamename
-                                        { initialChatSettings
-                                            | zone = model2.zone
-                                        }
-                                        model2.chatDict
-                            }
+                            getChatCmd =
+                                getChat gamename
 
-                        getChatCmd =
-                            getChat gamename
-
-                        ( model4, cmd4 ) =
-                            reconnectToGame game model3
-                    in
-                    model4 |> withCmds [ getChatCmd, cmd4 ]
+                            ( model4, cmd4 ) =
+                                reconnectToGame game model3
+                        in
+                        model4 |> withCmds [ getChatCmd, cmd4 ]
 
 
 reconnectToGame : Game -> Model -> ( Model, Cmd Msg )
@@ -860,12 +867,12 @@ reconnectToGame game model =
                 game
                 (ConnectionSpec gamename <| UpdateConnection game.playerid)
 
-    else if gamename == model.game.gamename then
-        if game.isLocal then
-            { model | gameid = "" }
-                |> withCmd (initialNewReqCmd game model)
+    else if game.isLocal then
+        model
+            |> withCmd (initialNewReqCmd game model)
 
-        else if model.page == PublicPage then
+    else if gamename == model.game.gamename then
+        if model.page == PublicPage then
             { model | gameid = "" }
                 |> webSocketConnect
                     game
@@ -932,7 +939,7 @@ handleGetChatResponse key value model =
                 |> withNoCmd
 
         Just gamename ->
-            case JD.decodeValue (ElmChat.settingsDecoder ChatUpdate) value of
+            case JD.decodeValue (ElmChat.settingsDecoder (ChatUpdate gamename)) value of
                 Err _ ->
                     { model
                         | error = Just <| "Couldn't decode chat: " ++ gamename
@@ -976,6 +983,7 @@ initialNewReqCmd game model =
 modelToSavedModel : Model -> SavedModel
 modelToSavedModel model =
     { gamename = model.gamename
+    , gameGamename = model.game.gamename
     , page = model.page
     , chooseFirst = model.chooseFirst
     , lastTestMode = model.lastTestMode
@@ -990,8 +998,13 @@ modelToSavedModel model =
 
 savedModelToModel : SavedModel -> Model -> Model
 savedModelToModel savedModel model =
+    let
+        game =
+            model.game
+    in
     { model
         | gamename = savedModel.gamename
+        , game = { game | gamename = savedModel.gameGamename }
         , page = savedModel.page
         , chooseFirst = savedModel.chooseFirst
         , lastTestMode = savedModel.lastTestMode
@@ -1179,9 +1192,16 @@ incomingMessageInternal interface maybeGame message model =
                             , yourWins = 0
                             , interface = interface
                         }
+
+                    model3 =
+                        if game.gamename == model.game.gamename then
+                            { model2 | gameid = gameid }
+
+                        else
+                            model2
                 in
                 ( Just game2
-                , model2
+                , model3
                     |> withCmds
                         [ chatCmd
                         , if not game.isLocal then
@@ -1256,15 +1276,25 @@ incomingMessageInternal interface maybeGame message model =
 
                             Just pid ->
                                 { game2 | playerid = pid }
+
+                ( model3, _ ) =
+                    updateGame game3.gamename (always game3) model2
+
+                msg =
+                    if game3.gamename == model.gamename then
+                        "The game is on!"
+
+                    else
+                        playerName player game3
+                            ++ " joined hidden game "
+                            ++ game3.gamename
             in
             ( Just game3
-            , { model2
-                | game = game3
-              }
+            , model3
                 |> withCmds
                     [ chatCmd
                     , setPage MainPage
-                    , maybeSendNotification False "The game is on!" model2
+                    , maybeSendNotification game3 False msg model2
                     ]
             )
 
@@ -1305,7 +1335,7 @@ incomingMessageInternal interface maybeGame message model =
                         , model2
                             |> withCmds
                                 [ if player /= game2.player then
-                                    maybeSendNotification True leftMsg model2
+                                    maybeSendNotification game2 True leftMsg model2
 
                                   else
                                     Cmd.none
@@ -1347,6 +1377,7 @@ incomingMessageInternal interface maybeGame message model =
                         , model
                             |> withCmds
                                 [ maybeSendNotification
+                                    game
                                     False
                                     "It's your turn in AGOG."
                                     model
@@ -1386,7 +1417,7 @@ incomingMessageInternal interface maybeGame message model =
                             else
                                 Just resignMsg
                       }
-                        |> withCmd (maybeSendNotification True resignMsg model)
+                        |> withCmd (maybeSendNotification game True resignMsg model)
                     )
                 )
 
@@ -1418,7 +1449,7 @@ incomingMessageInternal interface maybeGame message model =
                                 Cmd.none
 
                             else
-                                maybeSendNotification True msg mdl2
+                                maybeSendNotification game True msg mdl2
                     in
                     ( Just
                         { game
@@ -1545,7 +1576,8 @@ incomingMessageInternal interface maybeGame message model =
                                     -- Kluge. ElmChat is supposed to do this
                                     , Task.attempt (\_ -> Noop) <|
                                         Dom.setViewportOf ids.chatOutput 0 1000000
-                                    , maybeSendNotification True
+                                    , maybeSendNotification game
+                                        True
                                         ("You got an AGOG chat message from " ++ name)
                                         model
                                     ]
@@ -1644,12 +1676,8 @@ notificationHandler response state mdl =
                 |> withNoCmd
 
 
-maybeSendNotification : Bool -> String -> Model -> Cmd Msg
-maybeSendNotification ignoreWhoseTurn title model =
-    let
-        game =
-            model.game
-    in
+maybeSendNotification : Game -> Bool -> String -> Model -> Cmd Msg
+maybeSendNotification game ignoreWhoseTurn title model =
     if
         model.notificationsEnabled
             && (ignoreWhoseTurn || game.gameState.whoseTurn == game.player)
@@ -1729,7 +1757,7 @@ socketHandler response state mdl =
                     else
                         Just <| "Connection unexpectedly closed: " ++ reason
             }
-                |> mapGames
+                |> updateAllGames
                     (\g ->
                         if g.isLocal then
                             Nothing
@@ -1768,8 +1796,8 @@ connectedResponse model =
                     case lookupGame gamename model of
                         Nothing ->
                             let
-                                name =
-                                    Debug.log "connectedResponse: can't find gamname" gamename
+                                mcs =
+                                    Debug.log "connectedResponse: can't find gamname" maybeConnectionSpec
                             in
                             Cmd.none
 
@@ -1809,10 +1837,10 @@ processConnectionReason game connectionReason model =
                     , maybeGameid = Nothing
                     }
 
-        JoinGameConnection ->
+        JoinGameConnection gameid ->
             send interface <|
                 JoinReq
-                    { gameid = model.gameid
+                    { gameid = gameid
                     , name = model.settings.name
                     , isRestore = False
                     }
@@ -1934,7 +1962,7 @@ update msg model =
                 ClearStorage ->
                     False
 
-                ChatUpdate _ _ ->
+                ChatUpdate _ _ _ ->
                     False
 
                 ChatSend _ _ ->
@@ -1988,7 +2016,7 @@ updateInternal msg model =
             { model
                 | tick = posix
                 , game =
-                    if model.tick /= zeroTick then
+                    if model.tick /= zeroTick || not game.isLocal then
                         game
 
                     else
@@ -2120,12 +2148,12 @@ updateInternal msg model =
                         model.gamename
 
                     newChat =
-                        { initialChatSettings | zone = model.zone }
+                        initialChatSettings newGamename model.zone
 
                     newGame =
                         let
                             agame =
-                                initialGame (Just <| makeSeed model.tick)
+                                initialGame Nothing
                         in
                         { agame | gamename = newGamename }
                 in
@@ -2136,6 +2164,7 @@ updateInternal msg model =
                     Nothing ->
                         { model
                             | game = newGame
+                            , gameid = newGame.gameid
                             , gameDict =
                                 Dict.insert game.gamename game model.gameDict
                             , chatDict =
@@ -2159,6 +2188,7 @@ updateInternal msg model =
                         { model
                             | gamename = gamename
                             , game = newGame
+                            , gameid = newGame.gameid
                             , gameDict =
                                 Dict.remove gamename model.gameDict
                                     |> Dict.insert model.game.gamename model.game
@@ -2185,7 +2215,7 @@ updateInternal msg model =
                             achat
 
                         Nothing ->
-                            { initialChatSettings | zone = model.zone }
+                            initialChatSettings newGamename model.zone
             in
             if newGamename == "" then
                 -- Delete game
@@ -2201,6 +2231,7 @@ updateInternal msg model =
                             { model
                                 | gamename = nextName
                                 , game = nextGame
+                                , gameid = nextGame.gameid
                                 , gameDict = Dict.remove nextName gameDict
                                 , chatDict = Dict.remove oldGamename chatDict
                             }
@@ -2322,21 +2353,23 @@ updateInternal msg model =
                                                 { gameState
                                                     | score = Types.zeroScore
                                                 }
+
+                                            interface =
+                                                ServerInterface
+                                                    { si
+                                                        | state =
+                                                            Just <|
+                                                                ServerInterface.updateGame
+                                                                    game.gameid
+                                                                    gs
+                                                                    state
+                                                    }
                                         in
                                         { model
                                             | game =
                                                 { game
                                                     | gameState = gs
-                                                    , interface =
-                                                        ServerInterface
-                                                            { si
-                                                                | state =
-                                                                    Just <|
-                                                                        ServerInterface.updateGame
-                                                                            model.gameid
-                                                                            gs
-                                                                            state
-                                                            }
+                                                    , interface = interface
                                                 }
                                         }
                                             |> withNoCmd
@@ -2647,10 +2680,10 @@ updateInternal msg model =
                         )
                     )
 
-        ChatUpdate chatSettings cmd ->
-            updateChat model.game.gamename model (always chatSettings)
+        ChatUpdate gamename chatSettings cmd ->
+            updateChat gamename model (always chatSettings)
                 |> Tuple.first
-                |> withCmds [ cmd, putChat game.gamename chatSettings ]
+                |> withCmds [ cmd, putChat gamename chatSettings ]
 
         ChatSend line chatSettings ->
             chatSend line chatSettings model
@@ -2726,7 +2759,7 @@ clearChatSettings : String -> Bool -> Model -> ( Model, Cmd Msg )
 clearChatSettings gamename clearInput model =
     let
         ( model2, maybeChat ) =
-            updateChat gamename
+            updateChat (Debug.log "Clear chat for game" gamename)
                 model
                 (\chat ->
                     { chat
@@ -2787,8 +2820,8 @@ makeWebSocketServer model =
 webSocketConnect : Game -> ConnectionSpec -> Model -> ( Model, Cmd Msg )
 webSocketConnect game spec model =
     if game.isLocal then
-        { model
-            | game =
+        let
+            newGame =
                 { game
                     | interface =
                         if game.interfaceIsProxy then
@@ -2799,12 +2832,14 @@ webSocketConnect game spec model =
                     , interfaceIsProxy = True
                     , isLive = True
                 }
-        }
+        in
+        updateGame game.gamename (always game) model
+            |> Tuple.first
             |> withNoCmd
 
     else
-        { model
-            | game =
+        let
+            newGame =
                 { game
                     | interface =
                         if True then
@@ -2815,7 +2850,9 @@ webSocketConnect game spec model =
                             game.interface
                     , interfaceIsProxy = False
                 }
-        }
+        in
+        updateGame game.gamename (always newGame) model
+            |> Tuple.first
             |> insertConnectionSpec (Debug.log "webSocketConnect" spec)
             |> withCmd
                 (WebSocket.makeOpen game.serverUrl
@@ -2826,14 +2863,14 @@ webSocketConnect game spec model =
 startGame : Model -> ( Model, Cmd Msg )
 startGame model =
     webSocketConnect model.game
-        (ConnectionSpec model.gamename StartGameConnection)
+        (ConnectionSpec model.game.gamename StartGameConnection)
         model
 
 
 join : Model -> ( Model, Cmd Msg )
 join model =
     webSocketConnect model.game
-        (ConnectionSpec model.gamename JoinGameConnection)
+        (ConnectionSpec model.game.gamename (JoinGameConnection model.game.gameid))
         model
 
 
@@ -4259,7 +4296,7 @@ publicPage bsize model =
                             ]
                       ]
                     , List.map
-                        (renderPublicGameRow model.gameid name game.isLive)
+                        (renderPublicGameRow model.game.gameid name game.isLive)
                         model.publicGames
                     ]
             , playButton

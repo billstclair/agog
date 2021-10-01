@@ -119,6 +119,17 @@ messageSender mdl socket state request response =
                 state
 
             else
+                let
+                    verb =
+                        WebSocketFramework.Server.verbose mdl
+
+                    verbose =
+                        if verb then
+                            Debug.log "verbose" verb
+
+                        else
+                            verb
+                in
                 { state
                     | state =
                         Just
@@ -126,6 +137,7 @@ messageSender mdl socket state request response =
                                 | private =
                                     { private
                                         | startTime = Just time
+                                        , verbose = Just verbose
                                     }
                             }
                 }
@@ -175,10 +187,10 @@ messageSender mdl socket state request response =
                 _ ->
                     case response of
                         NewRsp { gameid } ->
-                            sendNewRsp model state
+                            sendNewRsp model state4
 
                         JoinRsp { gameid } ->
-                            sendJoinRsp model state
+                            sendJoinRsp model state4
 
                         AnotherGameRsp record ->
                             \_ _ ->

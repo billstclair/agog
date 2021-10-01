@@ -57,6 +57,7 @@ module Agog.Types exposing
     , emptyPiece
     , emptyPrivateGameState
     , emptySettings
+    , gameStateIsVerbose
     , gamesEqual
     , lightStyle
     , maybeMakeHulkOption
@@ -66,6 +67,7 @@ module Agog.Types exposing
     , otherColor
     , otherPlayer
     , playerColor
+    , serverIsVerbose
     , statisticsKeyOrder
     , statisticsKeys
     , typeToStyle
@@ -290,6 +292,7 @@ emptySettings =
 
 type alias SavedModel =
     { gamename : String
+    , gameGamename : String
     , page : Page
     , chooseFirst : Player
     , lastTestMode : Maybe TestMode
@@ -317,7 +320,8 @@ type alias SubscriptionSet =
 
 
 type alias PrivateGameState =
-    { subscribers : SubscriptionSet
+    { verbose : Maybe Bool
+    , subscribers : SubscriptionSet
     , statisticsSubscribers : Set Socket
     , statisticsChanged : Bool
 
@@ -329,7 +333,8 @@ type alias PrivateGameState =
 
 emptyPrivateGameState : PrivateGameState
 emptyPrivateGameState =
-    { subscribers = Set.empty
+    { verbose = Nothing
+    , subscribers = Set.empty
     , statisticsSubscribers = Set.empty
     , statisticsChanged = False
     , startTime = Nothing
@@ -759,6 +764,26 @@ type MessageForLog
 
 type alias ServerState =
     WebSocketFramework.Types.ServerState GameState Player
+
+
+serverIsVerbose : ServerState -> Bool
+serverIsVerbose state =
+    case state.state of
+        Nothing ->
+            False
+
+        Just gs ->
+            gameStateIsVerbose gs
+
+
+gameStateIsVerbose : GameState -> Bool
+gameStateIsVerbose gs =
+    case gs.private.verbose of
+        Nothing ->
+            False
+
+        Just v ->
+            v
 
 
 type alias StatisticsKeys =

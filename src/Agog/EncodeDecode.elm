@@ -208,6 +208,7 @@ encodeSavedModel : SavedModel -> Value
 encodeSavedModel model =
     JE.object
         [ ( "gamename", JE.string model.gamename )
+        , ( "gameGamename", JE.string model.gameGamename )
         , ( "page", encodePage model.page )
         , ( "chooseFirst", encodePlayer model.chooseFirst )
         , ( "lastTestMode", encodeMaybe encodeTestMode model.lastTestMode )
@@ -229,6 +230,7 @@ savedModelDecoder : Decoder SavedModel
 savedModelDecoder =
     JD.succeed SavedModel
         |> optional "gamename" JD.string Types.defaultGamename
+        |> optional "gameGamename" JD.string Types.defaultGamename
         |> optional "page" pageDecoder MainPage
         |> required "chooseFirst" playerDecoder
         |> optional "lastTestMode" (JD.nullable testModeDecoder) Nothing
@@ -720,9 +722,15 @@ playerNamesDecoder =
 
 
 encodePrivateGameState : PrivateGameState -> Value
-encodePrivateGameState { subscribers, statisticsSubscribers, statisticsChanged, startTime, updateTime } =
+encodePrivateGameState { verbose, subscribers, statisticsSubscribers, statisticsChanged, startTime, updateTime } =
     List.concat
-        [ case Set.toList subscribers of
+        [ case verbose of
+            Nothing ->
+                []
+
+            Just v ->
+                [ ( "verbose", JE.bool v ) ]
+        , case Set.toList subscribers of
             [] ->
                 []
 
@@ -794,6 +802,7 @@ socketSetDecoder =
 privateGameStateDecoder : Decoder PrivateGameState
 privateGameStateDecoder =
     JD.succeed PrivateGameState
+        |> optional "verbose" (JD.nullable JD.bool) Nothing
         |> optional "subscribers" subscribersDecoder Set.empty
         |> optional "statisticsSubscribers" socketSetDecoder Set.empty
         |> optional "statisticsChanged" JD.bool False

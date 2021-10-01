@@ -130,7 +130,7 @@
                             { key: key, message: message }));
     });
     socket.addEventListener("close", function(event) {
-	  //console.log("'" + key + "' closed");
+      //console.log("'" + key + "' closed");
       delete sockets[key];        // for open errors
       sub.send(objectReturn("closed",
                             { key: key,
@@ -155,7 +155,8 @@
       return socketNotOpenReturn(key, "send", message);
     }
     try {
-	  socket.send(message);
+      //console.log("Send for '" + key + "': " + message);
+      socket.send(message);
     } catch(err) {
       // The old code ignored err.name
       return keyedErrorReturn(key, 'badsend', 'Send error', err.name)
