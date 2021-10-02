@@ -30,27 +30,46 @@
 
       // From https://stackoverflow.com/a/54119854
       // Fixes delay in Safari.
-      /*  // Unfortunately, this makes it turn off music, always.
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       var audioCtx = null;
       if (AudioContext) {
           audioCtx = new AudioContext();
-          }
-      */
+          // Suspending the audio context when we're not using it
+          // prevents music from stopping on iOS, except when you
+          // actually play a sound. I don't know how to get it to mix
+          // with the playing music.
+          audioCtx.suspend();
+      }
 
       var sounds = {};
+
+      function makeAudio(file) {
+        var audio = new Audio(file);
+        if (audioCtx) {
+          audio.addEventListener('ended', function(event) {
+            audioCtx.suspend();
+          });
+        }
+        return audio;
+      }
       var files = ['jump.mp3', 'move.mp3'];
       for (var i = 0; i < files.length; i++) {
           var file = 'sounds/' + files[i];
-          sounds[file] = new Audio(file);
+          sounds[file] = makeAudio(file);
       }
       app.ports.playAudio.subscribe(function(file) {
-          var audio = sounds.file;
+          var audio = sounds[file];
           if (!audio) {
-              audio = new Audio(file);
+              audio = makeAudio(file);
               sounds[file] = audio;
           }
-          audio.play();
+          if (audioCtx) {
+            audioCtx.resume().then(function() {
+              audio.play();
+            });
+          } else {
+            audio.play();
+          }
       });
     </script>
 
