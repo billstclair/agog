@@ -4405,6 +4405,11 @@ alignRightStyle =
     style "text-align" "right"
 
 
+smallTextStyle : Html.Attribute msg
+smallTextStyle =
+    style "font-size" "80%"
+
+
 type alias Format =
     List DateFormat.Token
 
@@ -4474,17 +4479,26 @@ militaryFormat =
     ]
 
 
-hmsString : Posix -> String
-hmsString posix =
+hmsString : Bool -> Posix -> String
+hmsString isMilitary posix =
     let
         millis =
             Time.posixToMillis posix
 
+        days =
+            millis // (24 * 60 * 60 * 1000)
+
         secs =
-            toFloat millis / 1000 |> round
+            (toFloat millis / 1000 |> round) - (days * 24 * 60 * 60)
 
         format =
-            if secs < 60 then
+            if isMilitary then
+                militaryFormat
+
+            else if days > 0 then
+                hmsFormat
+
+            else if secs < 60 then
                 sFormat
 
             else if secs < 60 * 60 then
@@ -4492,8 +4506,16 @@ hmsString posix =
 
             else
                 hmsFormat
+
+        dayString =
+            if days > 0 then
+                String.fromInt days ++ ":"
+
+            else
+                ""
     in
-    formatUtc format <| Time.millisToPosix (1000 * secs)
+    dayString
+        ++ (formatUtc format <| Time.millisToPosix (1000 * secs))
 
 
 roundPosix : Posix -> Posix
@@ -4612,7 +4634,7 @@ movesPage bsize model =
                 Just time ->
                     span []
                         [ b "Total time: "
-                        , text <| formatUtc militaryFormat totalTime
+                        , text <| hmsString True totalTime
                         , br
                         , text <| dateAndTimeString model.zone time
                         ]
@@ -4719,7 +4741,10 @@ movesRow index moves =
     in
     tr []
         [ td [ alignCenterStyle ] [ text (String.fromInt <| index + 1) ]
-        , td [ alignRightStyle ]
+        , td
+            [ alignRightStyle
+            , smallTextStyle
+            ]
             [ case maybeWhite of
                 Nothing ->
                     text chars.nbsp
@@ -4729,7 +4754,7 @@ movesRow index moves =
                         text chars.nbsp
 
                     else
-                        text <| hmsString time
+                        text <| hmsString False time
             ]
         , td [ alignCenterStyle ]
             [ case maybeWhite of
@@ -4747,13 +4772,16 @@ movesRow index moves =
                 Just black ->
                     text <| ED.oneMoveToPrettyString black
             ]
-        , td [ alignRightStyle ]
+        , td
+            [ alignRightStyle
+            , smallTextStyle
+            ]
             [ case maybeBlack of
                 Nothing ->
                     text chars.nbsp
 
                 Just { time } ->
-                    text <| hmsString time
+                    text <| hmsString False time
             ]
         ]
 
