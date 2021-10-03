@@ -1074,8 +1074,11 @@ withGameFromId gameid model thunk =
 
 
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
-incomingMessage interface message mdl =
+incomingMessage interface msg mdl =
     let
+        message =
+            Types.fillinResponseMoveTimes model.tick msg
+
         messageLog =
             Debug.log "incomingMessage" <| ED.messageToLogMessage message
 
@@ -2152,17 +2155,21 @@ updateInternal msg model =
                 |> withNoCmd
 
         SwitchGame gamename ->
+            let
+                mdl =
+                    { model | error = Nothing }
+            in
             if gamename == game.gamename then
-                model |> withNoCmd
+                mdl |> withNoCmd
 
             else if gamename == "" then
                 -- New Game
                 let
                     newGamename =
-                        model.gamename
+                        mdl.gamename
 
                     newChat =
-                        initialChatSettings newGamename model.zone
+                        initialChatSettings newGamename mdl.zone
 
                     newGame =
                         let
@@ -2171,12 +2178,12 @@ updateInternal msg model =
                         in
                         { agame | gamename = newGamename }
                 in
-                case lookupGame newGamename model of
+                case lookupGame newGamename mdl of
                     Just _ ->
-                        model |> withNoCmd
+                        mdl |> withNoCmd
 
                     Nothing ->
-                        { model
+                        { mdl
                             | game = newGame
                             , gameid = newGame.gameid
                             , gameDict =
@@ -2192,14 +2199,14 @@ updateInternal msg model =
             else
                 case Dict.get gamename model.gameDict of
                     Nothing ->
-                        { model
+                        { mdl
                             | error =
                                 Just <| "Bug: can't find game named " ++ gamename
                         }
                             |> withNoCmd
 
                     Just newGame ->
-                        { model
+                        { mdl
                             | gamename = gamename
                             , game = newGame
                             , gameid = newGame.gameid
@@ -2883,9 +2890,23 @@ startGame model =
 
 join : Model -> ( Model, Cmd Msg )
 join model =
-    webSocketConnect model.game
-        (ConnectionSpec model.game.gamename (JoinGameConnection model.game.gameid))
-        model
+    let
+        gameid =
+            model.gameid
+
+        game =
+            model.game
+
+        model2 =
+            { model
+                | game =
+                    -- Needed by JoinRsp
+                    { game | gameid = gameid }
+            }
+    in
+    webSocketConnect model2.game
+        (ConnectionSpec model.game.gamename (JoinGameConnection gameid))
+        model2
 
 
 disconnect : Model -> ( Model, Cmd Msg )
@@ -3873,7 +3894,7 @@ mainPage bsize model =
                         else
                             "Make a new game named \"" ++ model.gamename ++ "\""
                     ]
-                    [ text "-- New Game --" ]
+                    [ text <| toMdashes "-- New Game --" ]
                     :: foldrGames
                         (\agame res ->
                             let
@@ -4197,7 +4218,7 @@ pairup strings =
 
 movesToString : List OneMove -> String
 movesToString moves =
-    List.map ED.oneMoveToString moves
+    List.map ED.oneMoveToPrettyString moves
         |> String.join ", "
 
 
@@ -4737,7 +4758,13 @@ chars =
     { leftCurlyQuote = codestr 0x201C
     , copyright = codestr 0xA9
     , nbsp = codestr 0xA0
+    , mdash = codestr 0x2014
     }
+
+
+toMdashes : String -> String
+toMdashes string =
+    String.replace "--" chars.mdash string
 
 
 
@@ -4785,7 +4812,7 @@ getGame gamename =
 
 put : String -> Maybe Value -> Cmd Msg
 put key value =
-    localStorageSend (LocalStorage.put key value)
+    localStorageSend (LocalStorage.put (Debug.log "put" key) value)
 
 
 get : String -> Cmd Msg

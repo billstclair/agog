@@ -119,7 +119,7 @@ lookupGame message playerid state =
         Just { gameid, player } ->
             case ServerInterface.getGame gameid state of
                 Nothing ->
-                    err "Unknown gameid"
+                    err <| "Unknown gameid: " ++ gameid
 
                 Just gameState ->
                     Ok ( gameid, gameState, player )
@@ -1012,6 +1012,7 @@ populateWinnerInFirstMove gameState =
                         , isUnique = True
                         , sequence = OneResign
                         , winner = winner
+                        , time = Types.posixZero
                         }
                             :: moves
 
@@ -1074,6 +1075,9 @@ chooseMove state message gameid gameState player rowCol options =
                                                 options
                                         }
                                 , winner = NoWinner
+
+                                -- TODO: get the time for this
+                                , time = Types.posixZero
                                 }
 
                             gs =
@@ -1187,6 +1191,9 @@ chooseMove state message gameid gameState player rowCol options =
                                             , sequence =
                                                 OneJumpSequence [ newMove ]
                                             , winner = NoWinner
+
+                                            -- TODO: Get the time for this
+                                            , time = Types.posixZero
                                             }
                                                 :: gameState.moves
                             in

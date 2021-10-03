@@ -89,6 +89,7 @@ import Json.Decode as JD exposing (Decoder)
 import Json.Decode.Pipeline as DP exposing (hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
 import Set exposing (Set)
+import Time exposing (Posix)
 import WebSocketFramework exposing (decodePlist, unknownMessage)
 import WebSocketFramework.EncodeDecode as WSFED
 import WebSocketFramework.Types
@@ -873,6 +874,22 @@ maybeOneMoveToString maybeMove =
             Just <| oneMoveToString move
 
 
+posixToString : Posix -> String
+posixToString posix =
+    Time.posixToMillis posix
+        |> String.fromInt
+
+
+stringToPosix : String -> Maybe Posix
+stringToPosix string =
+    case String.toInt string of
+        Nothing ->
+            Nothing
+
+        Just int ->
+            Just <| Time.millisToPosix int
+
+
 oneMoveToPrettyString : OneMove -> String
 oneMoveToPrettyString { piece, isUnique, sequence, winner } =
     let
@@ -962,7 +979,7 @@ oneMoveSequenceToPrettyString isUnique sequence =
 
 
 oneMoveToString : OneMove -> String
-oneMoveToString { piece, isUnique, sequence, winner } =
+oneMoveToString { piece, isUnique, sequence, winner, time } =
     let
         uniqueMarker =
             if isUnique then
@@ -984,8 +1001,15 @@ oneMoveToString { piece, isUnique, sequence, winner } =
 
                 _ ->
                     "%" ++ winnerToString winner
+
+        posixString =
+            if time == Types.posixZero then
+                ""
+
+            else
+                ":" ++ posixToString time
     in
-    uniqueMarker ++ pieceString ++ sequenceString ++ winString
+    uniqueMarker ++ pieceString ++ sequenceString ++ winString ++ posixString
 
 
 oneMoveSequenceToString : OneMoveSequence -> String
@@ -1051,6 +1075,24 @@ oneMoveSequenceToString sequence =
 
 stringToOneMove : String -> Maybe OneMove
 stringToOneMove string =
+    case String.split ":" string of
+        [ move, timestr ] ->
+            case stringToPosix timestr of
+                Nothing ->
+                    Nothing
+
+                Just time ->
+                    stringToOneMoveInternal move time
+
+        [ move ] ->
+            stringToOneMoveInternal move Types.posixZero
+
+        _ ->
+            Nothing
+
+
+stringToOneMoveInternal : String -> Posix -> Maybe OneMove
+stringToOneMoveInternal string time =
     let
         n =
             String.left 1 string
@@ -1086,6 +1128,7 @@ stringToOneMove string =
                                 , isUnique = isUnique
                                 , sequence = sequence
                                 , winner = winner
+                                , time = time
                                 }
             in
             case String.split "%" s of
@@ -1411,6 +1454,7 @@ defaultOneMove =
     , isUnique = True
     , sequence = OneSlide { from = torc "a1", to = torc "a2", makeHulk = Nothing }
     , winner = NoWinner
+    , time = Types.posixZero
     }
 
 

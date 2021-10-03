@@ -57,6 +57,10 @@ module Agog.Types exposing
     , emptyPiece
     , emptyPrivateGameState
     , emptySettings
+    , fillinGameMoveTimes
+    , fillinGameStateMoveTimes
+    , fillinOneMoveTimes
+    , fillinResponseMoveTimes
     , gameStateIsVerbose
     , gamesEqual
     , lightStyle
@@ -67,10 +71,12 @@ module Agog.Types exposing
     , otherColor
     , otherPlayer
     , playerColor
+    , posixZero
     , serverIsVerbose
     , statisticsKeyOrder
     , statisticsKeys
     , typeToStyle
+    , updateResponseGameState
     , winPlayer
     , zeroScore
     )
@@ -79,6 +85,7 @@ import Array exposing (Array)
 import Dict exposing (Dict)
 import ElmChat
 import Set exposing (Set)
+import Time exposing (Posix)
 import WebSocketFramework.Types
     exposing
         ( GameId
@@ -381,7 +388,53 @@ type alias OneMove =
     , isUnique : Bool
     , sequence : OneMoveSequence
     , winner : Winner
+    , time : Posix
     }
+
+
+fillinOneMoveTimes : Posix -> List OneMove -> ( List OneMove, Bool )
+fillinOneMoveTimes time moves =
+    let
+        fillOne move =
+            if move.time == posixZero then
+                ( { move | time = time }, True )
+
+            else
+                ( move, False )
+    in
+    case moves of
+        [] ->
+            ( moves, False )
+
+        [ move ] ->
+            let
+                ( newMove, changed ) =
+                    fillOne move
+            in
+            if changed then
+                ( [ newMove ], True )
+
+            else
+                ( moves, False )
+
+        move1 :: move2 :: tail ->
+            let
+                ( nm1, c1 ) =
+                    fillOne move1
+
+                ( nm2, c2 ) =
+                    fillOne move2
+            in
+            if c1 || c2 then
+                ( nm1 :: nm2 :: tail, True )
+
+            else
+                ( moves, False )
+
+
+posixZero : Posix
+posixZero =
+    Time.millisToPosix 0
 
 
 type alias UndoState =
@@ -413,6 +466,27 @@ type alias GameState =
     , path : List ( Int, Int )
     , testMode : Maybe TestMode
     , private : PrivateGameState --not sent over the wire
+    }
+
+
+fillinGameStateMoveTimes : Posix -> GameState -> GameState
+fillinGameStateMoveTimes time gameState =
+    let
+        ( moves, changed ) =
+            fillinOneMoveTimes time gameState.moves
+    in
+    if changed then
+        { gameState | moves = moves }
+
+    else
+        gameState
+
+
+fillinGameMoveTimes : Posix -> NamedGame msg -> NamedGame msg
+fillinGameMoveTimes time game =
+    { game
+        | gameState =
+            fillinGameStateMoveTimes time game.gameState
     }
 
 
@@ -460,6 +534,39 @@ type PublicType
     = NotPublic
     | EntirelyPublic
     | PublicFor String
+
+
+updateResponseGameState : (GameState -> GameState) -> Message -> Message
+updateResponseGameState updater message =
+    case message of
+        NewRsp ({ gameState } as rec) ->
+            NewRsp { rec | gameState = updater gameState }
+
+        JoinRsp ({ gameState } as rec) ->
+            JoinRsp { rec | gameState = updater gameState }
+
+        UpdateRsp ({ gameState } as rec) ->
+            UpdateRsp { rec | gameState = updater gameState }
+
+        PlayRsp ({ gameState } as rec) ->
+            PlayRsp { rec | gameState = updater gameState }
+
+        ResignRsp ({ gameState } as rec) ->
+            ResignRsp { rec | gameState = updater gameState }
+
+        AnotherGameRsp ({ gameState } as rec) ->
+            AnotherGameRsp { rec | gameState = updater gameState }
+
+        GameOverRsp ({ gameState } as rec) ->
+            GameOverRsp { rec | gameState = updater gameState }
+
+        _ ->
+            message
+
+
+fillinResponseMoveTimes : Posix -> Message -> Message
+fillinResponseMoveTimes time message =
+    updateResponseGameState (\gs -> fillinGameStateMoveTimes time gs) message
 
 
 type Message
