@@ -39,7 +39,7 @@ port module Main exposing (main)
 import Agog.Documentation as Documentation
 import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
-import Agog.NewBoard as NewBoard exposing (SizerKind(..), rc)
+import Agog.NewBoard as NewBoard exposing (rc)
 import Agog.Types as Types
     exposing
         ( Choice(..)
@@ -3516,11 +3516,10 @@ mainPage bsize model =
             Types.typeToStyle model.styleType
     in
     div [ align "center" ]
-        [ Lazy.lazy7 NewBoard.render
+        [ Lazy.lazy6 NewBoard.render
             theStyle
             bsize
             Click
-            (Just <| NewBoard.getSizer DefaultSizer)
             currentPlayer
             rotated
             gameState

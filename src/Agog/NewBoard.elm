@@ -11,8 +11,7 @@
 
 
 module Agog.NewBoard exposing
-    ( SizerKind(..)
-    , areMovesAJump
+    ( areMovesAJump
     , blackSanctum
     , clear
     , colToString
@@ -22,7 +21,6 @@ module Agog.NewBoard exposing
     , empty
     , findSquareSatisfying
     , get
-    , getSizer
     , illegalRowCol
     , initial
     , isRowColLegal
@@ -433,82 +431,8 @@ lineWidth =
     lineWidthO2 * 2
 
 
-connectSizer : Style -> Int -> ( Int, String )
-connectSizer style delta =
-    ( connectWidth delta, connectColor style )
-
-
-pathSizer : Style -> Int -> ( Int, String )
-pathSizer style delta =
-    ( pathWidth delta, pathColor style )
-
-
-type alias Sizer =
-    { connect : Style -> Int -> ( Int, String )
-    , path : Style -> Int -> ( Int, String )
-    }
-
-
-wideSizer : Sizer
-wideSizer =
-    Sizer connectSizer pathSizer
-
-
-narrowSizer : Sizer
-narrowSizer =
-    { connect = \style _ -> ( 2, connectColor style )
-    , path = \style _ -> ( 2, pathColor style )
-    }
-
-
-type SizerKind
-    = DefaultSizer
-    | WideSizer
-
-
-sizerKinds : List ( SizerKind, Sizer )
-sizerKinds =
-    [ ( DefaultSizer, narrowSizer )
-    , ( WideSizer, wideSizer )
-    ]
-
-
-getSizer : SizerKind -> Sizer
-getSizer kind =
-    case LE.find (\( k, s ) -> k == kind) sizerKinds of
-        Nothing ->
-            narrowSizer
-
-        Just ( _, s ) ->
-            s
-
-
-getConnectSizer : Maybe Sizer -> (Style -> Int -> ( Int, String ))
-getConnectSizer sizer =
-    (case sizer of
-        Nothing ->
-            getSizer DefaultSizer
-
-        Just s ->
-            s
-    )
-        |> .connect
-
-
-getPathSizer : Maybe Sizer -> (Style -> Int -> ( Int, String ))
-getPathSizer sizer =
-    (case sizer of
-        Nothing ->
-            getSizer DefaultSizer
-
-        Just s ->
-            s
-    )
-        |> .path
-
-
-render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Sizer -> Maybe Player -> Bool -> GameState -> Html msg
-render style size tagger sizer player rotated gameState =
+render : Style -> Int -> (( Int, Int ) -> msg) -> Maybe Player -> Bool -> GameState -> Html msg
+render style size tagger player rotated gameState =
     let
         board =
             gameState.newBoard
@@ -563,7 +487,7 @@ render style size tagger sizer player rotated gameState =
               <|
                 List.concat
                     [ drawRows style delta rotated
-                    , drawCols style delta rotated sizer board
+                    , drawCols style delta rotated board
                     , drawRects style selected jumperLocations legalMoves jumps (List.head gameState.moves) board rotated delta
                     , drawClickRects style delta rotated tagger
                     ]
@@ -1215,9 +1139,9 @@ drawClickRect style delta tagger rowidx colidx =
         []
 
 
-drawCols : Style -> Int -> Bool -> Maybe Sizer -> NewBoard -> List (Svg msg)
-drawCols style delta rotated sizer board =
-    List.map (drawCol style delta rotated sizer board) [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
+drawCols : Style -> Int -> Bool -> NewBoard -> List (Svg msg)
+drawCols style delta rotated board =
+    List.map (drawCol style delta rotated board) [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
         |> List.concat
 
 
@@ -1232,8 +1156,8 @@ tosy delta rotated y =
             y
 
 
-drawCol : Style -> Int -> Bool -> Maybe Sizer -> NewBoard -> Int -> List (Svg msg)
-drawCol style delta rotated sizer board idx =
+drawCol : Style -> Int -> Bool -> NewBoard -> Int -> List (Svg msg)
+drawCol style delta rotated board idx =
     let
         xc =
             delta * idx + delta // 2

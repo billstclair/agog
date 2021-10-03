@@ -419,7 +419,6 @@ type alias GameState =
     , jumps : List OneCorruptibleJump
     , score : Score
     , winner : Winner
-    , path : List ( Int, Int )
     , testMode : Maybe TestMode
     , private : PrivateGameState --not sent over the wire
     }

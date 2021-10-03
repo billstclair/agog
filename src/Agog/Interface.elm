@@ -84,7 +84,6 @@ emptyGameState players =
     , jumps = []
     , score = Types.zeroScore
     , winner = NoWinner
-    , path = []
     , testMode = Nothing
     , private = Types.emptyPrivateGameState
     }
