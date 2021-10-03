@@ -61,6 +61,7 @@ import Agog.Types as Types
         , RowCol
         , SavedModel
         , Score
+        , ServerState
         , Settings
         , StatisticsKeys
         , Style
@@ -78,6 +79,7 @@ import Browser.Events as Events
 import Browser.Navigation as Navigation exposing (Key)
 import Char
 import Cmd.Extra exposing (withCmd, withCmds, withNoCmd)
+import DateFormat
 import DateFormat.Relative
 import Dict exposing (Dict)
 import Dict.Extra as DE
@@ -399,6 +401,36 @@ fullProcessor =
     ServerInterface.fullMessageProcessor encodeDecode Interface.proxyMessageProcessor
 
 
+updateServerState : (ServerState -> ServerState) -> ServerInterface -> ServerInterface
+updateServerState updater serverInterface =
+    let
+        (ServerInterface interface) =
+            serverInterface
+    in
+    case interface.state of
+        Nothing ->
+            let
+                state =
+                    WebSocketFramework.Types.emptyServerState Nothing
+            in
+            ServerInterface
+                { interface
+                    | state = Just <| updater state
+                }
+
+        Just state ->
+            ServerInterface
+                { interface
+                    | state = Just <| updater state
+                }
+
+
+updateServerTime : Posix -> ServerInterface -> ServerInterface
+updateServerTime posix serverInterface =
+    serverInterface
+        |> updateServerState (\state -> { state | time = posix })
+
+
 updateServerSeed : Maybe Seed -> ServerInterface -> ServerInterface
 updateServerSeed maybeSeed serverInterface =
     case maybeSeed of
@@ -406,30 +438,8 @@ updateServerSeed maybeSeed serverInterface =
             serverInterface
 
         Just seed ->
-            let
-                (ServerInterface interface) =
-                    serverInterface
-            in
-            case interface.state of
-                Nothing ->
-                    let
-                        state =
-                            WebSocketFramework.Types.emptyServerState Nothing
-                    in
-                    ServerInterface
-                        { interface
-                            | state = Just { state | seed = seed }
-                        }
-
-                Just state ->
-                    ServerInterface
-                        { interface
-                            | state =
-                                Just
-                                    { state
-                                        | seed = seed
-                                    }
-                        }
+            serverInterface
+                |> updateServerState (\state -> { state | seed = seed })
 
 
 proxyServer : Maybe Seed -> ServerInterface
@@ -1074,11 +1084,8 @@ withGameFromId gameid model thunk =
 
 
 incomingMessage : ServerInterface -> Message -> Model -> ( Model, Cmd Msg )
-incomingMessage interface msg mdl =
+incomingMessage interface message mdl =
     let
-        message =
-            Types.fillinResponseMoveTimes model.tick msg
-
         messageLog =
             Debug.log "incomingMessage" <| ED.messageToLogMessage message
 
@@ -2033,8 +2040,15 @@ updateInternal msg model =
             { model
                 | tick = posix
                 , game =
-                    if model.tick /= zeroTick || not game.isLocal then
-                        game
+                    if model.tick /= zeroTick then
+                        if not game.isLocal then
+                            game
+
+                        else
+                            { game
+                                | interface =
+                                    updateServerTime model.tick game.interface
+                            }
 
                     else
                         { game
@@ -4386,6 +4400,109 @@ alignCenterStyle =
     style "text-align" "center"
 
 
+alignRightStyle : Html.Attribute msg
+alignRightStyle =
+    style "text-align" "right"
+
+
+type alias Format =
+    List DateFormat.Token
+
+
+dateAndTimeFormat : Format
+dateAndTimeFormat =
+    [ DateFormat.dayOfMonthNumber
+    , DateFormat.text " "
+    , DateFormat.monthNameFull
+    , DateFormat.text " "
+    , DateFormat.yearNumber
+    , DateFormat.text ", "
+    , DateFormat.hourNumber
+    , DateFormat.text ":"
+    , DateFormat.minuteFixed
+    , DateFormat.amPmLowercase
+    ]
+
+
+formatPosix : Zone -> Format -> Posix -> String
+formatPosix zone format posix =
+    DateFormat.format format zone posix
+
+
+formatUtc : Format -> Posix -> String
+formatUtc format posix =
+    formatPosix Time.utc format posix
+
+
+dateAndTimeString : Zone -> Posix -> String
+dateAndTimeString zone posix =
+    formatPosix zone dateAndTimeFormat posix
+
+
+sFormat : Format
+sFormat =
+    [ DateFormat.text ":"
+    , DateFormat.secondFixed
+    ]
+
+
+msFormat : Format
+msFormat =
+    [ DateFormat.minuteFixed
+    , DateFormat.text ":"
+    , DateFormat.secondFixed
+    ]
+
+
+hmsFormat : Format
+hmsFormat =
+    [ DateFormat.hourFixed
+    , DateFormat.text ":"
+    , DateFormat.minuteFixed
+    , DateFormat.text ":"
+    , DateFormat.secondFixed
+    ]
+
+
+militaryFormat : Format
+militaryFormat =
+    [ DateFormat.hourMilitaryFixed
+    , DateFormat.text ":"
+    , DateFormat.minuteFixed
+    , DateFormat.text ":"
+    , DateFormat.secondFixed
+    ]
+
+
+hmsString : Posix -> String
+hmsString posix =
+    let
+        millis =
+            Time.posixToMillis posix
+
+        secs =
+            toFloat millis / 1000 |> round
+
+        format =
+            if secs < 60 then
+                sFormat
+
+            else if secs < 60 * 60 then
+                msFormat
+
+            else
+                hmsFormat
+    in
+    formatUtc format <| Time.millisToPosix (1000 * secs)
+
+
+roundPosix : Posix -> Posix
+roundPosix posix =
+    Time.posixToMillis posix
+        |> (\m -> 1000 * round (toFloat m / 1000))
+        |> Time.millisToPosix
+
+
 movesPage : Int -> Model -> Html Msg
 movesPage bsize model =
     let
@@ -4402,7 +4519,67 @@ movesPage bsize model =
             game.gameState
 
         moves =
-            gameState.moves
+            List.reverse gameState.moves
+
+        gameTime =
+            case List.head moves of
+                Just move ->
+                    Just move.time
+
+                Nothing ->
+                    Nothing
+
+        ( totalTime, offsetMoves ) =
+            case gameTime of
+                Nothing ->
+                    ( Types.posixZero, moves )
+
+                Just time ->
+                    let
+                        millis =
+                            Time.posixToMillis (roundPosix time)
+
+                        moves2 =
+                            moves
+                                |> List.map
+                                    (\move ->
+                                        { move
+                                            | time =
+                                                (Time.posixToMillis (roundPosix move.time) - millis)
+                                                    |> Time.millisToPosix
+                                        }
+                                    )
+
+                        moves3 =
+                            moves2
+                                |> List.foldl
+                                    (\move ( res, last ) ->
+                                        let
+                                            atime =
+                                                move.time |> Time.posixToMillis
+                                        in
+                                        ( { move | time = Time.millisToPosix (atime - last) } :: res
+                                        , atime
+                                        )
+                                    )
+                                    ( [], 0 )
+                                |> Tuple.first
+                                |> List.reverse
+                    in
+                    ( case List.head (List.reverse moves2) of
+                        Just p ->
+                            p.time
+                                |> Time.posixToMillis
+                                |> (\a ->
+                                        1000
+                                            * round (toFloat a / 1000)
+                                            |> Time.millisToPosix
+                                   )
+
+                        Nothing ->
+                            Types.posixZero
+                    , moves3
+                    )
 
         { white, black } =
             gameState.players
@@ -4426,6 +4603,19 @@ movesPage bsize model =
             List.foldl mapper ( True, [] ) list
                 |> Tuple.second
                 |> List.reverse
+
+        gameTimeSpan =
+            case gameTime of
+                Nothing ->
+                    text ""
+
+                Just time ->
+                    span []
+                        [ b "Total time: "
+                        , text <| formatUtc militaryFormat totalTime
+                        , br
+                        , text <| dateAndTimeString model.zone time
+                        ]
     in
     rulesDiv False
         [ rulesDiv True
@@ -4433,15 +4623,20 @@ movesPage bsize model =
                 [ text "Moves" ]
             , p [] [ playButton ]
             , if game.isLocal then
-                text ""
+                p []
+                    [ gameTimeSpan ]
 
               else
                 p []
                     [ b "White: "
                     , text white
                     , text ", "
-                    , text "Black: "
+                    , b "Black: "
                     , text black
+                    , span []
+                        [ br
+                        , gameTimeSpan
+                        ]
                     ]
             , table
                 [ class "prettytable"
@@ -4450,11 +4645,14 @@ movesPage bsize model =
               <|
                 [ tr []
                     [ th chars.nbsp
+                    , th chars.nbsp
                     , th "White"
                     , th "Black"
+                    , th chars.nbsp
                     ]
                 ]
-                    ++ List.indexedMap movesRow (List.reverse moves |> pairList)
+                    ++ List.indexedMap movesRow
+                        (offsetMoves |> pairList)
                     ++ (let
                             ( winString, isResign ) =
                                 case List.head moves of
@@ -4521,6 +4719,18 @@ movesRow index moves =
     in
     tr []
         [ td [ alignCenterStyle ] [ text (String.fromInt <| index + 1) ]
+        , td [ alignRightStyle ]
+            [ case maybeWhite of
+                Nothing ->
+                    text chars.nbsp
+
+                Just { time } ->
+                    if Debug.log "time" time == Types.posixZero then
+                        text chars.nbsp
+
+                    else
+                        text <| hmsString time
+            ]
         , td [ alignCenterStyle ]
             [ case maybeWhite of
                 Nothing ->
@@ -4536,6 +4746,14 @@ movesRow index moves =
 
                 Just black ->
                     text <| ED.oneMoveToPrettyString black
+            ]
+        , td [ alignRightStyle ]
+            [ case maybeBlack of
+                Nothing ->
+                    text chars.nbsp
+
+                Just { time } ->
+                    text <| hmsString time
             ]
         ]
 

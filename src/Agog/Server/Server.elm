@@ -97,13 +97,10 @@ deathRowDuration =
 
 
 messageSender : ServerMessageSender ServerModel Message GameState Player
-messageSender mdl socket state request rsp =
+messageSender mdl socket state request response =
     let
         time =
             WebSocketFramework.Server.getTime mdl
-
-        response =
-            Types.fillinResponseMoveTimes (Time.millisToPosix time) rsp
 
         state2 =
             let

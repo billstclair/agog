@@ -56,6 +56,7 @@ import Agog.WhichServer as WhichServer
 import Debug
 import Dict exposing (Dict)
 import List.Extra as LE
+import Time exposing (Posix)
 import WebSocketFramework exposing (decodePlist, unknownMessage)
 import WebSocketFramework.EncodeDecode as WSFED
 import WebSocketFramework.ServerInterface as ServerInterface
@@ -270,6 +271,10 @@ logSeed prefix state =
 
 generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessorInternal isProxyServer state message =
+    let
+        time =
+            state.time
+    in
     case message of
         NewReq { name, player, publicType, gamename, restoreState, maybeGameid } ->
             let
@@ -493,7 +498,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                 gameState
                                     |> updateJumperLocations
                                     |> NewBoard.populateLegalMoves
-                                    |> populateWinner
+                                    |> populateWinner time
 
                             state2 =
                                 populateEndOfGameStatistics gs state
@@ -614,7 +619,7 @@ generalMessageProcessorInternal isProxyServer state message =
 
                                             gs =
                                                 { gameState | winner = winner }
-                                                    |> populateWinnerInFirstMove
+                                                    |> populateWinnerInFirstMove time
 
                                             state2 =
                                                 populateEndOfGameStatistics gs state
@@ -966,8 +971,8 @@ populateEndOfGameStatistics gameState state =
             update BlackPlayer
 
 
-populateWinner : GameState -> GameState
-populateWinner gameState =
+populateWinner : Posix -> GameState -> GameState
+populateWinner time gameState =
     case gameState.winner of
         NoWinner ->
             let
@@ -975,14 +980,14 @@ populateWinner gameState =
                     NewBoard.winner gameState.whoseTurn gameState.newBoard
             in
             { gameState | winner = winner }
-                |> populateWinnerInFirstMove
+                |> populateWinnerInFirstMove time
 
         _ ->
             gameState
 
 
-populateWinnerInFirstMove : GameState -> GameState
-populateWinnerInFirstMove gameState =
+populateWinnerInFirstMove : Posix -> GameState -> GameState
+populateWinnerInFirstMove time gameState =
     let
         winner =
             gameState.winner
@@ -1012,7 +1017,7 @@ populateWinnerInFirstMove gameState =
                         , isUnique = True
                         , sequence = OneResign
                         , winner = winner
-                        , time = Types.posixZero
+                        , time = time
                         }
                             :: moves
 
@@ -1031,6 +1036,9 @@ populateWinnerInFirstMove gameState =
 chooseMove : Types.ServerState -> Message -> String -> GameState -> Player -> RowCol -> List ChooseMoveOption -> ( Types.ServerState, Maybe Message )
 chooseMove state message gameid gameState player rowCol options =
     let
+        time =
+            state.time
+
         board =
             gameState.newBoard
     in
@@ -1075,9 +1083,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                 options
                                         }
                                 , winner = NoWinner
-
-                                -- TODO: get the time for this
-                                , time = Types.posixZero
+                                , time = time
                                 }
 
                             gs =
@@ -1098,7 +1104,7 @@ chooseMove state message gameid gameState player rowCol options =
                                     gs3 =
                                         gs2
                                             |> updateJumperLocations
-                                            |> populateWinner
+                                            |> populateWinner time
 
                                     state2 =
                                         populateEndOfGameStatistics gs3 state
@@ -1191,9 +1197,7 @@ chooseMove state message gameid gameState player rowCol options =
                                             , sequence =
                                                 OneJumpSequence [ newMove ]
                                             , winner = NoWinner
-
-                                            -- TODO: Get the time for this
-                                            , time = Types.posixZero
+                                            , time = time
                                             }
                                                 :: gameState.moves
                             in
@@ -1255,7 +1259,7 @@ chooseMove state message gameid gameState player rowCol options =
                                                 gs4 =
                                                     gs3
                                                         |> updateJumperLocations
-                                                        |> populateWinner
+                                                        |> populateWinner time
 
                                                 state2 =
                                                     populateEndOfGameStatistics gs4 state
