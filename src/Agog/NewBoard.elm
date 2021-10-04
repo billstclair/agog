@@ -638,36 +638,37 @@ highlightLastMove style selected maybeLastMove delta =
                             let
                                 mapper : OneCorruptibleJump -> List (Svg msg) -> List (Svg msg)
                                 mapper { from, over, to, hulkAfterJump } res =
-                                    if res == [] then
+                                    (if res == [] then
                                         [ drawHighlight style.lastMoveFromColor
                                             delta
                                             from
-                                        , drawHighlight style.lastMoveToColor
-                                            delta
-                                            to
                                         ]
-                                            ++ (case hulkAfterJump of
-                                                    NoHulkAfterJump ->
-                                                        []
 
-                                                    CorruptAfterJump ->
-                                                        [ drawHighlight style.lastMoveToColor
-                                                            delta
-                                                            over
-                                                        ]
+                                     else
+                                        []
+                                    )
+                                        ++ [ drawHighlight style.lastMoveToColor
+                                                delta
+                                                to
+                                           ]
+                                        ++ (case hulkAfterJump of
+                                                NoHulkAfterJump ->
+                                                    []
 
-                                                    MakeHulkAfterJump hulkPos ->
-                                                        [ drawHighlight
-                                                            style.lastMoveToColor
-                                                            delta
-                                                            hulkPos
-                                                        ]
-                                               )
-                                            ++ res
+                                                CorruptAfterJump ->
+                                                    [ drawHighlight style.lastMoveToColor
+                                                        delta
+                                                        over
+                                                    ]
 
-                                    else
-                                        drawHighlight style.lastMoveToColor delta to
-                                            :: res
+                                                MakeHulkAfterJump hulkPos ->
+                                                    [ drawHighlight
+                                                        style.lastMoveToColor
+                                                        delta
+                                                        hulkPos
+                                                    ]
+                                           )
+                                        ++ res
                             in
                             List.foldl mapper [] jumps
 
