@@ -11,11 +11,13 @@
 
 
 module Agog.NewBoard exposing
-    ( areMovesAJump
+    ( archiveGameState
+    , areMovesAJump
     , blackSanctum
     , clear
     , colToString
     , computeJumperLocations
+    , computeWinner
     , count
     , countColor
     , empty
@@ -33,18 +35,18 @@ module Agog.NewBoard exposing
     , render
     , rowColToString
     , rowToString
-    , score
     , set
     , stringToCol
     , stringToRow
     , stringToRowCol
+    , unarchiveGameState
     , whiteSanctum
-    , winner
     )
 
 import Agog.Types as Types
     exposing
-        ( Color(..)
+        ( ArchivedGameState
+        , Color(..)
         , GameState
         , JumpSequence
         , MovesOrJumps(..)
@@ -242,11 +244,6 @@ count board =
         |> List.length
 
 
-score : NewBoard -> Int
-score board =
-    31 - count board
-
-
 get : RowCol -> NewBoard -> Piece
 get { row, col } board =
     case Array.get row board of
@@ -282,8 +279,8 @@ set { row, col } piece board =
 {-| This finds only WinBySanctum and WinByCapture.
 The other two are discovered during play in Interface.chooseMove.
 -}
-winner : Player -> NewBoard -> Winner
-winner whoseTurn board =
+computeWinner : Player -> NewBoard -> Winner
+computeWinner whoseTurn board =
     if get whiteSanctum board == blackJourneyman then
         BlackWinner WinBySanctum
 
@@ -1852,3 +1849,79 @@ countColor color board =
             total + increment
     in
     mapWholeBoard mapper board 0
+
+
+archiveGameState : GameState -> ArchivedGameState
+archiveGameState { moves, players, whoseTurn, score, winner } =
+    ArchivedGameState moves players whoseTurn score winner
+
+
+unarchiveGameState : ArchivedGameState -> GameState -> GameState
+unarchiveGameState { moves, players, whoseTurn, score, winner } gameState =
+    { gameState
+        | newBoard = replayMoves moves initial
+        , moves = moves
+        , players = players
+        , whoseTurn = whoseTurn
+        , selected = Nothing
+        , jumperLocations = []
+        , legalMoves = NoMoves
+        , undoStates = []
+        , jumps = []
+        , score = score
+        , winner = winner
+        , testMode = Nothing
+    }
+
+
+replayMoves : List OneMove -> NewBoard -> NewBoard
+replayMoves moves board =
+    -- Should this check that the moves are legal?
+    List.foldl replayMove ( WhitePlayer, board ) moves
+        |> Tuple.second
+
+
+replayMove : OneMove -> ( Player, NewBoard ) -> ( Player, NewBoard )
+replayMove { piece, sequence } ( whoseTurn, board ) =
+    case sequence of
+        OneResign ->
+            ( whoseTurn, board )
+
+        OneSlide { from, to, makeHulk } ->
+            let
+                board2 =
+                    set from Types.emptyPiece board
+            in
+            ( Types.otherPlayer whoseTurn
+            , case makeHulk of
+                Nothing ->
+                    set to piece board2
+
+                Just hulkPos ->
+                    set to Types.emptyPiece board2
+                        |> set hulkPos
+                            { color = Types.playerColor whoseTurn
+                            , pieceType = Hulk
+                            }
+            )
+
+        OneJumpSequence jumps ->
+            ( Types.otherPlayer whoseTurn
+            , List.foldl (replayOneCorruptibleJump whoseTurn piece) board jumps
+            )
+
+
+replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> NewBoard -> NewBoard
+replayOneCorruptibleJump whoseTurn piece { from, over, to, corrupted } board =
+    board
+        |> set from Types.emptyPiece
+        |> set over
+            (if corrupted then
+                { color = Types.playerColor whoseTurn
+                , pieceType = CorruptedHulk
+                }
+
+             else
+                Types.emptyPiece
+            )
+        |> set to piece

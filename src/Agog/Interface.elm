@@ -976,7 +976,7 @@ populateWinner time gameState =
         NoWinner ->
             let
                 winner =
-                    NewBoard.winner gameState.whoseTurn gameState.newBoard
+                    NewBoard.computeWinner gameState.whoseTurn gameState.newBoard
             in
             { gameState | winner = winner }
                 |> populateWinnerInFirstMove time

@@ -11,7 +11,8 @@
 
 
 module Agog.Types exposing
-    ( ChatSettings
+    ( ArchivedGameState
+    , ChatSettings
     , Choice(..)
     , ChooseMoveOption(..)
     , Color(..)
@@ -421,6 +422,15 @@ type alias GameState =
     , winner : Winner
     , testMode : Maybe TestMode
     , private : PrivateGameState --not sent over the wire
+    }
+
+
+type alias ArchivedGameState =
+    { moves : List OneMove
+    , players : PlayerNames
+    , whoseTurn : Player
+    , score : Score
+    , winner : Winner
     }
 
 
