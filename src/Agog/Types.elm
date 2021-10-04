@@ -17,6 +17,7 @@ module Agog.Types exposing
     , ChooseMoveOption(..)
     , Color(..)
     , GameState
+    , HulkAfterJump(..)
     , JumpSequence
     , Message(..)
     , MessageForLog(..)
@@ -363,11 +364,17 @@ type MovesOrJumps
     | Jumps (List JumpSequence)
 
 
+type HulkAfterJump
+    = NoHulkAfterJump
+    | CorruptAfterJump
+    | MakeHulkAfterJump RowCol
+
+
 type alias OneCorruptibleJump =
     { from : RowCol
     , over : RowCol
     , to : RowCol
-    , corrupted : Bool
+    , hulkAfterJump : HulkAfterJump
     }
 
 
@@ -458,7 +465,8 @@ type UndoWhichJumps
 
 
 type ChooseMoveOption
-    = CorruptJumped
+    = NoOption
+    | CorruptJumped
     | MakeHulk RowCol
 
 
@@ -474,7 +482,7 @@ maybeMakeHulkOption option =
 
 type Choice
     = ChoosePiece RowCol
-    | ChooseMove RowCol (List ChooseMoveOption)
+    | ChooseMove RowCol ChooseMoveOption
     | ChooseUndoJump UndoWhichJumps
     | ChooseResign Player
     | ChooseNew Player

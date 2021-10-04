@@ -48,6 +48,7 @@ import Agog.Types as Types
         ( ArchivedGameState
         , Color(..)
         , GameState
+        , HulkAfterJump(..)
         , JumpSequence
         , MovesOrJumps(..)
         , NewBoard
@@ -636,7 +637,7 @@ highlightLastMove style selected maybeLastMove delta =
                         OneJumpSequence jumps ->
                             let
                                 mapper : OneCorruptibleJump -> List (Svg msg) -> List (Svg msg)
-                                mapper { from, over, to, corrupted } res =
+                                mapper { from, over, to, hulkAfterJump } res =
                                     if res == [] then
                                         [ drawHighlight style.lastMoveFromColor
                                             delta
@@ -645,14 +646,22 @@ highlightLastMove style selected maybeLastMove delta =
                                             delta
                                             to
                                         ]
-                                            ++ (if corrupted then
-                                                    [ drawHighlight style.lastMoveToColor
-                                                        delta
-                                                        over
-                                                    ]
+                                            ++ (case hulkAfterJump of
+                                                    NoHulkAfterJump ->
+                                                        []
 
-                                                else
-                                                    []
+                                                    CorruptAfterJump ->
+                                                        [ drawHighlight style.lastMoveToColor
+                                                            delta
+                                                            over
+                                                        ]
+
+                                                    MakeHulkAfterJump hulkPos ->
+                                                        [ drawHighlight
+                                                            style.lastMoveToColor
+                                                            delta
+                                                            hulkPos
+                                                        ]
                                                )
                                             ++ res
 
@@ -1048,56 +1057,51 @@ drawJumps style board jumps delta =
                 w =
                     "3"
             in
-            let
-                strokeColor =
-                    if oneJump.corrupted then
-                        corruptedColor
-
-                    else
-                        color
-            in
             g [] <|
-                if oneJump.corrupted then
-                    [ Svg.line
-                        [ x1 <| tos (round <| xc - leno2hyp)
-                        , x2 <| tos (round <| xc + leno2hyp)
-                        , y1 <| tos (round <| yc - leno2hyp)
-                        , y2 <| tos (round <| yc + leno2hyp)
-                        , strokeWidth w
-                        , stroke strokeColor
+                case oneJump.hulkAfterJump of
+                    CorruptAfterJump ->
+                        [ Svg.line
+                            [ x1 <| tos (round <| xc - leno2hyp)
+                            , x2 <| tos (round <| xc + leno2hyp)
+                            , y1 <| tos (round <| yc - leno2hyp)
+                            , y2 <| tos (round <| yc + leno2hyp)
+                            , strokeWidth w
+                            , stroke corruptedColor
+                            ]
+                            []
+                        , Svg.line
+                            [ x1 <| tos (round <| xc + leno2hyp)
+                            , x2 <| tos (round <| xc - leno2hyp)
+                            , y1 <| tos (round <| yc - leno2hyp)
+                            , y2 <| tos (round <| yc + leno2hyp)
+                            , strokeWidth w
+                            , stroke corruptedColor
+                            ]
+                            []
                         ]
-                        []
-                    , Svg.line
-                        [ x1 <| tos (round <| xc + leno2hyp)
-                        , x2 <| tos (round <| xc - leno2hyp)
-                        , y1 <| tos (round <| yc - leno2hyp)
-                        , y2 <| tos (round <| yc + leno2hyp)
-                        , strokeWidth w
-                        , stroke strokeColor
-                        ]
-                        []
-                    ]
 
-                else
-                    [ Svg.line
-                        [ x1 <| tos (round <| xc - leno2)
-                        , x2 <| tos (round <| xc + leno2)
-                        , y1 <| tos (round yc)
-                        , y2 <| tos (round yc)
-                        , strokeWidth w
-                        , stroke strokeColor
+                    _ ->
+                        -- Can't ever draw a MakeHulkAfterJump, since it's always
+                        -- the last jump
+                        [ Svg.line
+                            [ x1 <| tos (round <| xc - leno2)
+                            , x2 <| tos (round <| xc + leno2)
+                            , y1 <| tos (round yc)
+                            , y2 <| tos (round yc)
+                            , strokeWidth w
+                            , stroke color
+                            ]
+                            []
+                        , Svg.line
+                            [ y1 <| tos (round <| yc - leno2)
+                            , y2 <| tos (round <| yc + leno2)
+                            , x1 <| tos (round xc)
+                            , x2 <| tos (round xc)
+                            , strokeWidth w
+                            , stroke color
+                            ]
+                            []
                         ]
-                        []
-                    , Svg.line
-                        [ y1 <| tos (round <| yc - leno2)
-                        , y2 <| tos (round <| yc + leno2)
-                        , x1 <| tos (round xc)
-                        , x2 <| tos (round xc)
-                        , strokeWidth w
-                        , stroke strokeColor
-                        ]
-                        []
-                    ]
     in
     List.map drawJump jumps
 
@@ -1915,16 +1919,23 @@ replayMove { piece, sequence } ( whoseTurn, board ) =
 
 
 replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> NewBoard -> NewBoard
-replayOneCorruptibleJump whoseTurn piece { from, over, to, corrupted } board =
+replayOneCorruptibleJump whoseTurn piece { from, over, to, hulkAfterJump } board =
     board
         |> set from Types.emptyPiece
-        |> set over
-            (if corrupted then
-                { color = Types.playerColor whoseTurn
-                , pieceType = CorruptedHulk
-                }
+        |> (case hulkAfterJump of
+                NoHulkAfterJump ->
+                    identity
 
-             else
-                Types.emptyPiece
-            )
+                CorruptAfterJump ->
+                    set over
+                        { color = Types.playerColor whoseTurn
+                        , pieceType = CorruptedHulk
+                        }
+
+                MakeHulkAfterJump hulkPos ->
+                    set hulkPos
+                        { color = Types.playerColor whoseTurn
+                        , pieceType = Hulk
+                        }
+           )
         |> set to piece

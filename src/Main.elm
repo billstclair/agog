@@ -3228,22 +3228,19 @@ delayedClick rowCol model =
                             { corruptJumped, makeHulk } =
                                 model.chooseMoveOptionsUI
 
-                            chooseMoveOptions =
-                                (if corruptJumped == AskYes () then
-                                    [ CorruptJumped ]
+                            chooseMoveOption =
+                                if corruptJumped == AskYes () then
+                                    CorruptJumped
 
-                                 else
-                                    []
-                                )
-                                    ++ (case makeHulk of
-                                            AskYes hulkPos ->
-                                                [ MakeHulk hulkPos ]
+                                else
+                                    case makeHulk of
+                                        AskYes hulkPos ->
+                                            MakeHulk hulkPos
 
-                                            _ ->
-                                                []
-                                       )
+                                        _ ->
+                                            NoOption
                         in
-                        ChooseMove rowCol chooseMoveOptions
+                        ChooseMove rowCol chooseMoveOption
 
                     _ ->
                         ChoosePiece rowCol

@@ -23,6 +23,8 @@ module Agog.EncodeDecode exposing
     , encodeSavedModel
     , frameworkToPublicGame
     , gameStateDecoder
+    , maybeOneMoveSequenceToString
+    , maybeOneMoveToPrettyString
     , maybeOneMoveToString
     , messageDecoder
     , messageEncoder
@@ -32,13 +34,16 @@ module Agog.EncodeDecode exposing
     , namedGameDecoder
     , newBoardToString
     , oneMoveDecoder
+    , oneMoveSequenceToString
     , oneMoveToPrettyString
     , oneMoveToString
     , oneMovesToString
     , pieceToString
     , publicGameToFramework
+    , stringToFromSlashOver
     , stringToNewBoard
     , stringToOneMove
+    , stringToOneMoveSequence
     , stringToPiece
     )
 
@@ -51,6 +56,7 @@ import Agog.Types as Types
         , ChooseMoveOption(..)
         , Color(..)
         , GameState
+        , HulkAfterJump(..)
         , JumpSequence
         , Message(..)
         , MessageForLog(..)
@@ -89,7 +95,7 @@ import Array exposing (Array)
 import Dict exposing (Dict)
 import ElmChat
 import Json.Decode as JD exposing (Decoder)
-import Json.Decode.Pipeline as DP exposing (hardcoded, optional, required)
+import Json.Decode.Pipeline as DP exposing (custom, hardcoded, optional, required)
 import Json.Encode as JE exposing (Value)
 import Set exposing (Set)
 import Time exposing (Posix)
@@ -893,6 +899,16 @@ stringToPosix string =
             Just <| Time.millisToPosix int
 
 
+maybeOneMoveToPrettyString : Maybe OneMove -> Maybe String
+maybeOneMoveToPrettyString maybeOneMove =
+    case maybeOneMove of
+        Nothing ->
+            Nothing
+
+        Just oneMove ->
+            Just <| oneMoveToPrettyString oneMove
+
+
 oneMoveToPrettyString : OneMove -> String
 oneMoveToPrettyString { piece, isUnique, sequence, winner } =
     let
@@ -959,18 +975,24 @@ oneMoveSequenceToPrettyString isUnique sequence =
 
                                 head :: tail ->
                                     let
-                                        { from, over, to, corrupted } =
+                                        { from, over, to, hulkAfterJump } =
                                             head
 
-                                        x =
-                                            if corrupted then
-                                                "+"
+                                        ( x, eq ) =
+                                            case hulkAfterJump of
+                                                NoHulkAfterJump ->
+                                                    ( "x", "" )
 
-                                            else
-                                                "x"
+                                                CorruptAfterJump ->
+                                                    ( "+", "" )
+
+                                                MakeHulkAfterJump hulkPos ->
+                                                    ( "x"
+                                                    , " " ++ NewBoard.rowColToString hulkPos ++ "=H"
+                                                    )
                                     in
                                     mapper tail <|
-                                        (x ++ NewBoard.rowColToString to)
+                                        (x ++ NewBoard.rowColToString to ++ eq)
                                             :: res
 
                         fromString =
@@ -1015,6 +1037,16 @@ oneMoveToString { piece, isUnique, sequence, winner, time } =
     uniqueMarker ++ pieceString ++ sequenceString ++ winString ++ posixString
 
 
+maybeOneMoveSequenceToString : Maybe OneMoveSequence -> Maybe String
+maybeOneMoveSequenceToString maybeSequence =
+    case maybeSequence of
+        Nothing ->
+            Nothing
+
+        Just sequence ->
+            Just <| oneMoveSequenceToString sequence
+
+
 oneMoveSequenceToString : OneMoveSequence -> String
 oneMoveSequenceToString sequence =
     case sequence of
@@ -1047,18 +1079,22 @@ oneMoveSequenceToString sequence =
 
                                 head :: tail ->
                                     let
-                                        { over, to, corrupted } =
+                                        { over, to, hulkAfterJump } =
                                             head
 
                                         from2 =
                                             head.from
 
-                                        x =
-                                            if corrupted then
-                                                "+"
+                                        ( x, eq ) =
+                                            case hulkAfterJump of
+                                                NoHulkAfterJump ->
+                                                    ( "x", "" )
 
-                                            else
-                                                "x"
+                                                CorruptAfterJump ->
+                                                    ( "+", "" )
+
+                                                MakeHulkAfterJump hulkPos ->
+                                                    ( "x", "=" ++ NewBoard.rowColToString hulkPos )
 
                                         slashOver =
                                             if Just over == locBetween from2 to then
@@ -1068,7 +1104,7 @@ oneMoveSequenceToString sequence =
                                                 "/" ++ NewBoard.rowColToString over
                                     in
                                     mapper tail <|
-                                        (slashOver ++ x ++ NewBoard.rowColToString to)
+                                        (slashOver ++ x ++ NewBoard.rowColToString to ++ eq)
                                             :: res
                     in
                     mapper jumps [ NewBoard.rowColToString from ]
@@ -1223,6 +1259,19 @@ torc =
     NewBoard.stringToRowCol
 
 
+mtorc : String -> Maybe RowCol
+mtorc string =
+    let
+        res =
+            NewBoard.stringToRowCol string
+    in
+    if NewBoard.isRowColLegal res then
+        Just res
+
+    else
+        Nothing
+
+
 stringToOneSlideRecord : String -> Maybe OneSlideRecord
 stringToOneSlideRecord string =
     case String.split "-" string of
@@ -1231,10 +1280,10 @@ stringToOneSlideRecord string =
                 ( to2, hulkLoc ) =
                     case String.split "=" to of
                         [ _ ] ->
-                            ( Just <| torc to, Nothing )
+                            ( mtorc to, Nothing )
 
                         [ to3, hrc ] ->
-                            ( Just <| torc to3
+                            ( mtorc to3
                             , Just <| torc hrc
                             )
 
@@ -1254,22 +1303,21 @@ stringToOneSlideRecord string =
 
                                 Just hl ->
                                     NewBoard.isRowColLegal hl
-
-                        from2 =
-                            torc from
-
-                        isFromLegal =
-                            NewBoard.isRowColLegal from2
                     in
-                    if not isFromLegal || not isHulkLocLegal then
+                    if not isHulkLocLegal then
                         Nothing
 
                     else
-                        Just
-                            { from = from2
-                            , to = to3
-                            , makeHulk = hulkLoc
-                            }
+                        case mtorc from of
+                            Nothing ->
+                                Nothing
+
+                            Just fromrc ->
+                                Just
+                                    { from = fromrc
+                                    , to = to3
+                                    , makeHulk = hulkLoc
+                                    }
 
         _ ->
             Nothing
@@ -1278,7 +1326,9 @@ stringToOneSlideRecord string =
 type alias ConcatibleJumps =
     { jumps : List OneCorruptibleJump
     , firstFrom : RowCol
+    , firstHulkPos : Maybe RowCol
     , lastTo : RowCol
+    , lastHulkPos : Maybe RowCol
     , nextOver : Maybe RowCol
     }
 
@@ -1305,19 +1355,20 @@ raiseNothings list =
 listOfStringListsToOneJumpSequence : List (List String) -> Maybe (List OneCorruptibleJump)
 listOfStringListsToOneJumpSequence listOfStringLists =
     case
-        List.map (listOfStringsToConcatibleJumps True) listOfStringLists
+        List.map listOfStringsToConcatibleJumps listOfStringLists
             |> raiseNothings
     of
         Nothing ->
             Nothing
 
         Just jumps ->
-            concatConcatibleJumps False jumps
+            concatConcatibleJumps jumps
 
 
 type alias FromSlashOver =
     { from : RowCol
     , maybeOver : Maybe RowCol
+    , hulkPos : Maybe RowCol
     }
 
 
@@ -1336,36 +1387,74 @@ defaultOver from maybeOver to =
                     Just loc
 
 
-listOfStringsToConcatibleJumps : Bool -> List String -> Maybe ConcatibleJumps
-listOfStringsToConcatibleJumps isCorrupted stringList =
-    -- TODO
+stringToFromSlashOver : String -> Maybe FromSlashOver
+stringToFromSlashOver string =
     let
-        stringToFromSlashOver : String -> Maybe FromSlashOver
-        stringToFromSlashOver string =
-            case String.split "/" string of
+        fromAndHulk : String -> Maybe ( RowCol, Maybe RowCol )
+        fromAndHulk s =
+            case String.split "=" s of
                 [ from ] ->
-                    Just
-                        { from = torc from
-                        , maybeOver = Nothing
-                        }
+                    case mtorc from of
+                        Nothing ->
+                            Nothing
 
-                [ from, over ] ->
-                    let
-                        o =
-                            torc over
-                    in
-                    if not <| NewBoard.isRowColLegal o then
-                        Nothing
+                        Just fromrc ->
+                            Just ( fromrc, Nothing )
 
-                    else
-                        Just
-                            { from = torc from
-                            , maybeOver = Just o
-                            }
+                [ from, hulk ] ->
+                    case mtorc from of
+                        Nothing ->
+                            Nothing
+
+                        Just fromrc ->
+                            case mtorc hulk of
+                                Nothing ->
+                                    Nothing
+
+                                Just hulkrc ->
+                                    Just ( fromrc, Just hulkrc )
 
                 _ ->
                     Nothing
+    in
+    case String.split "/" string of
+        [ from ] ->
+            case fromAndHulk from of
+                Nothing ->
+                    Nothing
 
+                Just ( fromrc, hulkPos ) ->
+                    Just
+                        { from = fromrc
+                        , maybeOver = Nothing
+                        , hulkPos = hulkPos
+                        }
+
+        [ from, over ] ->
+            case fromAndHulk from of
+                Nothing ->
+                    Nothing
+
+                Just ( fromrc, hulkPos ) ->
+                    case mtorc over of
+                        Nothing ->
+                            Nothing
+
+                        Just overrc ->
+                            Just
+                                { from = fromrc
+                                , maybeOver = Just overrc
+                                , hulkPos = hulkPos
+                                }
+
+        _ ->
+            Nothing
+
+
+listOfStringsToConcatibleJumps : List String -> Maybe ConcatibleJumps
+listOfStringsToConcatibleJumps stringList =
+    -- TODO
+    let
         mapper : FromSlashOver -> FromSlashOver -> List FromSlashOver -> List OneCorruptibleJump -> Maybe ConcatibleJumps
         mapper firstSlashOver prevSlashOver fromSlashOvers res =
             case fromSlashOvers of
@@ -1373,7 +1462,9 @@ listOfStringsToConcatibleJumps isCorrupted stringList =
                     Just <|
                         { jumps = List.reverse res
                         , firstFrom = firstSlashOver.from
+                        , firstHulkPos = firstSlashOver.hulkPos
                         , lastTo = prevSlashOver.from
+                        , lastHulkPos = prevSlashOver.hulkPos
                         , nextOver = prevSlashOver.maybeOver
                         }
 
@@ -1381,6 +1472,9 @@ listOfStringsToConcatibleJumps isCorrupted stringList =
                     let
                         from =
                             prevSlashOver.from
+
+                        toHulk =
+                            nextFromSlashOver.hulkPos
 
                         to =
                             nextFromSlashOver.from
@@ -1393,13 +1487,17 @@ listOfStringsToConcatibleJumps isCorrupted stringList =
                             Nothing
 
                         Just over ->
-                            mapper firstSlashOver nextFromSlashOver tail <|
-                                { from = from
-                                , over = over
-                                , to = to
-                                , corrupted = isCorrupted
-                                }
-                                    :: res
+                            if toHulk /= Nothing then
+                                Nothing
+
+                            else
+                                mapper firstSlashOver nextFromSlashOver tail <|
+                                    { from = from
+                                    , over = over
+                                    , to = to
+                                    , hulkAfterJump = CorruptAfterJump
+                                    }
+                                        :: res
     in
     case List.map stringToFromSlashOver stringList |> raiseNothings of
         Nothing ->
@@ -1414,8 +1512,8 @@ listOfStringsToConcatibleJumps isCorrupted stringList =
                     mapper slashOver slashOver tail []
 
 
-concatConcatibleJumps : Bool -> List ConcatibleJumps -> Maybe (List OneCorruptibleJump)
-concatConcatibleJumps isCorrupted maybeJumpss =
+concatConcatibleJumps : List ConcatibleJumps -> Maybe (List OneCorruptibleJump)
+concatConcatibleJumps maybeJumpss =
     let
         mapper : RowCol -> Maybe RowCol -> List ConcatibleJumps -> List OneCorruptibleJump -> Maybe (List OneCorruptibleJump)
         mapper prevTo maybeOver jumpss res =
@@ -1423,7 +1521,7 @@ concatConcatibleJumps isCorrupted maybeJumpss =
                 [] ->
                     Just <| List.reverse res
 
-                { jumps, firstFrom, lastTo, nextOver } :: rest ->
+                { jumps, firstFrom, firstHulkPos, lastTo, nextOver } :: rest ->
                     let
                         maybePrevOver =
                             defaultOver prevTo maybeOver firstFrom
@@ -1433,22 +1531,39 @@ concatConcatibleJumps isCorrupted maybeJumpss =
                             Nothing
 
                         Just prevOver ->
-                            mapper lastTo nextOver rest <|
-                                List.reverse jumps
-                                    ++ ({ from = prevTo
-                                        , over = prevOver
-                                        , to = firstFrom
-                                        , corrupted = isCorrupted
-                                        }
-                                            :: res
-                                       )
+                            if rest /= [] && firstHulkPos /= Nothing then
+                                -- Only the last jump can make a hulk
+                                -- (by landing on the sanctum).
+                                Nothing
+
+                            else
+                                mapper lastTo nextOver rest <|
+                                    List.reverse jumps
+                                        ++ ({ from = prevTo
+                                            , over = prevOver
+                                            , to = firstFrom
+                                            , hulkAfterJump =
+                                                case firstHulkPos of
+                                                    Nothing ->
+                                                        NoHulkAfterJump
+
+                                                    Just hulkPos ->
+                                                        MakeHulkAfterJump hulkPos
+                                            }
+                                                :: res
+                                           )
     in
     case maybeJumpss of
         [] ->
             Just []
 
-        { jumps, lastTo, nextOver } :: rest ->
-            mapper lastTo nextOver rest <| List.reverse jumps
+        { jumps, lastTo, lastHulkPos, nextOver } :: rest ->
+            case lastHulkPos of
+                Just _ ->
+                    Nothing
+
+                Nothing ->
+                    mapper lastTo nextOver rest <| List.reverse jumps
 
 
 defaultOneMove : OneMove
@@ -1629,13 +1744,22 @@ oneJumpDecoder =
 
 
 encodeOneCorruptibleJump : OneCorruptibleJump -> Value
-encodeOneCorruptibleJump { from, over, to, corrupted } =
-    JE.object
+encodeOneCorruptibleJump { from, over, to, hulkAfterJump } =
+    JE.object <|
         [ ( "from", encodeRowCol from )
         , ( "over", encodeRowCol over )
         , ( "to", encodeRowCol to )
-        , ( "corrupted", JE.bool corrupted )
         ]
+            ++ (case hulkAfterJump of
+                    NoHulkAfterJump ->
+                        []
+
+                    CorruptAfterJump ->
+                        [ ( "corrupted", JE.bool True ) ]
+
+                    MakeHulkAfterJump rowCol ->
+                        [ ( "makehulk", encodeRowCol rowCol ) ]
+               )
 
 
 oneCorruptibleJumpDecoder : Decoder OneCorruptibleJump
@@ -1644,7 +1768,23 @@ oneCorruptibleJumpDecoder =
         |> required "from" rowColDecoder
         |> required "over" rowColDecoder
         |> required "to" rowColDecoder
-        |> required "corrupted" JD.bool
+        |> custom
+            (JD.oneOf
+                [ JD.field "corrupted" JD.bool
+                    |> JD.andThen
+                        (\corrupted ->
+                            if corrupted then
+                                JD.succeed CorruptAfterJump
+
+                            else
+                                -- This only happens for backward compatibility
+                                JD.succeed NoHulkAfterJump
+                        )
+                , JD.field "makehulk" rowColDecoder
+                    |> JD.andThen (MakeHulkAfterJump >> JD.succeed)
+                , JD.succeed NoHulkAfterJump
+                ]
+            )
 
 
 encodeMovesOrJumps : MovesOrJumps -> Value
@@ -1710,6 +1850,9 @@ undoWhichJumpsDecoder =
 encodeChooseMoveOption : ChooseMoveOption -> Value
 encodeChooseMoveOption option =
     case option of
+        NoOption ->
+            JE.string "NoOption"
+
         CorruptJumped ->
             JE.string "CorruptJumped"
 
@@ -1723,7 +1866,10 @@ chooseMoveOptionDecoder =
         [ JD.string
             |> JD.andThen
                 (\string ->
-                    if string == "CorruptJumped" then
+                    if string == "NoOption" then
+                        JD.succeed NoOption
+
+                    else if string == "CorruptJumped" then
                         JD.succeed CorruptJumped
 
                     else
@@ -1744,15 +1890,15 @@ encodeChoice choice =
             ChoosePiece rowCol ->
                 ( "ChoosePiece", encodeRowCol rowCol )
 
-            ChooseMove rowCol options ->
+            ChooseMove rowCol option ->
                 ( "ChooseMove"
-                , if options == [] then
+                , if option == NoOption then
                     encodeRowCol rowCol
 
                   else
                     JE.object
                         [ ( "rowCol", encodeRowCol rowCol )
-                        , ( "options", JE.list encodeChooseMoveOption options )
+                        , ( "option", encodeChooseMoveOption option )
                         ]
                 )
 
@@ -1777,11 +1923,11 @@ choiceDecoder =
                 [ rowColDecoder
                     |> JD.andThen
                         (\rowCol ->
-                            ChooseMove rowCol [] |> JD.succeed
+                            ChooseMove rowCol NoOption |> JD.succeed
                         )
                 , JD.succeed ChooseMove
                     |> required "rowCol" rowColDecoder
-                    |> required "options" (JD.list chooseMoveOptionDecoder)
+                    |> optional "option" chooseMoveOptionDecoder NoOption
                 ]
         , JD.field "ChooseUndoJump" undoWhichJumpsDecoder
             |> JD.andThen (ChooseUndoJump >> JD.succeed)
