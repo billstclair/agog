@@ -410,6 +410,8 @@ type alias TestMode =
 
 type alias GameState =
     { newBoard : NewBoard
+
+    -- Reversed
     , moves : List OneMove
     , players : PlayerNames
     , whoseTurn : Player
@@ -428,8 +430,6 @@ type alias GameState =
 type alias ArchivedGameState =
     { moves : List OneMove
     , players : PlayerNames
-    , whoseTurn : Player
-    , score : Score
     , winner : Winner
     }
 

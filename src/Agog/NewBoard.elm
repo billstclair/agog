@@ -1852,14 +1852,18 @@ countColor color board =
 
 
 archiveGameState : GameState -> ArchivedGameState
-archiveGameState { moves, players, whoseTurn, score, winner } =
-    ArchivedGameState moves players whoseTurn score winner
+archiveGameState { moves, players, winner } =
+    ArchivedGameState moves players winner
 
 
 unarchiveGameState : ArchivedGameState -> GameState -> GameState
-unarchiveGameState { moves, players, whoseTurn, score, winner } gameState =
+unarchiveGameState { moves, players, winner } gameState =
+    let
+        ( whoseTurn, board ) =
+            replayMoves moves initial
+    in
     { gameState
-        | newBoard = replayMoves moves initial
+        | newBoard = board
         , moves = moves
         , players = players
         , whoseTurn = whoseTurn
@@ -1868,17 +1872,16 @@ unarchiveGameState { moves, players, whoseTurn, score, winner } gameState =
         , legalMoves = NoMoves
         , undoStates = []
         , jumps = []
-        , score = score
         , winner = winner
         , testMode = Nothing
     }
 
 
-replayMoves : List OneMove -> NewBoard -> NewBoard
+replayMoves : List OneMove -> NewBoard -> ( Player, NewBoard )
 replayMoves moves board =
     -- Should this check that the moves are legal?
-    List.foldl replayMove ( WhitePlayer, board ) moves
-        |> Tuple.second
+    -- List.foldr walks in reverse order, as intended.
+    List.foldr replayMove ( WhitePlayer, board ) moves
 
 
 replayMove : OneMove -> ( Player, NewBoard ) -> ( Player, NewBoard )

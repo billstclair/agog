@@ -1550,14 +1550,12 @@ gameStateDecoder =
 encodeArchivedGameState : Bool -> ArchivedGameState -> Value
 encodeArchivedGameState includePrivate gameState =
     let
-        { moves, players, whoseTurn, score, winner } =
+        { moves, players, winner } =
             gameState
     in
     JE.object
         [ ( "moves", JE.list encodeOneMove moves )
         , ( "players", encodePlayerNames players )
-        , ( "whoseTurn", encodePlayer whoseTurn )
-        , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         ]
 
@@ -1567,8 +1565,6 @@ archivedGameStateDecoder =
     JD.succeed ArchivedGameState
         |> required "moves" (JD.list oneMoveDecoder)
         |> required "players" playerNamesDecoder
-        |> required "whoseTurn" playerDecoder
-        |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
 
 
