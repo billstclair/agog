@@ -51,6 +51,7 @@ import Agog.Types as Types
         , NamedGame
         , NewBoard
         , OneMove
+        , OneMoveSequence(..)
         , Page(..)
         , PieceType(..)
         , Player(..)
@@ -490,7 +491,7 @@ initialGame : Maybe Seed -> Game
 initialGame seed =
     { gamename = Types.defaultGamename
     , gameid = ""
-    , gameState = Interface.emptyGameState (PlayerNames "" "")
+    , gameState = Interface.emptyGameState Types.emptyPlayerNames
     , isLocal = False
     , serverUrl = WhichServer.serverUrl
     , otherPlayerid = ""
@@ -2496,7 +2497,21 @@ updateInternal msg model =
                         send model.game.interface
                             (SetGameStateReq
                                 { playerid = game.playerid
-                                , gameState = { gs | winner = NoWinner }
+                                , gameState =
+                                    { gs
+                                        | winner = NoWinner
+                                        , moves =
+                                            case gameState.moves of
+                                                (move :: tail) as moves ->
+                                                    if move.sequence == OneResign then
+                                                        tail
+
+                                                    else
+                                                        moves
+
+                                                moves ->
+                                                    moves
+                                    }
                                 }
                             )
 
@@ -3559,7 +3574,10 @@ mainPage bsize model =
                 ]
                 [ text message ]
             , br
-            , if gameState.winner /= NoWinner then
+            , if
+                (gameState.winner /= NoWinner)
+                    || (gameState.moves == [] && gameState.players == Types.emptyPlayerNames)
+              then
                 text ""
 
               else
@@ -4749,7 +4767,7 @@ movesRow index moves =
                     text chars.nbsp
 
                 Just { time } ->
-                    if Debug.log "time" time == Types.posixZero then
+                    if index == 0 && time == Types.posixZero then
                         text chars.nbsp
 
                     else

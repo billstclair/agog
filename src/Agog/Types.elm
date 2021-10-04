@@ -56,6 +56,7 @@ module Agog.Types exposing
     , darkStyle
     , defaultGamename
     , emptyPiece
+    , emptyPlayerNames
     , emptyPrivateGameState
     , emptySettings
     , gameStateIsVerbose
@@ -438,6 +439,11 @@ type alias PlayerNames =
     { white : String
     , black : String
     }
+
+
+emptyPlayerNames : PlayerNames
+emptyPlayerNames =
+    PlayerNames "" ""
 
 
 type alias RowCol =
