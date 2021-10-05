@@ -1,6 +1,6 @@
 --------------------------------------------------------------------
 --
--- NewBoard.elm
+-- Board.elm
 -- AGOG board, storage and rendering.
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
@@ -10,7 +10,7 @@
 ----------------------------------------------------------------------
 
 
-module Agog.NewBoard exposing
+module Agog.Board exposing
     ( archiveGameState
     , areMovesAJump
     , blackSanctum
@@ -46,12 +46,12 @@ module Agog.NewBoard exposing
 import Agog.Types as Types
     exposing
         ( ArchivedGameState
+        , Board
         , Color(..)
         , GameState
         , HulkAfterJump(..)
         , JumpSequence
         , MovesOrJumps(..)
-        , NewBoard
         , OneCorruptibleJump
         , OneJump
         , OneMove
@@ -124,7 +124,7 @@ import Svg.Attributes as Attributes
 import Svg.Events as Events
 
 
-empty : NewBoard
+empty : Board
 empty =
     Array.repeat 8 (Array.repeat 8 Types.emptyPiece)
 
@@ -176,10 +176,10 @@ blackJourneyman =
     { blackGolem | pieceType = Journeyman }
 
 
-initial : NewBoard
+initial : Board
 initial =
     let
-        fillGolems : NewBoard -> Piece -> Int -> Int -> Int -> NewBoard
+        fillGolems : Board -> Piece -> Int -> Int -> Int -> Board
         fillGolems b p col startRow endRow =
             if startRow > endRow then
                 b
@@ -236,7 +236,7 @@ initial =
     b12
 
 
-count : NewBoard -> Int
+count : Board -> Int
 count board =
     Array.toList board
         |> List.map Array.toList
@@ -245,7 +245,7 @@ count board =
         |> List.length
 
 
-get : RowCol -> NewBoard -> Piece
+get : RowCol -> Board -> Piece
 get { row, col } board =
     case Array.get row board of
         Nothing ->
@@ -260,12 +260,12 @@ get { row, col } board =
                     res
 
 
-clear : RowCol -> NewBoard -> NewBoard
+clear : RowCol -> Board -> Board
 clear rowCol board =
     set rowCol Types.emptyPiece board
 
 
-set : RowCol -> Piece -> NewBoard -> NewBoard
+set : RowCol -> Piece -> Board -> Board
 set { row, col } piece board =
     case Array.get row board of
         Nothing ->
@@ -280,7 +280,7 @@ set { row, col } piece board =
 {-| This finds only WinBySanctum and WinByCapture.
 The other two are discovered during play in Interface.chooseMove.
 -}
-computeWinner : Player -> NewBoard -> Winner
+computeWinner : Player -> Board -> Winner
 computeWinner whoseTurn board =
     if get whiteSanctum board == blackJourneyman then
         BlackWinner WinBySanctum
@@ -355,7 +355,7 @@ areMovesAJump legalMoves =
             False
 
 
-isUniqueMoveTo : RowCol -> RowCol -> Maybe Piece -> Bool -> NewBoard -> Bool
+isUniqueMoveTo : RowCol -> RowCol -> Maybe Piece -> Bool -> Board -> Bool
 isUniqueMoveTo from to maybePiece isJump board =
     let
         movingPiece =
@@ -579,7 +579,7 @@ indices =
     [ 0, 1, 2, 3, 4, 5, 6, 7 ]
 
 
-drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> Maybe OneMove -> NewBoard -> Bool -> Int -> List (Svg msg)
+drawRects : Style -> Maybe RowCol -> List RowCol -> MovesOrJumps -> List OneCorruptibleJump -> Maybe OneMove -> Board -> Bool -> Int -> List (Svg msg)
 drawRects style selected jumperLocations legalMoves jumps maybeLastMove board rotated delta =
     let
         docol f rowidx colidx res =
@@ -870,7 +870,7 @@ drawSomeRemovedPieces style rotated color delta cnt =
     loop cnt locations []
 
 
-drawPiece : Style -> NewBoard -> Bool -> Int -> Int -> Int -> Svg msg
+drawPiece : Style -> Board -> Bool -> Int -> Int -> Int -> Svg msg
 drawPiece style board rotated delta rowidx colidx =
     let
         rowcol =
@@ -997,7 +997,7 @@ drawShadeRect style delta rowidx colidx =
             []
 
 
-drawJumps : Style -> NewBoard -> List OneCorruptibleJump -> Int -> List (Svg msg)
+drawJumps : Style -> Board -> List OneCorruptibleJump -> Int -> List (Svg msg)
 drawJumps style board jumps delta =
     let
         color =
@@ -1141,7 +1141,7 @@ drawClickRect style delta tagger rowidx colidx =
         []
 
 
-drawCols : Style -> Int -> Bool -> NewBoard -> List (Svg msg)
+drawCols : Style -> Int -> Bool -> Board -> List (Svg msg)
 drawCols style delta rotated board =
     List.map (drawCol style delta rotated board) [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ]
         |> List.concat
@@ -1158,7 +1158,7 @@ tosy delta rotated y =
             y
 
 
-drawCol : Style -> Int -> Bool -> NewBoard -> Int -> List (Svg msg)
+drawCol : Style -> Int -> Bool -> Board -> Int -> List (Svg msg)
 drawCol style delta rotated board idx =
     let
         xc =
@@ -1351,17 +1351,17 @@ stringToRowCol rowCol =
             (stringToCol <| String.left 1 rowCol)
 
 
-mapAllNeighbors : (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapAllNeighbors : (RowCol -> Piece -> a -> a) -> Board -> RowCol -> a -> a
 mapAllNeighbors =
     mapNeighbors True WhiteColor
 
 
-mapForwardNeighbors : Color -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapForwardNeighbors : Color -> (RowCol -> Piece -> a -> a) -> Board -> RowCol -> a -> a
 mapForwardNeighbors color =
     mapNeighbors False color
 
 
-mapNeighbors : Bool -> Color -> (RowCol -> Piece -> a -> a) -> NewBoard -> RowCol -> a -> a
+mapNeighbors : Bool -> Color -> (RowCol -> Piece -> a -> a) -> Board -> RowCol -> a -> a
 mapNeighbors all color mapper board startPos init =
     let
         map r c res =
@@ -1399,7 +1399,7 @@ mapNeighbors all color mapper board startPos init =
         |> map (row + plusRow) col
 
 
-mapWholeBoard : (RowCol -> Piece -> a -> a) -> NewBoard -> a -> a
+mapWholeBoard : (RowCol -> Piece -> a -> a) -> Board -> a -> a
 mapWholeBoard mapper board res =
     let
         mapone row col res3 =
@@ -1418,7 +1418,7 @@ mapWholeBoard mapper board res =
     List.foldr mapcols res indices
 
 
-mapWholeBoardWithExit : (RowCol -> Piece -> a -> ( a, Bool )) -> NewBoard -> a -> a
+mapWholeBoardWithExit : (RowCol -> Piece -> a -> ( a, Bool )) -> Board -> a -> a
 mapWholeBoardWithExit mapper board res =
     let
         mapone : Int -> Int -> a -> ( a, Bool )
@@ -1451,7 +1451,7 @@ mapWholeBoardWithExit mapper board res =
         |> Tuple.first
 
 
-findSquareSatisfying : (RowCol -> Piece -> Bool) -> NewBoard -> Maybe ( RowCol, Piece )
+findSquareSatisfying : (RowCol -> Piece -> Bool) -> Board -> Maybe ( RowCol, Piece )
 findSquareSatisfying predicate board =
     let
         illegalRc =
@@ -1508,7 +1508,7 @@ populateLegalMoves gameState =
     }
 
 
-computeJumperLocations : Color -> NewBoard -> List RowCol
+computeJumperLocations : Color -> Board -> List RowCol
 computeJumperLocations color board =
     let
         mapper : RowCol -> Piece -> List ( RowCol, Int ) -> List ( RowCol, Int )
@@ -1551,7 +1551,7 @@ computeJumperLocations color board =
     List.foldl selector [] jumpPairs
 
 
-computeLegalMoves : NewBoard -> Maybe RowCol -> MovesOrJumps
+computeLegalMoves : Board -> Maybe RowCol -> MovesOrJumps
 computeLegalMoves newBoard selected =
     case selected of
         Nothing ->
@@ -1576,12 +1576,12 @@ isHulkType pieceType =
     pieceType == Hulk || pieceType == CorruptedHulk
 
 
-legalJumps : NewBoard -> RowCol -> List JumpSequence
+legalJumps : Board -> RowCol -> List JumpSequence
 legalJumps board startPos =
     legalJumpsWithPiece board startPos <| get startPos board
 
 
-legalJumpsWithPiece : NewBoard -> RowCol -> Piece -> List JumpSequence
+legalJumpsWithPiece : Board -> RowCol -> Piece -> List JumpSequence
 legalJumpsWithPiece board startPos piece =
     let
         { color, pieceType } =
@@ -1619,7 +1619,7 @@ removeNonMaximalJumpSequences jumpSequences =
     List.filter (\l -> maxlen == List.length l) jumpSequences
 
 
-computeJumpSequences : Color -> NewBoard -> RowCol -> List JumpSequence
+computeJumpSequences : Color -> Board -> RowCol -> List JumpSequence
 computeJumpSequences color board startPos =
     let
         mapper : RowCol -> Piece -> List JumpSequence -> List JumpSequence
@@ -1669,7 +1669,7 @@ computeJumpSequences color board startPos =
     mapAllNeighbors mapper board startPos []
 
 
-computeLongJumpSequences : Color -> NewBoard -> RowCol -> List JumpSequence
+computeLongJumpSequences : Color -> Board -> RowCol -> List JumpSequence
 computeLongJumpSequences color board startPos =
     let
         findLastPos : RowCol -> RowCol -> Maybe ( RowCol, Piece )
@@ -1769,7 +1769,7 @@ computeLongJumpSequences color board startPos =
         []
 
 
-legalSlides : NewBoard -> RowCol -> List RowCol
+legalSlides : Board -> RowCol -> List RowCol
 legalSlides board startPos =
     let
         { color, pieceType } =
@@ -1794,7 +1794,7 @@ legalSlides board startPos =
         mapForwardNeighbors color mapper board startPos []
 
 
-computeLongSlides : Color -> NewBoard -> RowCol -> List RowCol
+computeLongSlides : Color -> Board -> RowCol -> List RowCol
 computeLongSlides color board startPos =
     let
         getSlide pos res =
@@ -1814,7 +1814,7 @@ computeLongSlides color board startPos =
     mapForwardNeighbors color mapper board startPos []
 
 
-countColor : Color -> NewBoard -> Int
+countColor : Color -> Board -> Int
 countColor color board =
     let
         mapper _ piece total =
@@ -1882,14 +1882,14 @@ unarchiveGameState { moves, players, winner } gameState =
     }
 
 
-replayMoves : List OneMove -> NewBoard -> ( Player, NewBoard )
+replayMoves : List OneMove -> Board -> ( Player, Board )
 replayMoves moves board =
     -- Should this check that the moves are legal?
     -- List.foldr walks in reverse order, as intended.
     List.foldr replayMove ( WhitePlayer, board ) moves
 
 
-replayMove : OneMove -> ( Player, NewBoard ) -> ( Player, NewBoard )
+replayMove : OneMove -> ( Player, Board ) -> ( Player, Board )
 replayMove { piece, sequence } ( whoseTurn, board ) =
     case sequence of
         OneResign ->
@@ -1919,7 +1919,7 @@ replayMove { piece, sequence } ( whoseTurn, board ) =
             )
 
 
-replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> NewBoard -> NewBoard
+replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> Board -> Board
 replayOneCorruptibleJump whoseTurn piece { from, over, to, hulkAfterJump } board =
     board
         |> set from Types.emptyPiece

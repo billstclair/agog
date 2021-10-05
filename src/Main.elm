@@ -36,20 +36,20 @@
 
 port module Main exposing (main)
 
+import Agog.Board as Board exposing (rc)
 import Agog.Documentation as Documentation
 import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
-import Agog.NewBoard as NewBoard exposing (rc)
 import Agog.Types as Types
     exposing
-        ( Choice(..)
+        ( Board
+        , Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
         , GameState
         , Message(..)
         , MovesOrJumps(..)
         , NamedGame
-        , NewBoard
         , OneMove
         , OneMoveSequence(..)
         , Page(..)
@@ -2566,7 +2566,7 @@ updateInternal msg model =
                         | gameState =
                             { gameState
                                 | moves = []
-                                , newBoard = NewBoard.empty
+                                , newBoard = Board.empty
                                 , selected = Nothing
                                 , legalMoves = Moves []
                             }
@@ -2581,7 +2581,7 @@ updateInternal msg model =
                         | gameState =
                             { gameState
                                 | moves = []
-                                , newBoard = NewBoard.initial
+                                , newBoard = Board.initial
                                 , selected = Nothing
                                 , legalMoves = Moves []
                             }
@@ -2943,15 +2943,20 @@ disconnect model =
     let
         game =
             model.game
+
+        game2 =
+            { game | isLive = False }
     in
-    { model | game = { game | isLive = False } }
-        |> withCmd
+    { model | game = game2 }
+        |> withCmds
             (if game.isLive && not game.isLocal then
-                send model.game.interface <|
+                [ send model.game.interface <|
                     LeaveReq { playerid = game.playerid }
+                , putGame game2
+                ]
 
              else
-                Cmd.none
+                []
             )
 
 
@@ -2988,9 +2993,9 @@ doTestClick row col model =
                             | gameState =
                                 { gameState
                                     | newBoard =
-                                        NewBoard.set (rc row col) Types.emptyPiece board
+                                        Board.set (rc row col) Types.emptyPiece board
                                 }
-                                    |> NewBoard.populateLegalMoves
+                                    |> Board.populateLegalMoves
                         }
                 }
                     |> withNoCmd
@@ -3001,13 +3006,13 @@ doTestClick row col model =
                         rc row col
 
                     { pieceType } =
-                        NewBoard.get rowcol board
+                        Board.get rowcol board
 
                     gs =
                         if pieceType == NoPiece then
                             { gameState
                                 | newBoard =
-                                    NewBoard.set rowcol testMode.piece board
+                                    Board.set rowcol testMode.piece board
                             }
 
                         else
@@ -3015,7 +3020,7 @@ doTestClick row col model =
                 in
                 { model
                     | game =
-                        { game | gameState = gs |> NewBoard.populateLegalMoves }
+                        { game | gameState = gs |> Board.populateLegalMoves }
                 }
                     |> withNoCmd
 
@@ -3042,7 +3047,7 @@ doClick row col model =
             Types.otherPlayer player
 
         { pieceType } =
-            NewBoard.get rowCol board
+            Board.get rowCol board
 
         selected =
             gameState.selected
@@ -3055,7 +3060,7 @@ doClick row col model =
                 Just selectedRc ->
                     let
                         p =
-                            NewBoard.get selectedRc board
+                            Board.get selectedRc board
                     in
                     ( p.pieceType, p.color )
     in
@@ -3119,7 +3124,7 @@ doClick row col model =
                 let
                     chooseMoveOptionsUI =
                         if
-                            (rowCol /= NewBoard.playerSanctum otherPlayer)
+                            (rowCol /= Board.playerSanctum otherPlayer)
                                 || ((selectedType /= Golem)
                                         && (selectedType /= Hulk)
                                         && (selectedType /= CorruptedHulk)
@@ -3140,7 +3145,7 @@ doClick row col model =
                                     else
                                         found
                             in
-                            if NewBoard.mapWholeBoard mapper board False then
+                            if Board.mapWholeBoard mapper board False then
                                 { chooseMoveOptionsUINo
                                     | makeHulk = AskAsk
                                 }
@@ -3156,7 +3161,7 @@ doClick row col model =
                         else
                             let
                                 jumpedType =
-                                    NewBoard.get jumpedRc board |> .pieceType
+                                    Board.get jumpedRc board |> .pieceType
                             in
                             if
                                 (jumpedType /= Golem && jumpedType /= Hulk)
@@ -3220,7 +3225,7 @@ delayedClick rowCol model =
             withPlayReq game.playerid <|
                 let
                     piece =
-                        NewBoard.get rowCol gameState.newBoard
+                        Board.get rowCol gameState.newBoard
                 in
                 case piece.pieceType of
                     NoPiece ->
@@ -3254,7 +3259,7 @@ delayedClick rowCol model =
 
 cellName : ( Int, Int ) -> String
 cellName ( rowidx, colidx ) =
-    NewBoard.colToString colidx ++ NewBoard.rowToString rowidx
+    Board.colToString colidx ++ Board.rowToString rowidx
 
 
 subscriptions : Model -> Sub Msg
@@ -3391,7 +3396,7 @@ mainPage bsize model =
             gameState.score
 
         count =
-            NewBoard.count gameState.newBoard
+            Board.count gameState.newBoard
 
         { white, black } =
             gameState.players
@@ -3528,7 +3533,7 @@ mainPage bsize model =
             Types.typeToStyle model.styleType
     in
     div [ align "center" ]
-        [ Lazy.lazy6 NewBoard.render
+        [ Lazy.lazy6 Board.render
             theStyle
             bsize
             Click

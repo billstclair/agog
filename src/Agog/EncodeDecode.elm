@@ -40,17 +40,18 @@ module Agog.EncodeDecode exposing
     , oneMovesToString
     , pieceToString
     , publicGameToFramework
+    , stringToBoard
     , stringToFromSlashOver
-    , stringToNewBoard
     , stringToOneMove
     , stringToOneMoveSequence
     , stringToPiece
     )
 
-import Agog.NewBoard as NewBoard exposing (rc)
+import Agog.Board as Board exposing (rc)
 import Agog.Types as Types
     exposing
         ( ArchivedGameState
+        , Board
         , ChatSettings
         , Choice(..)
         , ChooseMoveOption(..)
@@ -62,7 +63,6 @@ import Agog.Types as Types
         , MessageForLog(..)
         , MovesOrJumps(..)
         , NamedGame
-        , NewBoard
         , OneCorruptibleJump
         , OneJump
         , OneMove
@@ -623,7 +623,7 @@ stringToNewRow string =
         |> Array.fromList
 
 
-newBoardToString : NewBoard -> String
+newBoardToString : Board -> String
 newBoardToString board =
     Array.toList board
         |> List.map newRowToString
@@ -631,8 +631,8 @@ newBoardToString board =
         |> String.concat
 
 
-stringToNewBoard : String -> Maybe NewBoard
-stringToNewBoard string =
+stringToBoard : String -> Maybe Board
+stringToBoard string =
     if String.length string /= 8 * 8 + 7 then
         Nothing
 
@@ -655,17 +655,17 @@ stringToNewBoard string =
             |> Just
 
 
-encodeNewBoard : NewBoard -> Value
-encodeNewBoard board =
+encodeBoard : Board -> Value
+encodeBoard board =
     JE.string <| newBoardToString board
 
 
-newBoardDecoder : Decoder NewBoard
+newBoardDecoder : Decoder Board
 newBoardDecoder =
     JD.string
         |> JD.andThen
             (\string ->
-                case stringToNewBoard string of
+                case stringToBoard string of
                     Nothing ->
                         JD.fail "Invalid board string."
 
@@ -924,13 +924,13 @@ oneMoveToPrettyString { piece, isUnique, sequence, winner } =
 unsharedRowOrCol : RowCol -> RowCol -> String
 unsharedRowOrCol from to =
     if from.row == to.row then
-        NewBoard.colToString from.col
+        Board.colToString from.col
 
     else if from.col == to.col then
-        NewBoard.rowToString from.row
+        Board.rowToString from.row
 
     else
-        NewBoard.rowColToString from
+        Board.rowColToString from
 
 
 oneMoveSequenceToPrettyString : Bool -> OneMoveSequence -> String
@@ -949,7 +949,7 @@ oneMoveSequenceToPrettyString isUnique sequence =
                         unsharedRowOrCol from to
 
                 toString =
-                    NewBoard.rowColToString to
+                    Board.rowColToString to
 
                 hulkString =
                     case makeHulk of
@@ -957,7 +957,7 @@ oneMoveSequenceToPrettyString isUnique sequence =
                             ""
 
                         Just h ->
-                            " " ++ NewBoard.rowColToString h ++ "=H"
+                            " " ++ Board.rowColToString h ++ "=H"
             in
             fromString ++ toString ++ hulkString
 
@@ -988,11 +988,11 @@ oneMoveSequenceToPrettyString isUnique sequence =
 
                                                 MakeHulkAfterJump hulkPos ->
                                                     ( "x"
-                                                    , " " ++ NewBoard.rowColToString hulkPos ++ "=H"
+                                                    , " " ++ Board.rowColToString hulkPos ++ "=H"
                                                     )
                                     in
                                     mapper tail <|
-                                        (x ++ NewBoard.rowColToString to ++ eq)
+                                        (x ++ Board.rowColToString to ++ eq)
                                             :: res
 
                         fromString =
@@ -1054,15 +1054,15 @@ oneMoveSequenceToString sequence =
             "resign"
 
         OneSlide { from, to, makeHulk } ->
-            NewBoard.rowColToString from
+            Board.rowColToString from
                 ++ "-"
-                ++ NewBoard.rowColToString to
+                ++ Board.rowColToString to
                 ++ (case makeHulk of
                         Nothing ->
                             ""
 
                         Just rc ->
-                            "=" ++ NewBoard.rowColToString rc
+                            "=" ++ Board.rowColToString rc
                    )
 
         OneJumpSequence jumps ->
@@ -1094,20 +1094,20 @@ oneMoveSequenceToString sequence =
                                                     ( "+", "" )
 
                                                 MakeHulkAfterJump hulkPos ->
-                                                    ( "x", "=" ++ NewBoard.rowColToString hulkPos )
+                                                    ( "x", "=" ++ Board.rowColToString hulkPos )
 
                                         slashOver =
                                             if Just over == locBetween from2 to then
                                                 ""
 
                                             else
-                                                "/" ++ NewBoard.rowColToString over
+                                                "/" ++ Board.rowColToString over
                                     in
                                     mapper tail <|
-                                        (slashOver ++ x ++ NewBoard.rowColToString to ++ eq)
+                                        (slashOver ++ x ++ Board.rowColToString to ++ eq)
                                             :: res
                     in
-                    mapper jumps [ NewBoard.rowColToString from ]
+                    mapper jumps [ Board.rowColToString from ]
                         |> List.reverse
                         |> String.concat
 
@@ -1256,16 +1256,16 @@ stringToOneMoveSequence string =
 
 torc : String -> RowCol
 torc =
-    NewBoard.stringToRowCol
+    Board.stringToRowCol
 
 
 mtorc : String -> Maybe RowCol
 mtorc string =
     let
         res =
-            NewBoard.stringToRowCol string
+            Board.stringToRowCol string
     in
-    if NewBoard.isRowColLegal res then
+    if Board.isRowColLegal res then
         Just res
 
     else
@@ -1302,7 +1302,7 @@ stringToOneSlideRecord string =
                                     True
 
                                 Just hl ->
-                                    NewBoard.isRowColLegal hl
+                                    Board.isRowColLegal hl
                     in
                     if not isHulkLocLegal then
                         Nothing
@@ -1598,7 +1598,7 @@ oneMoveDecoder =
 encodeUndoState : UndoState -> Value
 encodeUndoState { board, moves, selected, legalMoves } =
     JE.object
-        [ ( "board", encodeNewBoard board )
+        [ ( "board", encodeBoard board )
         , ( "moves", JE.list encodeOneMove moves )
         , ( "selected", encodeMaybe encodeRowCol selected )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
@@ -1628,7 +1628,7 @@ encodeGameState includePrivate gameState =
                 JE.null
     in
     JE.object
-        [ ( "newBoard", encodeNewBoard newBoard )
+        [ ( "newBoard", encodeBoard newBoard )
         , ( "moves", JE.list encodeOneMove moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )

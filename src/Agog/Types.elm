@@ -12,6 +12,7 @@
 
 module Agog.Types exposing
     ( ArchivedGameState
+    , Board
     , ChatSettings
     , Choice(..)
     , ChooseMoveOption(..)
@@ -23,7 +24,6 @@ module Agog.Types exposing
     , MessageForLog(..)
     , MovesOrJumps(..)
     , NamedGame
-    , NewBoard
     , OneCorruptibleJump
     , OneJump
     , OneMove
@@ -135,7 +135,7 @@ emptyPiece =
     }
 
 
-type alias NewBoard =
+type alias Board =
     Array (Array Piece)
 
 
@@ -403,7 +403,7 @@ posixZero =
 
 
 type alias UndoState =
-    { board : NewBoard
+    { board : Board
     , moves : List OneMove -- in reverse order
     , selected : Maybe RowCol
     , legalMoves : MovesOrJumps
@@ -417,7 +417,7 @@ type alias TestMode =
 
 
 type alias GameState =
-    { newBoard : NewBoard
+    { newBoard : Board
 
     -- Reversed
     , moves : List OneMove

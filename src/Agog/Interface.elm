@@ -22,11 +22,12 @@ module Agog.Interface exposing
     , setStatisticsChanged
     )
 
+import Agog.Board as Board
 import Agog.EncodeDecode as ED
-import Agog.NewBoard as NewBoard
 import Agog.Types as Types
     exposing
-        ( Choice(..)
+        ( Board
+        , Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
         , GameState
@@ -34,7 +35,6 @@ import Agog.Types as Types
         , JumpSequence
         , Message(..)
         , MovesOrJumps(..)
-        , NewBoard
         , OneCorruptibleJump
         , OneJump
         , OneMoveSequence(..)
@@ -74,7 +74,7 @@ import WebSocketFramework.Types
 
 emptyGameState : PlayerNames -> GameState
 emptyGameState players =
-    { newBoard = NewBoard.initial
+    { newBoard = Board.initial
     , moves = []
     , players = players
     , whoseTurn = WhitePlayer
@@ -497,7 +497,7 @@ generalMessageProcessorInternal isProxyServer state message =
                             gs =
                                 gameState
                                     |> updateJumperLocations
-                                    |> NewBoard.populateLegalMoves
+                                    |> Board.populateLegalMoves
                                     |> populateWinner time
 
                             state2 =
@@ -650,7 +650,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                 else
                                     let
                                         piece =
-                                            NewBoard.get rowCol board
+                                            Board.get rowCol board
                                     in
                                     if piece.pieceType == NoPiece then
                                         errorRes message state "No piece at chosen location."
@@ -675,7 +675,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                                         else
                                                             Just rowCol
                                                 }
-                                                    |> NewBoard.populateLegalMoves
+                                                    |> Board.populateLegalMoves
                                         in
                                         ( ServerInterface.updateGame gameid gs state
                                         , Just <|
@@ -788,7 +788,7 @@ updateJumperLocations : GameState -> GameState
 updateJumperLocations gameState =
     let
         jumperLocations =
-            NewBoard.computeJumperLocations
+            Board.computeJumperLocations
                 (Types.playerColor gameState.whoseTurn)
                 gameState.newBoard
     in
@@ -802,7 +802,7 @@ processChooseMoveOption option moveTo lastMove whoseTurn jumpOver gameState =
             gameState.newBoard
 
         selectedPiece =
-            NewBoard.get moveTo board
+            Board.get moveTo board
 
         ( selectedType, selectedColor ) =
             ( selectedPiece.pieceType, selectedPiece.color )
@@ -832,7 +832,7 @@ processChooseMoveOption option moveTo lastMove whoseTurn jumpOver gameState =
 
                     else if
                         (pieceType == Golem)
-                            && (NewBoard.countColor color board >= 23)
+                            && (Board.countColor color board >= 23)
                     then
                         -- This can happen, but I'll bet it won't.
                         -- Sorta like the two-move mate.
@@ -848,7 +848,7 @@ processChooseMoveOption option moveTo lastMove whoseTurn jumpOver gameState =
                                             , color = Types.otherColor color
                                             }
                                     in
-                                    ( NewBoard.set jumpedPos corruptedHulk board
+                                    ( Board.set jumpedPos corruptedHulk board
                                     , gameState.jumps
                                     )
 
@@ -875,14 +875,14 @@ processChooseMoveOption option moveTo lastMove whoseTurn jumpOver gameState =
         MakeHulk hulkPos ->
             let
                 hulkPiece =
-                    NewBoard.get hulkPos board
+                    Board.get hulkPos board
             in
             if not lastMove then
                 ( gameState, Just "May only make a hulk if your final jump lands on the other player's sanctum." )
 
             else if
-                ((selectedColor == WhiteColor) && (moveTo /= NewBoard.blackSanctum))
-                    || ((selectedColor == BlackColor) && (moveTo /= NewBoard.whiteSanctum))
+                ((selectedColor == WhiteColor) && (moveTo /= Board.blackSanctum))
+                    || ((selectedColor == BlackColor) && (moveTo /= Board.whiteSanctum))
             then
                 ( gameState, Just "Can't make a hulk except by landing on the other player's sanctum." )
 
@@ -918,8 +918,8 @@ processChooseMoveOption option moveTo lastMove whoseTurn jumpOver gameState =
                         }
 
                     newBoard =
-                        NewBoard.clear moveTo board
-                            |> NewBoard.set hulkPos hulk
+                        Board.clear moveTo board
+                            |> Board.set hulkPos hulk
                 in
                 ( { gameState | newBoard = newBoard }, Nothing )
 
@@ -990,7 +990,7 @@ populateWinner time gameState =
         NoWinner ->
             let
                 winner =
-                    NewBoard.computeWinner gameState.whoseTurn gameState.newBoard
+                    Board.computeWinner gameState.whoseTurn gameState.newBoard
             in
             { gameState | winner = winner }
                 |> populateWinnerInFirstMove time
@@ -1065,7 +1065,7 @@ chooseMove state message gameid gameState player rowCol option =
                     gameState.legalMoves
 
                 piece =
-                    NewBoard.get selected board
+                    Board.get selected board
             in
             case legalMoves of
                 NoMoves ->
@@ -1078,7 +1078,7 @@ chooseMove state message gameid gameState player rowCol option =
                     else
                         let
                             isUnique =
-                                NewBoard.isUniqueMoveTo selected
+                                Board.isUniqueMoveTo selected
                                     rowCol
                                     (Just piece)
                                     False
@@ -1152,13 +1152,13 @@ chooseMove state message gameid gameState player rowCol option =
                                     case List.head firstSequence of
                                         Nothing ->
                                             -- Can't happen
-                                            NewBoard.rc -1 -1
+                                            Board.rc -1 -1
 
                                         Just { over } ->
                                             over
 
                                 jumpOver =
-                                    Just ( firstOver, NewBoard.get firstOver board )
+                                    Just ( firstOver, Board.get firstOver board )
 
                                 newMove =
                                     { from = selected
@@ -1203,7 +1203,7 @@ chooseMove state message gameid gameState player rowCol option =
                                             -- First jump
                                             let
                                                 isUnique =
-                                                    NewBoard.isUniqueMoveTo selected
+                                                    Board.isUniqueMoveTo selected
                                                         rowCol
                                                         (Just piece)
                                                         True
@@ -1229,7 +1229,7 @@ chooseMove state message gameid gameState player rowCol option =
                                         doJump jump board2 =
                                             case jump.hulkAfterJump of
                                                 CorruptAfterJump ->
-                                                    NewBoard.set jump.over
+                                                    Board.set jump.over
                                                         { color = piece.color
                                                         , pieceType = CorruptedHulk
                                                         }
@@ -1238,7 +1238,7 @@ chooseMove state message gameid gameState player rowCol option =
                                                 _ ->
                                                     -- MakeHulkAfterJump is done
                                                     -- by processChooseMoveOption
-                                                    NewBoard.set jump.over
+                                                    Board.set jump.over
                                                         { color = piece.color
                                                         , pieceType = NoPiece
                                                         }
@@ -1300,8 +1300,8 @@ chooseMove state message gameid gameState player rowCol option =
                                         gs =
                                             { gameState
                                                 | newBoard =
-                                                    NewBoard.set selected Types.emptyPiece board
-                                                        |> NewBoard.set rowCol piece
+                                                    Board.set selected Types.emptyPiece board
+                                                        |> Board.set rowCol piece
                                                 , moves = moves
                                                 , selected = Just rowCol
                                                 , legalMoves = Jumps newSequences
@@ -1358,7 +1358,7 @@ endOfTurn selected moved piece option gameState =
         setPiece =
             if
                 (piece.pieceType /= Journeyman)
-                    && (moved == NewBoard.playerSanctum whoseTurn)
+                    && (moved == Board.playerSanctum whoseTurn)
                     && (not <| isMakeHulk option)
             then
                 Types.emptyPiece
@@ -1367,8 +1367,8 @@ endOfTurn selected moved piece option gameState =
                 piece
 
         newBoard =
-            NewBoard.clear selected gameState.newBoard
-                |> NewBoard.set moved setPiece
+            Board.clear selected gameState.newBoard
+                |> Board.set moved setPiece
     in
     { gameState
         | newBoard = newBoard
@@ -1445,7 +1445,7 @@ colorMatchesPlayer color player =
 
 cellName : ( Int, Int ) -> String
 cellName ( rowidx, colidx ) =
-    NewBoard.colToString colidx ++ NewBoard.rowToString rowidx
+    Board.colToString colidx ++ Board.rowToString rowidx
 
 
 updateScore : GameState -> GameState

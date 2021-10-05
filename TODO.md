@@ -1,8 +1,5 @@
 # AGOG TODO
 
-1. A jump can end on the sanctum, and create a Hulk.
-   This is not represented by the types.
-   Be sure to add it to NewBoard.replayMoves
 1. Save moves from all games in session
 1. Rename NewBoard type to Board
 1. "-- New Game --" copies all game state except connection.
