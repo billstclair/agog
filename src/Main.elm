@@ -499,6 +499,7 @@ initialGame seed =
     , playerid = ""
     , isLive = False
     , yourWins = 0
+    , archives = []
 
     -- not persistent
     , interfaceIsProxy = True
@@ -1210,6 +1211,8 @@ incomingMessageInternal interface maybeGame message model =
                                     , playerid = playerid
                                     , isLive = True
                                     , yourWins = 0
+                                    , archives =
+                                        Board.archiveGame gameState :: game.archives
                                     , interface = interface
                                 }
 

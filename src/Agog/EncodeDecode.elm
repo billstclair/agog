@@ -11,10 +11,10 @@
 
 
 module Agog.EncodeDecode exposing
-    ( archivedGameStateDecoder
+    ( archivedGameDecoder
     , decodeSavedModel
     , defaultOneMove
-    , encodeArchivedGameState
+    , encodeArchivedGame
     , encodeGameState
     , encodeMessageForLog
     , encodeMoves
@@ -50,7 +50,7 @@ module Agog.EncodeDecode exposing
 import Agog.Board as Board exposing (rc)
 import Agog.Types as Types
     exposing
-        ( ArchivedGameState
+        ( ArchivedGame
         , Board
         , ChatSettings
         , Choice(..)
@@ -1662,8 +1662,8 @@ gameStateDecoder =
         |> required "private" privateGameStateDecoder
 
 
-encodeArchivedGameState : Bool -> ArchivedGameState -> Value
-encodeArchivedGameState includePrivate gameState =
+encodeArchivedGame : ArchivedGame -> Value
+encodeArchivedGame gameState =
     let
         { moves, players, winner } =
             gameState
@@ -1675,9 +1675,9 @@ encodeArchivedGameState includePrivate gameState =
         ]
 
 
-archivedGameStateDecoder : Decoder ArchivedGameState
-archivedGameStateDecoder =
-    JD.succeed ArchivedGameState
+archivedGameDecoder : Decoder ArchivedGame
+archivedGameDecoder =
+    JD.succeed ArchivedGame
         |> required "moves" (JD.list oneMoveDecoder)
         |> required "players" playerNamesDecoder
         |> required "winner" winnerDecoder
@@ -2663,6 +2663,7 @@ encodeNamedGame game =
         , ( "playerid", JE.string game.playerid )
         , ( "isLive", JE.bool game.isLive )
         , ( "yourWins", JE.int game.yourWins )
+        , ( "archives", JE.list encodeArchivedGame game.archives )
         ]
 
 
@@ -2679,6 +2680,7 @@ namedGameDecoder proxyServer =
         |> required "playerid" JD.string
         |> required "isLive" JD.bool
         |> required "yourWins" JD.int
+        |> optional "archives" (JD.list archivedGameDecoder) []
         -- interfaceIsProxy
         |> hardcoded True
         |> hardcoded proxyServer

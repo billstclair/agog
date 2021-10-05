@@ -11,7 +11,7 @@
 
 
 module Agog.Types exposing
-    ( ArchivedGameState
+    ( ArchivedGame
     , Board
     , ChatSettings
     , Choice(..)
@@ -435,7 +435,7 @@ type alias GameState =
     }
 
 
-type alias ArchivedGameState =
+type alias ArchivedGame =
     { moves : List OneMove
     , players : PlayerNames
     , winner : Winner
@@ -912,6 +912,7 @@ type alias NamedGame msg =
     , playerid : PlayerId
     , isLive : Bool
     , yourWins : Int
+    , archives : List ArchivedGame
 
     -- Not persistent
     , interfaceIsProxy : Bool

@@ -11,7 +11,7 @@
 
 
 module Agog.Board exposing
-    ( archiveGameState
+    ( archiveGame
     , areMovesAJump
     , blackSanctum
     , clear
@@ -39,13 +39,13 @@ module Agog.Board exposing
     , stringToCol
     , stringToRow
     , stringToRowCol
-    , unarchiveGameState
+    , unarchiveGame
     , whiteSanctum
     )
 
 import Agog.Types as Types
     exposing
-        ( ArchivedGameState
+        ( ArchivedGame
         , Board
         , Color(..)
         , GameState
@@ -1856,13 +1856,13 @@ countColor color board =
     mapWholeBoard mapper board 0
 
 
-archiveGameState : GameState -> ArchivedGameState
-archiveGameState { moves, players, winner } =
-    ArchivedGameState moves players winner
+archiveGame : GameState -> ArchivedGame
+archiveGame { moves, players, winner } =
+    ArchivedGame moves players winner
 
 
-unarchiveGameState : ArchivedGameState -> GameState -> GameState
-unarchiveGameState { moves, players, winner } gameState =
+unarchiveGame : ArchivedGame -> GameState -> GameState
+unarchiveGame { moves, players, winner } gameState =
     let
         ( whoseTurn, board ) =
             replayMoves moves initial
