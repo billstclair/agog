@@ -1617,7 +1617,7 @@ undoStateDecoder =
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { newBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, testMode } =
+        { newBoard, initialBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, testMode, testModeInitialBoard } =
             gameState
 
         privateValue =
@@ -1629,6 +1629,7 @@ encodeGameState includePrivate gameState =
     in
     JE.object
         [ ( "newBoard", encodeBoard newBoard )
+        , ( "initialBoard", encodeMaybe encodeBoard initialBoard )
         , ( "moves", JE.list encodeOneMove moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
@@ -1640,6 +1641,7 @@ encodeGameState includePrivate gameState =
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         , ( "testMode", encodeMaybe encodeTestMode testMode )
+        , ( "testModeInitialBoard", encodeMaybe encodeBoard testModeInitialBoard )
         , ( "private", privateValue )
         ]
 
@@ -1648,6 +1650,7 @@ gameStateDecoder : Decoder GameState
 gameStateDecoder =
     JD.succeed GameState
         |> required "newBoard" newBoardDecoder
+        |> optional "initialBoard" (JD.nullable newBoardDecoder) Nothing
         |> required "moves" (JD.list oneMoveDecoder)
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder
@@ -1659,6 +1662,7 @@ gameStateDecoder =
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
         |> required "testMode" (JD.nullable testModeDecoder)
+        |> optional "testModeInitialBoard" (JD.nullable newBoardDecoder) Nothing
         |> required "private" privateGameStateDecoder
 
 

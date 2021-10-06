@@ -418,6 +418,7 @@ type alias TestMode =
 
 type alias GameState =
     { newBoard : Board
+    , initialBoard : Maybe Board
 
     -- Reversed
     , moves : List OneMove
@@ -431,6 +432,7 @@ type alias GameState =
     , score : Score
     , winner : Winner
     , testMode : Maybe TestMode
+    , testModeInitialBoard : Maybe Board
     , private : PrivateGameState --not sent over the wire
     }
 

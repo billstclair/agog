@@ -75,6 +75,7 @@ import WebSocketFramework.Types
 emptyGameState : PlayerNames -> GameState
 emptyGameState players =
     { newBoard = Board.initial
+    , initialBoard = Nothing
     , moves = []
     , players = players
     , whoseTurn = WhitePlayer
@@ -86,6 +87,7 @@ emptyGameState players =
     , score = Types.zeroScore
     , winner = NoWinner
     , testMode = Nothing
+    , testModeInitialBoard = Nothing
     , private = Types.emptyPrivateGameState
     }
 

@@ -336,6 +336,7 @@ type Msg
     | SetNotificationsEnabled Bool
     | SetSoundEnabled Bool
     | EraseBoard
+    | RevertBoard
     | InitialBoard
     | SetTestClear Bool
     | SetTestColor Color
@@ -2493,62 +2494,7 @@ updateInternal msg model =
                 disconnect model
 
         SetTestMode isTestMode ->
-            let
-                gs =
-                    { gameState
-                        | selected = Nothing
-                        , testMode =
-                            if isTestMode then
-                                case model.lastTestMode of
-                                    Nothing ->
-                                        Just
-                                            { piece = { pieceType = Golem, color = WhiteColor }
-                                            , clear = False
-                                            }
-
-                                    jtm ->
-                                        jtm
-
-                            else
-                                Nothing
-                    }
-
-                cmd =
-                    if not isTestMode then
-                        send model.game.interface
-                            (SetGameStateReq
-                                { playerid = game.playerid
-                                , gameState =
-                                    { gs
-                                        | winner = NoWinner
-                                        , moves =
-                                            case gameState.moves of
-                                                (move :: tail) as moves ->
-                                                    if move.sequence == OneResign then
-                                                        tail
-
-                                                    else
-                                                        moves
-
-                                                moves ->
-                                                    moves
-                                    }
-                                }
-                            )
-
-                    else
-                        Cmd.none
-            in
-            { model
-                | game = { game | gameState = gs }
-                , lastTestMode =
-                    if isTestMode then
-                        Nothing
-
-                    else
-                        gs.testMode
-            }
-                |> withCmd cmd
+            setTestMode isTestMode model
 
         SetNotificationsEnabled enabled ->
             if not enabled then
@@ -2589,11 +2535,30 @@ updateInternal msg model =
                                 | moves = []
                                 , newBoard = Board.empty
                                 , selected = Nothing
-                                , legalMoves = Moves []
+                                , legalMoves = NoMoves
                             }
                     }
             }
                 |> withNoCmd
+
+        RevertBoard ->
+            case gameState.testModeInitialBoard of
+                Nothing ->
+                    model |> withNoCmd
+
+                Just board ->
+                    { model
+                        | game =
+                            { game
+                                | gameState =
+                                    { gameState
+                                        | newBoard = board
+                                        , selected = Nothing
+                                        , legalMoves = NoMoves
+                                    }
+                            }
+                    }
+                        |> withNoCmd
 
         InitialBoard ->
             { model
@@ -2604,7 +2569,7 @@ updateInternal msg model =
                                 | moves = []
                                 , newBoard = Board.initial
                                 , selected = Nothing
-                                , legalMoves = Moves []
+                                , legalMoves = NoMoves
                             }
                     }
             }
@@ -2827,6 +2792,79 @@ updateInternal msg model =
 
                 Ok res ->
                     res
+
+
+setTestMode : Bool -> Model -> ( Model, Cmd Msg )
+setTestMode isTestMode model =
+    let
+        game =
+            model.game
+
+        gameState =
+            game.gameState
+    in
+    if isTestMode == (gameState.testMode /= Nothing) then
+        model |> withNoCmd
+
+    else
+        let
+            gs =
+                if isTestMode then
+                    { gameState
+                        | testMode =
+                            case model.lastTestMode of
+                                Nothing ->
+                                    Just
+                                        { piece = { pieceType = Golem, color = WhiteColor }
+                                        , clear = False
+                                        }
+
+                                jtm ->
+                                    jtm
+                        , testModeInitialBoard = Just gameState.newBoard
+                    }
+
+                else
+                    let
+                        ( initialBoard, moves ) =
+                            if Just gameState.newBoard == gameState.testModeInitialBoard then
+                                ( gameState.initialBoard, gameState.moves )
+
+                            else
+                                ( Just gameState.newBoard, [] )
+                    in
+                    { gameState
+                        | initialBoard = initialBoard
+                        , moves = moves
+                        , testMode = Nothing
+                        , testModeInitialBoard = Nothing
+                    }
+
+            cmd =
+                if not isTestMode then
+                    send model.game.interface
+                        (SetGameStateReq
+                            { playerid = game.playerid
+                            , gameState = gs
+                            }
+                        )
+
+                else
+                    Cmd.none
+
+            game2 =
+                { game | gameState = gs }
+        in
+        { model
+            | game = game2
+            , lastTestMode =
+                if isTestMode then
+                    Nothing
+
+                else
+                    gameState.testMode
+        }
+            |> withCmds [ cmd, putGame game2 ]
 
 
 clearChatSettings : String -> Bool -> Model -> ( Model, Cmd Msg )
@@ -4029,6 +4067,9 @@ mainPage bsize model =
                             div [ align "center" ]
                                 [ button [ onClick EraseBoard ]
                                     [ text "Erase Board!" ]
+                                , text " "
+                                , button [ onClick RevertBoard ]
+                                    [ text "Revert" ]
                                 , text " "
                                 , button [ onClick InitialBoard ]
                                     [ text "Initial Setup" ]
