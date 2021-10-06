@@ -68,6 +68,7 @@ import Agog.Types as Types
         , Style
         , StyleType(..)
         , TestMode
+        , TestModeInitialState
         , UndoWhichJumps(..)
         , WinReason(..)
         , Winner(..)
@@ -2527,53 +2528,58 @@ updateInternal msg model =
                 |> withNoCmd
 
         EraseBoard ->
-            { model
-                | game =
+            let
+                game2 =
                     { game
                         | gameState =
                             { gameState
-                                | moves = []
-                                , newBoard = Board.empty
+                                | newBoard = Board.empty
                                 , selected = Nothing
                                 , legalMoves = NoMoves
                             }
                     }
-            }
-                |> withNoCmd
+            in
+            { model | game = game2 }
+                |> withCmd (putGame game2)
 
         RevertBoard ->
-            case gameState.testModeInitialBoard of
+            case gameState.testModeInitialState of
                 Nothing ->
                     model |> withNoCmd
 
-                Just board ->
-                    { model
-                        | game =
+                Just { board, moves, whoseTurn, selected, legalMoves } ->
+                    let
+                        game2 =
                             { game
                                 | gameState =
                                     { gameState
                                         | newBoard = board
-                                        , selected = Nothing
-                                        , legalMoves = NoMoves
+                                        , moves = moves
+                                        , whoseTurn = whoseTurn
+                                        , selected = selected
+                                        , legalMoves = legalMoves
                                     }
                             }
-                    }
-                        |> withNoCmd
+                    in
+                    { model | game = game2 }
+                        |> withCmd (putGame game2)
 
         InitialBoard ->
-            { model
-                | game =
+            let
+                game2 =
                     { game
                         | gameState =
                             { gameState
                                 | moves = []
                                 , newBoard = Board.initial
                                 , selected = Nothing
+                                , whoseTurn = WhitePlayer
                                 , legalMoves = NoMoves
                             }
                     }
-            }
-                |> withNoCmd
+            in
+            { model | game = game2 }
+                |> withCmd (putGame game2)
 
         SetTestClear testClear ->
             case gameState.testMode of
@@ -2794,6 +2800,20 @@ updateInternal msg model =
                     res
 
 
+gameStateToTestModeInitialState : GameState -> TestModeInitialState
+gameStateToTestModeInitialState gameState =
+    let
+        { newBoard, moves, whoseTurn, selected, legalMoves } =
+            gameState
+    in
+    { board = newBoard
+    , moves = moves
+    , whoseTurn = whoseTurn
+    , selected = selected
+    , legalMoves = legalMoves
+    }
+
+
 setTestMode : Bool -> Model -> ( Model, Cmd Msg )
 setTestMode isTestMode model =
     let
@@ -2821,13 +2841,14 @@ setTestMode isTestMode model =
 
                                 jtm ->
                                     jtm
-                        , testModeInitialBoard = Just gameState.newBoard
+                        , testModeInitialState =
+                            Just <| gameStateToTestModeInitialState gameState
                     }
 
                 else
                     let
                         ( initialBoard, moves ) =
-                            if Just gameState.newBoard == gameState.testModeInitialBoard then
+                            if Just (gameStateToTestModeInitialState gameState) == gameState.testModeInitialState then
                                 ( gameState.initialBoard, gameState.moves )
 
                             else
@@ -2837,7 +2858,7 @@ setTestMode isTestMode model =
                         | initialBoard = initialBoard
                         , moves = moves
                         , testMode = Nothing
-                        , testModeInitialBoard = Nothing
+                        , testModeInitialState = Nothing
                     }
 
             cmd =
@@ -2845,7 +2866,16 @@ setTestMode isTestMode model =
                     send model.game.interface
                         (SetGameStateReq
                             { playerid = game.playerid
-                            , gameState = gs
+                            , gameState =
+                                { gs
+                                    | winner = NoWinner
+                                    , whoseTurn =
+                                        if gs.newBoard == Board.initial then
+                                            WhitePlayer
+
+                                        else
+                                            gs.whoseTurn
+                                }
                             }
                         )
 

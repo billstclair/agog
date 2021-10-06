@@ -50,6 +50,7 @@ module Agog.Types exposing
     , StyleType(..)
     , SubscriptionSet
     , TestMode
+    , TestModeInitialState
     , UndoState
     , UndoWhichJumps(..)
     , WinReason(..)
@@ -432,8 +433,17 @@ type alias GameState =
     , score : Score
     , winner : Winner
     , testMode : Maybe TestMode
-    , testModeInitialBoard : Maybe Board
+    , testModeInitialState : Maybe TestModeInitialState
     , private : PrivateGameState --not sent over the wire
+    }
+
+
+type alias TestModeInitialState =
+    { board : Board
+    , moves : List OneMove
+    , whoseTurn : Player
+    , selected : Maybe RowCol
+    , legalMoves : MovesOrJumps
     }
 
 

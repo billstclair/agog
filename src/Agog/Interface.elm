@@ -87,7 +87,7 @@ emptyGameState players =
     , score = Types.zeroScore
     , winner = NoWinner
     , testMode = Nothing
-    , testModeInitialBoard = Nothing
+    , testModeInitialState = Nothing
     , private = Types.emptyPrivateGameState
     }
 

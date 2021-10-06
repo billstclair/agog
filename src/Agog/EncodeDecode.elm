@@ -85,6 +85,7 @@ import Agog.Types as Types
         , Socket
         , StyleType(..)
         , TestMode
+        , TestModeInitialState
         , UndoState
         , UndoWhichJumps(..)
         , WinReason(..)
@@ -1614,10 +1615,35 @@ undoStateDecoder =
         |> required "legalMoves" movesOrJumpsDecoder
 
 
+encodeTestModeInitialState : TestModeInitialState -> Value
+encodeTestModeInitialState state =
+    let
+        { board, moves, whoseTurn, selected, legalMoves } =
+            state
+    in
+    JE.object
+        [ ( "board", encodeBoard board )
+        , ( "moves", JE.list encodeOneMove moves )
+        , ( "whoseTurn", encodePlayer whoseTurn )
+        , ( "selected", encodeMaybe encodeRowCol selected )
+        , ( "legalMoves", encodeMovesOrJumps legalMoves )
+        ]
+
+
+testModeInitialStateDecoder : Decoder TestModeInitialState
+testModeInitialStateDecoder =
+    JD.succeed TestModeInitialState
+        |> required "board" newBoardDecoder
+        |> required "moves" (JD.list oneMoveDecoder)
+        |> required "whoseTurn" playerDecoder
+        |> required "selected" (JD.nullable rowColDecoder)
+        |> required "legalMoves" movesOrJumpsDecoder
+
+
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { newBoard, initialBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, testMode, testModeInitialBoard } =
+        { newBoard, initialBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, testMode, testModeInitialState } =
             gameState
 
         privateValue =
@@ -1641,7 +1667,7 @@ encodeGameState includePrivate gameState =
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
         , ( "testMode", encodeMaybe encodeTestMode testMode )
-        , ( "testModeInitialBoard", encodeMaybe encodeBoard testModeInitialBoard )
+        , ( "testModeInitialState", encodeMaybe encodeTestModeInitialState testModeInitialState )
         , ( "private", privateValue )
         ]
 
@@ -1662,7 +1688,7 @@ gameStateDecoder =
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
         |> required "testMode" (JD.nullable testModeDecoder)
-        |> optional "testModeInitialBoard" (JD.nullable newBoardDecoder) Nothing
+        |> optional "testModeInitialState" (JD.nullable testModeInitialStateDecoder) Nothing
         |> required "private" privateGameStateDecoder
 
 
