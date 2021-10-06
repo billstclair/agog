@@ -276,6 +276,8 @@ type alias Model =
     , notificationPermission : Maybe Permission
     , visible : Bool
     , soundFile : Maybe String
+    , showArchive : Maybe ( Game, Int )
+    , showMove : Maybe ( Game, Int )
 
     -- persistent below here
     , gamename : String
@@ -579,6 +581,8 @@ init flags url key =
             , notificationPermission = Nothing
             , visible = True
             , soundFile = Nothing
+            , showArchive = Nothing
+            , showMove = Nothing
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -2041,6 +2045,11 @@ update msg model =
             ]
 
 
+showingArchiveOrMove : Model -> Bool
+showingArchiveOrMove model =
+    model.showArchive /= Nothing || model.showMove /= Nothing
+
+
 updateInternal : Msg -> Model -> ( Model, Cmd Msg )
 updateInternal msg model =
     let
@@ -2101,7 +2110,7 @@ updateInternal msg model =
                 |> withNoCmd
 
         SetIsLocal isLocal ->
-            if game.isLocal == isLocal then
+            if game.isLocal == isLocal || showingArchiveOrMove model then
                 model |> withNoCmd
 
             else
@@ -2225,6 +2234,8 @@ updateInternal msg model =
                                 Dict.insert game.gamename game model.gameDict
                             , chatDict =
                                 Dict.insert newGamename newChat model.chatDict
+                            , showArchive = Nothing
+                            , showMove = Nothing
                         }
                             |> withCmds
                                 [ putGame newGame
@@ -2248,6 +2259,8 @@ updateInternal msg model =
                             , gameDict =
                                 Dict.remove gamename model.gameDict
                                     |> Dict.insert model.game.gamename model.game
+                            , showArchive = Nothing
+                            , showMove = Nothing
                         }
                             |> withNoCmd
 
@@ -2290,6 +2303,8 @@ updateInternal msg model =
                                 , gameid = nextGame.gameid
                                 , gameDict = Dict.remove nextName gameDict
                                 , chatDict = Dict.remove oldGamename chatDict
+                                , showArchive = Nothing
+                                , showMove = Nothing
                             }
                                 |> withCmds
                                     [ put (gameKey oldGamename) Nothing
@@ -2301,18 +2316,43 @@ updateInternal msg model =
 
             else
                 let
-                    renamedGame =
+                    g =
                         { game | gamename = newGamename }
+
+                    ( savedGame, renamedGame, ( showArchive, showMove ) ) =
+                        case model.showMove of
+                            Nothing ->
+                                case model.showArchive of
+                                    Nothing ->
+                                        ( g, g, ( Nothing, Nothing ) )
+
+                                    Just ( archivedGame, index ) ->
+                                        let
+                                            ag =
+                                                { archivedGame
+                                                    | gamename = newGamename
+                                                }
+                                        in
+                                        ( ag, g, ( Nothing, Just ( ag, index ) ) )
+
+                            Just ( movedGame, index ) ->
+                                let
+                                    mg =
+                                        { movedGame | gamename = newGamename }
+                                in
+                                ( mg, g, ( Just ( mg, index ), model.showArchive ) )
                 in
                 { model
                     | game = renamedGame
                     , chatDict =
                         Dict.remove oldGamename chatDict
                             |> Dict.insert newGamename chat
+                    , showArchive = showArchive
+                    , showMove = showMove
                 }
                     |> withCmds
                         [ put (gameKey oldGamename) Nothing
-                        , putGame renamedGame
+                        , putGame savedGame
                         , put (chatKey oldGamename) Nothing
                         , putChat newGamename chat
                         ]
@@ -2446,7 +2486,11 @@ updateInternal msg model =
             join { model | gameid = gameid }
 
         Disconnect ->
-            disconnect model
+            if showingArchiveOrMove model then
+                model |> withNoCmd
+
+            else
+                disconnect model
 
         SetTestMode isTestMode ->
             let
@@ -2661,7 +2705,10 @@ updateInternal msg model =
                 |> withCmds [ clearStorage ]
 
         Click ( row, col ) ->
-            if gameState.testMode /= Nothing then
+            if showingArchiveOrMove model then
+                model |> withNoCmd
+
+            else if gameState.testMode /= Nothing then
                 doTestClick row col model
 
             else if gameState.winner /= NoWinner || (not <| isPlaying model) then
@@ -3798,7 +3845,9 @@ mainPage bsize model =
                 [ type_ "checkbox"
                 , checked game.isLocal
                 , onCheck SetIsLocal
-                , disabled <| not game.isLocal && game.isLive
+                , disabled <|
+                    (not game.isLocal && game.isLive)
+                        || showingArchiveOrMove model
                 ]
                 []
             , case model.notificationAvailable of
@@ -4258,19 +4307,6 @@ movesToString : List OneMove -> String
 movesToString moves =
     List.map ED.oneMoveToPrettyString moves
         |> String.join ", "
-
-
-pairToString : ( String, String ) -> String
-pairToString ( s1, s2 ) =
-    if s2 == "" then
-        s1
-
-    else
-        "(" ++ s1 ++ "," ++ chars.nbsp ++ s2 ++ ")"
-
-
-
--- For testing. No longer used.
 
 
 radio : String -> String -> Bool -> Bool -> msg -> Html msg
