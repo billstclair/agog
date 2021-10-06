@@ -3836,14 +3836,24 @@ mainPage bsize model =
                                 [ text "Undo All Jumps" ]
                             ]
                     ]
-            , br
-            , a
-                [ href "#"
-                , onClick <| SetPage MovesPage
-                ]
-                [ b "Moves" ]
-            , b ": "
-            , text <| moveString gameState.moves
+            , let
+                ( moveText, moveCnt, moveIndex ) =
+                    moveString model
+              in
+              if moveCnt == 0 then
+                text ""
+
+              else
+                span []
+                    [ br
+                    , a
+                        [ href "#"
+                        , onClick <| SetPage MovesPage
+                        ]
+                        [ b "Moves" ]
+                    , b ": "
+                    , text moveText
+                    ]
             , let
                 { games, whiteWins, blackWins } =
                     gameState.score
@@ -4286,23 +4296,47 @@ mainPage bsize model =
         ]
 
 
-moveString : List OneMove -> String
-moveString moves =
+moveString : Model -> ( String, Int, Int )
+moveString model =
     let
+        gameState =
+            model.game.gameState
+
+        moves =
+            gameState.moves
+
         len =
             4
 
+        movesLength =
+            List.length moves
+
         ellipsis =
-            if List.length moves > len then
+            if movesLength > len then
                 ", ..."
 
             else
                 ""
 
+        ( prefix, count, index ) =
+            case model.showMove of
+                Nothing ->
+                    ( "", movesLength, 0 )
+
+                Just ( fullGame, idx ) ->
+                    ( if idx > 0 then
+                        "..., "
+
+                      else
+                        ""
+                    , List.length fullGame.gameState.moves
+                    , idx
+                    )
+
         head =
             List.take 4 moves
     in
-    movesToString head ++ ellipsis
+    ( prefix ++ movesToString head ++ ellipsis, count, index )
 
 
 footerParagraph : Html Msg
