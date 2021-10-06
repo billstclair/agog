@@ -1950,8 +1950,26 @@ onKeydown tagger =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
+        clearClearStorage =
+            model.reallyClearStorage
+                && (case msg of
+                        ClearStorage ->
+                            False
+
+                        Tick _ ->
+                            False
+
+                        _ ->
+                            True
+                   )
+
         ( mdl, cmd ) =
-            updateInternal msg model
+            updateInternal msg <|
+                if clearClearStorage then
+                    { model | reallyClearStorage = False, error = Nothing }
+
+                else
+                    model
 
         { white, black } =
             mdl.game.gameState.players
