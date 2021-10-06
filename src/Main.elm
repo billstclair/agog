@@ -325,7 +325,6 @@ type Msg
     | RenameGame
     | SetPage Page
     | SetHideTitle Bool
-    | ResetScore
     | NewGame
     | StartGame
     | Join
@@ -1211,8 +1210,6 @@ incomingMessageInternal interface maybeGame message model =
                                     , playerid = playerid
                                     , isLive = True
                                     , yourWins = 0
-                                    , archives =
-                                        Board.archiveGame gameState :: game.archives
                                     , interface = interface
                                 }
 
@@ -1481,6 +1478,8 @@ incomingMessageInternal interface maybeGame message model =
                         { game
                             | gameState = gameState
                             , player = player
+                            , archives =
+                                Board.archiveGame gameState :: game.archives
                         }
                     , mdl2 |> withCmd cmd
                     )
@@ -2388,49 +2387,6 @@ updateInternal msg model =
             { model | settings = { settings | hideTitle = hideTitle } }
                 |> withNoCmd
 
-        ResetScore ->
-            if not <| game.isLocal then
-                model |> withNoCmd
-
-            else
-                case game.interface of
-                    ServerInterface si ->
-                        case si.state of
-                            Nothing ->
-                                model |> withNoCmd
-
-                            Just s ->
-                                case si.state of
-                                    Nothing ->
-                                        model |> withNoCmd
-
-                                    Just state ->
-                                        let
-                                            gs =
-                                                { gameState
-                                                    | score = Types.zeroScore
-                                                }
-
-                                            interface =
-                                                ServerInterface
-                                                    { si
-                                                        | state =
-                                                            Just <|
-                                                                ServerInterface.updateGame
-                                                                    game.gameid
-                                                                    gs
-                                                                    state
-                                                    }
-                                        in
-                                        { model
-                                            | game =
-                                                { game
-                                                    | gameState = gs
-                                                    , interface = interface
-                                                }
-                                        }
-                                            |> withNoCmd
-
         NewGame ->
             let
                 resigning =
@@ -2965,20 +2921,46 @@ disconnect model =
         game =
             model.game
 
+        gameState =
+            if not game.isLocal then
+                game.gameState
+
+            else
+                let
+                    gs =
+                        game.gameState
+                in
+                { gs | score = Types.zeroScore }
+
         game2 =
-            { game | isLive = False }
+            if not game.isLocal then
+                { game | isLive = False }
+
+            else
+                { game
+                    | archives = []
+                    , gameState = gameState
+                }
     in
     { model | game = game2 }
         |> withCmds
-            (if game.isLive && not game.isLocal then
-                [ send model.game.interface <|
+            [ putGame game2
+            , if game.isLive && not game.isLocal then
+                send model.game.interface <|
                     LeaveReq { playerid = game.playerid }
-                , putGame game2
-                ]
 
-             else
-                []
-            )
+              else
+                Cmd.none
+            , if game.isLocal then
+                send model.game.interface <|
+                    SetGameStateReq
+                        { playerid = game.playerid
+                        , gameState = gameState
+                        }
+
+              else
+                Cmd.none
+            ]
 
 
 send : ServerInterface -> Message -> Cmd Msg
@@ -3795,12 +3777,6 @@ mainPage bsize model =
                     , text ", "
                     , text otherWinString
                     , text " "
-                    , if not game.isLocal then
-                        text ""
-
-                      else
-                        button [ onClick ResetScore ]
-                            [ text "Reset" ]
                     ]
             , br
             , br
@@ -4060,7 +4036,15 @@ mainPage bsize model =
                                 ]
                     ]
             , if game.isLocal then
-                text ""
+                div [ align "center" ]
+                    [ button
+                        [ onClick Disconnect
+                        , disabled <|
+                            (game.archives == [])
+                                && (gameState.score == Types.zeroScore)
+                        ]
+                        [ text "Clear Archive" ]
+                    ]
 
               else
                 div [ align "center" ]
