@@ -19,6 +19,7 @@ module Agog.Types exposing
     , Color(..)
     , GameState
     , HulkAfterJump(..)
+    , InitialBoard
     , JumpSequence
     , Message(..)
     , MessageForLog(..)
@@ -417,9 +418,15 @@ type alias TestMode =
     }
 
 
+type alias InitialBoard =
+    { board : Board
+    , whoseTurn : Player
+    }
+
+
 type alias GameState =
     { newBoard : Board
-    , initialBoard : Maybe Board
+    , initialBoard : Maybe InitialBoard
 
     -- Reversed
     , moves : List OneMove

@@ -11,8 +11,7 @@
 
 
 module Agog.Board exposing
-    ( archiveGame
-    , areMovesAJump
+    ( areMovesAJump
     , blackSanctum
     , clear
     , colToString
@@ -39,14 +38,12 @@ module Agog.Board exposing
     , stringToCol
     , stringToRow
     , stringToRowCol
-    , unarchiveGame
     , whiteSanctum
     )
 
 import Agog.Types as Types
     exposing
-        ( ArchivedGame
-        , Board
+        ( Board
         , Color(..)
         , GameState
         , HulkAfterJump(..)
@@ -1854,89 +1851,3 @@ countColor color board =
             total + increment
     in
     mapWholeBoard mapper board 0
-
-
-archiveGame : GameState -> ArchivedGame
-archiveGame { moves, players, winner } =
-    ArchivedGame moves players winner
-
-
-unarchiveGame : ArchivedGame -> GameState -> GameState
-unarchiveGame { moves, players, winner } gameState =
-    let
-        ( whoseTurn, board ) =
-            replayMoves moves initial
-    in
-    { gameState
-        | newBoard = board
-        , moves = moves
-        , players = players
-        , whoseTurn = whoseTurn
-        , selected = Nothing
-        , jumperLocations = []
-        , legalMoves = NoMoves
-        , undoStates = []
-        , jumps = []
-        , winner = winner
-        , testMode = Nothing
-    }
-
-
-replayMoves : List OneMove -> Board -> ( Player, Board )
-replayMoves moves board =
-    -- Should this check that the moves are legal?
-    -- List.foldr walks in reverse order, as intended.
-    List.foldr replayMove ( WhitePlayer, board ) moves
-
-
-replayMove : OneMove -> ( Player, Board ) -> ( Player, Board )
-replayMove { piece, sequence } ( whoseTurn, board ) =
-    case sequence of
-        OneResign ->
-            ( whoseTurn, board )
-
-        OneSlide { from, to, makeHulk } ->
-            let
-                board2 =
-                    set from Types.emptyPiece board
-            in
-            ( Types.otherPlayer whoseTurn
-            , case makeHulk of
-                Nothing ->
-                    set to piece board2
-
-                Just hulkPos ->
-                    set to Types.emptyPiece board2
-                        |> set hulkPos
-                            { color = Types.playerColor whoseTurn
-                            , pieceType = Hulk
-                            }
-            )
-
-        OneJumpSequence jumps ->
-            ( Types.otherPlayer whoseTurn
-            , List.foldl (replayOneCorruptibleJump whoseTurn piece) board jumps
-            )
-
-
-replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> Board -> Board
-replayOneCorruptibleJump whoseTurn piece { from, over, to, hulkAfterJump } board =
-    board
-        |> set from Types.emptyPiece
-        |> (case hulkAfterJump of
-                NoHulkAfterJump ->
-                    identity
-
-                CorruptAfterJump ->
-                    set over
-                        { color = Types.playerColor whoseTurn
-                        , pieceType = CorruptedHulk
-                        }
-
-                MakeHulkAfterJump hulkPos ->
-                    set hulkPos
-                        { color = Types.playerColor whoseTurn
-                        , pieceType = Hulk
-                        }
-           )
-        |> set to piece

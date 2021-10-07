@@ -324,6 +324,7 @@ type Msg
     | SetServerUrl String
     | SetGameid String
     | SetGameName GameName
+    | SetMoveIndex Int
     | SwitchGame GameName
     | RenameGame
     | SetPage Page
@@ -1099,10 +1100,18 @@ incomingMessage interface message mdl =
         model =
             { mdl | reallyClearStorage = False }
 
-        ( maybeGame, ( model2, cmd2 ) ) =
+        ( isReviewing, reviewingGame, reviewingIndex ) =
+            case model.showMove of
+                Nothing ->
+                    ( False, Nothing, 0 )
+
+                Just ( g, index ) ->
+                    ( True, Just g, index )
+
+        ( gameIsBeingReviewed, ( maybeGame, ( model2, cmd2 ) ) ) =
             case Types.messageToGameid message of
                 Nothing ->
-                    incomingMessageInternal interface Nothing message model
+                    ( False, incomingMessageInternal interface Nothing message model )
 
                 Just gameid ->
                     let
@@ -1113,20 +1122,43 @@ incomingMessage interface message mdl =
 
                                 Just game ->
                                     Just { game | interface = interface }
+
+                        ( game3IsBeingReviewed, maybeGame3 ) =
+                            if not isReviewing then
+                                ( False, maybeGame2 )
+
+                            else
+                                case maybeGame2 of
+                                    Nothing ->
+                                        ( False, Nothing )
+
+                                    Just game2 ->
+                                        if game2.gamename == model.game.gamename then
+                                            ( True, reviewingGame )
+
+                                        else
+                                            ( False, maybeGame2 )
                     in
-                    incomingMessageInternal interface maybeGame2 message model
+                    ( game3IsBeingReviewed
+                    , incomingMessageInternal interface maybeGame3 message model
+                    )
     in
     case maybeGame of
         Nothing ->
             model2 |> withCmd cmd2
 
         Just game ->
-            let
-                ( model3, maybeGame2 ) =
-                    updateGame game.gamename (always game) model2
-            in
-            model3
-                |> withCmds [ cmd2, putGame game ]
+            if gameIsBeingReviewed then
+                { model2 | showMove = Just ( game, reviewingIndex ) }
+                    |> withCmds [ cmd2, putGame game ]
+
+            else
+                let
+                    ( model3, _ ) =
+                        updateGame game.gamename (always game) model2
+                in
+                model3
+                    |> withCmds [ cmd2, putGame game ]
 
 
 {-| Do the work for `incomingMessage`.
@@ -1485,7 +1517,7 @@ incomingMessageInternal interface maybeGame message model =
                             | gameState = gameState
                             , player = player
                             , archives =
-                                Board.archiveGame gameState :: game.archives
+                                Interface.archiveGame gameState :: game.archives
                         }
                     , mdl2 |> withCmd cmd
                     )
@@ -2200,6 +2232,9 @@ updateInternal msg model =
             { model | gamename = gamename }
                 |> withNoCmd
 
+        SetMoveIndex index ->
+            setMoveIndex index model
+
         SwitchGame gamename ->
             let
                 mdl =
@@ -2800,6 +2835,57 @@ updateInternal msg model =
                     res
 
 
+setMoveIndex : Int -> Model -> ( Model, Cmd Msg )
+setMoveIndex newIdx model =
+    let
+        ( game, index ) =
+            case model.showMove of
+                Nothing ->
+                    ( model.game, 0 )
+
+                Just ( g, i ) ->
+                    ( g, i )
+
+        gameState =
+            game.gameState
+
+        newIndex =
+            max 0 <| min newIdx <| List.length gameState.moves
+    in
+    if newIndex == index then
+        model |> withNoCmd
+
+    else if newIndex == 0 then
+        { model
+            | game = game
+            , showMove = Nothing
+        }
+            |> withNoCmd
+
+    else
+        let
+            moves =
+                List.drop newIndex gameState.moves
+
+            newGameState =
+                Interface.unarchiveGame
+                    { moves = moves
+                    , players = gameState.players
+                    , winner = NoWinner
+                    }
+                    gameState
+
+            newGame =
+                { game | gameState = newGameState }
+        in
+        { model
+            | game = newGame
+            , showMove =
+                Just ( game, newIndex )
+        }
+            |> withNoCmd
+
+
 gameStateToTestModeInitialState : GameState -> TestModeInitialState
 gameStateToTestModeInitialState gameState =
     let
@@ -2852,7 +2938,7 @@ setTestMode isTestMode model =
                                 ( gameState.initialBoard, gameState.moves )
 
                             else
-                                ( Just gameState.newBoard, [] )
+                                ( Just <| Types.InitialBoard gameState.newBoard gameState.whoseTurn, [] )
                     in
                     { gameState
                         | initialBoard = initialBoard
@@ -3510,21 +3596,32 @@ mainPage bsize model =
         gameState =
             game.gameState
 
-        score =
-            gameState.score
-
-        count =
-            Board.count gameState.newBoard
-
         { white, black } =
-            gameState.players
+            liveGameState.players
+
+        ( isReviewing, liveGame ) =
+            case model.showMove of
+                Nothing ->
+                    ( False, game )
+
+                Just ( g, _ ) ->
+                    ( True, g )
+
+        score =
+            liveGameState.score
+
+        liveGameState =
+            liveGame.gameState
+
+        reviewingMessage =
+            "You are reviewing the game. Click \"End review\" to resume play."
 
         currentPlayer =
-            if not game.isLocal then
-                Just game.player
+            if not liveGame.isLocal then
+                Just liveGame.player
 
             else
-                Just gameState.whoseTurn
+                Just liveGameState.whoseTurn
 
         rotated =
             case model.rotate of
@@ -3538,11 +3635,18 @@ mainPage bsize model =
             model.chooseMoveOptionsUI
 
         ( playing, message, yourTurn ) =
-            if not game.isLive then
-                ( False
-                , "Enter \"Your Name\" and either click \"Start Game\" or enter \"Game ID\" and click \"Join\""
-                , True
-                )
+            if not liveGame.isLive then
+                if isReviewing then
+                    ( False
+                    , ""
+                    , False
+                    )
+
+                else
+                    ( False
+                    , "Enter \"Your Name\" and either click \"Start Game\" or enter \"Game ID\" and click \"Join\""
+                    , True
+                    )
 
             else if white == "" || black == "" then
                 ( False
@@ -3563,10 +3667,10 @@ mainPage bsize model =
                     winString player reason =
                         let
                             rawName =
-                                playerName player game
+                                playerName player liveGame
 
                             name =
-                                if game.isLocal || player /= game.player then
+                                if liveGame.isLocal || player /= liveGame.player then
                                     rawName
 
                                 else
@@ -3574,7 +3678,7 @@ mainPage bsize model =
                         in
                         name ++ " won " ++ winReasonToDescription reason ++ "!"
                 in
-                case gameState.winner of
+                case liveGameState.winner of
                     WhiteWinner reason ->
                         ( False, winString WhitePlayer reason, False )
 
@@ -3585,14 +3689,21 @@ mainPage bsize model =
                         let
                             ( prefixp, action, yourTurn2 ) =
                                 if corruptJumped == AskAsk || makeHulk == AskAsk then
-                                    ( True
-                                    , "follow the instructions in the orange-outlined box below"
-                                    , True
-                                    )
+                                    if isReviewing then
+                                        ( False
+                                        , "It is your move"
+                                        , True
+                                        )
+
+                                    else
+                                        ( True
+                                        , "follow the instructions in the orange-outlined box below"
+                                        , True
+                                        )
 
                                 else if
-                                    not game.isLocal
-                                        && (gameState.whoseTurn /= game.player)
+                                    not liveGame.isLocal
+                                        && (liveGameState.whoseTurn /= game.player)
                                 then
                                     let
                                         otherName =
@@ -3607,18 +3718,21 @@ mainPage bsize model =
                                     , False
                                     )
 
+                                else if isReviewing then
+                                    ( False, "It is your move", True )
+
                                 else
                                     ( True
-                                    , case gameState.selected of
+                                    , case liveGameState.selected of
                                         Nothing ->
-                                            if gameState.jumperLocations == [] then
+                                            if liveGameState.jumperLocations == [] then
                                                 "choose a piece to move"
 
                                             else
                                                 "choose one of the selected jumper pieces"
 
                                         Just _ ->
-                                            case gameState.legalMoves of
+                                            case liveGameState.legalMoves of
                                                 NoMoves ->
                                                     "selected piece has no legal moves."
 
@@ -3649,6 +3763,102 @@ mainPage bsize model =
 
         theStyle =
             Types.typeToStyle model.styleType
+
+        messageStyles =
+            [ style "color"
+                (if not yourTurn && (not playing || liveGameState.winner == NoWinner) then
+                    "green"
+
+                 else
+                    "orange"
+                )
+            , style "font-weight"
+                (if liveGameState.winner == NoWinner then
+                    "normal"
+
+                 else
+                    "bold"
+                )
+            , style "font-size" <|
+                if yourTurn then
+                    "125%"
+
+                else
+                    "100%"
+            ]
+
+        movesSpan =
+            let
+                ( moveText, moveCnt, moveIndex ) =
+                    moveString model
+            in
+            if moveCnt == 0 && model.showMove == Nothing then
+                text ""
+
+            else
+                span []
+                    [ a
+                        [ href "#"
+                        , onClick <| SetPage MovesPage
+                        ]
+                        [ b "Moves" ]
+                    , b ": "
+                    , text moveText
+                    , if model.showMove == Nothing then
+                        text ""
+
+                      else
+                        span []
+                            [ text " "
+                            , button [ onClick <| SetMoveIndex 0 ]
+                                [ text "End review" ]
+                            ]
+                    , br
+                    , if moveIndex < moveCnt then
+                        span []
+                            [ a
+                                [ href "#"
+                                , onClick <| SetMoveIndex moveCnt
+                                ]
+                                [ text <| chars.nbsp ++ "|<" ++ chars.nbsp ]
+                            , text " "
+                            , a
+                                [ href "#"
+                                , onClick <| SetMoveIndex (moveIndex + 1)
+                                ]
+                                [ text <| chars.nbsp ++ "<" ++ chars.nbsp ]
+                            ]
+
+                      else
+                        span []
+                            [ text <| chars.nbsp ++ "|<" ++ chars.nbsp
+                            , text " "
+                            , text <| chars.nbsp ++ "<" ++ chars.nbsp
+                            ]
+                    , text " "
+                    , if moveIndex > 0 then
+                        span []
+                            [ a
+                                [ href "#"
+                                , onClick <| SetMoveIndex (moveIndex - 1)
+                                ]
+                                [ text <| chars.nbsp ++ ">" ++ chars.nbsp ]
+                            , text " "
+                            , a
+                                [ href "#"
+                                , onClick <| SetMoveIndex 0
+                                ]
+                                [ text <| chars.nbsp ++ ">|" ++ chars.nbsp ]
+                            ]
+
+                      else
+                        span []
+                            [ text <| chars.nbsp ++ ">" ++ chars.nbsp
+                            , text " "
+                            , text <| chars.nbsp ++ ">|" ++ chars.nbsp
+                            ]
+                    , br
+                    ]
     in
     div [ align "center" ]
         [ Lazy.lazy6 Board.render
@@ -3670,33 +3880,29 @@ mainPage bsize model =
                         [ text err
                         , br
                         ]
-            , span
-                [ style "color"
-                    (if not yourTurn && (not playing || gameState.winner == NoWinner) then
-                        "green"
+            , if not isReviewing then
+                text ""
 
-                     else
-                        "orange"
-                    )
-                , style "font-weight"
-                    (if gameState.winner == NoWinner then
-                        "normal"
+              else
+                span messageStyles
+                    [ text reviewingMessage
+                    , br
+                    ]
+            , if message == "" then
+                text ""
 
-                     else
-                        "bold"
-                    )
-                , style "font-size" <|
-                    if yourTurn then
-                        "125%"
-
-                    else
-                        "100%"
-                ]
-                [ text message ]
+              else
+                span messageStyles
+                    [ text message ]
             , br
+            , if not isReviewing then
+                text ""
+
+              else
+                movesSpan
             , if
-                (gameState.winner /= NoWinner)
-                    || (gameState.moves == [] && gameState.players == Types.emptyPlayerNames)
+                (liveGameState.winner /= NoWinner)
+                    || (liveGameState.moves == [] && liveGameState.players == Types.emptyPlayerNames)
               then
                 text ""
 
@@ -3723,39 +3929,42 @@ mainPage bsize model =
                                 name ++ ", " ++ color
                       in
                       text label
-                    , br
                     ]
             , if corruptJumped == AskAsk || makeHulk == AskAsk then
-                div
-                    [ style "border" <| "3px solid orange"
-                    , style "padding" "5px"
-                    , style "width" "fit-content"
-                    ]
-                    [ if corruptJumped == AskAsk then
-                        span []
-                            [ b "Corrupt Jumped Piece: "
-                            , button [ onClick <| CorruptJumpedUI (AskYes ()) ]
-                                [ text "Yes" ]
-                            , button [ onClick <| CorruptJumpedUI AskNo ]
-                                [ text "No" ]
-                            , br
-                            ]
+                if isReviewing then
+                    text ""
 
-                      else
-                        text ""
-                    , if makeHulk == AskAsk then
-                        span []
-                            [ b "Click a Golem to make it a Hulk, Click an empty square to not make a hulk."
-                            , br
-                            ]
+                else
+                    div
+                        [ style "border" <| "3px solid orange"
+                        , style "padding" "5px"
+                        , style "width" "fit-content"
+                        ]
+                        [ if corruptJumped == AskAsk then
+                            span []
+                                [ b "Corrupt Jumped Piece: "
+                                , button [ onClick <| CorruptJumpedUI (AskYes ()) ]
+                                    [ text "Yes" ]
+                                , button [ onClick <| CorruptJumpedUI AskNo ]
+                                    [ text "No" ]
+                                , br
+                                ]
 
-                      else
-                        text ""
-                    ]
+                          else
+                            text ""
+                        , if makeHulk == AskAsk then
+                            span []
+                                [ b "Click a Golem to make it a Hulk, Click an empty square to not make a hulk."
+                                , br
+                                ]
+
+                          else
+                            text ""
+                        ]
 
               else
                 text ""
-            , if not game.isLocal && game.isLive then
+            , if not liveGame.isLocal && liveGame.isLive then
                 span []
                     [ if white == "" || black == "" then
                         text ""
@@ -3772,7 +3981,8 @@ mainPage bsize model =
                                             |> updateChatAttributes bsize model.styleType
                                 in
                                 span []
-                                    [ ElmChat.styledInputBox [ id ids.chatInput ]
+                                    [ br
+                                    , ElmChat.styledInputBox [ id ids.chatInput ]
                                         []
                                         --width in chars
                                         40
@@ -3810,59 +4020,53 @@ mainPage bsize model =
 
                                 else
                                     black
+
+                    --, br
                     ]
 
               else
                 text ""
-            , let
-                undoLen =
-                    List.length gameState.undoStates
-              in
-              if undoLen == 0 then
+            , if isReviewing then
                 text ""
 
               else
-                span []
-                    [ br
-                    , button [ onClick <| SendUndoJumps UndoOneJump ]
-                        [ text "Undo Jump" ]
-                    , if undoLen <= 1 then
-                        text ""
+                let
+                    undoLen =
+                        List.length liveGameState.undoStates
+                in
+                if undoLen == 0 then
+                    text ""
 
-                      else
-                        span []
-                            [ text " "
-                            , button [ onClick <| SendUndoJumps UndoAllJumps ]
-                                [ text "Undo All Jumps" ]
-                            ]
-                    ]
-            , let
-                ( moveText, moveCnt, moveIndex ) =
-                    moveString model
-              in
-              if moveCnt == 0 then
-                text ""
+                else
+                    span []
+                        [ br
+                        , button [ onClick <| SendUndoJumps UndoOneJump ]
+                            [ text "Undo Jump" ]
+                        , if undoLen <= 1 then
+                            text ""
 
-              else
-                span []
-                    [ br
-                    , a
-                        [ href "#"
-                        , onClick <| SetPage MovesPage
+                          else
+                            span []
+                                [ text " "
+                                , button [ onClick <| SendUndoJumps UndoAllJumps ]
+                                    [ text "Undo All Jumps" ]
+                                ]
                         ]
-                        [ b "Moves" ]
-                    , b ": "
-                    , text moveText
-                    ]
+            , br
+            , if isReviewing then
+                text ""
+
+              else
+                movesSpan
             , let
                 { games, whiteWins, blackWins } =
-                    gameState.score
+                    liveGameState.score
 
                 yourWins =
-                    game.yourWins
+                    liveGame.yourWins
 
                 player =
-                    game.player
+                    liveGame.player
 
                 otherPlayer =
                     Types.otherPlayer player
@@ -3873,24 +4077,23 @@ mainPage bsize model =
               else
                 let
                     ( yourWinString, otherWinString ) =
-                        if game.isLocal then
+                        if liveGame.isLocal then
                             ( "White won " ++ String.fromInt whiteWins
                             , "Black won " ++ String.fromInt blackWins
                             )
 
                         else
                             ( "You ("
-                                ++ playerName player game
+                                ++ playerName player liveGame
                                 ++ ") won "
                                 ++ String.fromInt yourWins
-                            , playerName otherPlayer game
+                            , playerName otherPlayer liveGame
                                 ++ " won "
                                 ++ String.fromInt (games - yourWins)
                             )
                 in
                 span []
-                    [ br
-                    , text <|
+                    [ text <|
                         String.fromInt games
                             ++ (if games == 1 then
                                     "game, "
@@ -3902,8 +4105,8 @@ mainPage bsize model =
                     , text ", "
                     , text otherWinString
                     , text " "
+                    , br
                     ]
-            , br
             , br
             , b "Rotate: "
             , radio "rotate"
@@ -3921,10 +4124,10 @@ mainPage bsize model =
             , b "Local: "
             , input
                 [ type_ "checkbox"
-                , checked game.isLocal
+                , checked liveGame.isLocal
                 , onCheck SetIsLocal
                 , disabled <|
-                    (not game.isLocal && game.isLive)
+                    (not liveGame.isLocal && liveGame.isLive)
                         || showingArchiveOrMove model
                 ]
                 []
@@ -3965,17 +4168,21 @@ mainPage bsize model =
                 ]
                 []
             , text " "
-            , button
-                [ onClick NewGame
-                , disabled (not <| isPlaying model)
-                ]
-                [ text <|
-                    if gameState.winner == NoWinner then
-                        "Resign"
+            , if isReviewing then
+                text ""
 
-                    else
-                        "New Game"
-                ]
+              else
+                button
+                    [ onClick NewGame
+                    , disabled (not <| isPlaying model)
+                    ]
+                    [ text <|
+                        if gameState.winner == NoWinner then
+                            "Resign"
+
+                        else
+                            "New Game"
+                    ]
             , br
             , b "Game name: "
             , input
@@ -3998,7 +4205,7 @@ mainPage bsize model =
                     delete && Dict.isEmpty model.gameDict
 
                 isCurrent =
-                    model.gamename == model.game.gamename
+                    model.gamename == liveGame.gamename
 
                 exists =
                     Nothing /= lookupGame model.gamename model
@@ -4073,7 +4280,7 @@ mainPage bsize model =
                         )
                         []
                         model
-            , if not (game.isLocal || WhichServer.isLocal) then
+            , if isReviewing || not (game.isLocal || WhichServer.isLocal) then
                 text ""
 
               else
@@ -4165,7 +4372,10 @@ mainPage bsize model =
                                         ]
                                 ]
                     ]
-            , if game.isLocal then
+            , if isReviewing then
+                text ""
+
+              else if game.isLocal then
                 div [ align "center" ]
                     [ button
                         [ onClick Disconnect
@@ -4325,7 +4535,11 @@ moveString model =
 
                 Just ( fullGame, idx ) ->
                     ( if idx > 0 then
-                        "..., "
+                        if movesLength == 0 then
+                            "..."
+
+                        else
+                            "..., "
 
                       else
                         ""

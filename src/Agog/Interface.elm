@@ -12,7 +12,8 @@
 
 
 module Agog.Interface exposing
-    ( bumpStatistic
+    ( archiveGame
+    , bumpStatistic
     , emptyGameState
     , forNameMatches
     , getStatisticsChanged
@@ -20,13 +21,15 @@ module Agog.Interface exposing
     , messageProcessor
     , proxyMessageProcessor
     , setStatisticsChanged
+    , unarchiveGame
     )
 
 import Agog.Board as Board
 import Agog.EncodeDecode as ED
 import Agog.Types as Types
     exposing
-        ( Board
+        ( ArchivedGame
+        , Board
         , Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
@@ -37,6 +40,7 @@ import Agog.Types as Types
         , MovesOrJumps(..)
         , OneCorruptibleJump
         , OneJump
+        , OneMove
         , OneMoveSequence(..)
         , Piece
         , PieceType(..)
@@ -1486,3 +1490,99 @@ updateScore gameState =
                     , blackWins = score.blackWins + db
                 }
         }
+
+
+archiveGame : GameState -> ArchivedGame
+archiveGame { moves, players, winner } =
+    ArchivedGame moves players winner
+
+
+unarchiveGame : ArchivedGame -> GameState -> GameState
+unarchiveGame { moves, players, winner } gameState =
+    let
+        ( firstTurn, aboard ) =
+            case gameState.initialBoard of
+                Nothing ->
+                    ( WhitePlayer, Board.initial )
+
+                Just iBoard ->
+                    ( iBoard.whoseTurn, iBoard.board )
+
+        ( whoseTurn, board ) =
+            replayMoves moves firstTurn aboard
+    in
+    { gameState
+        | newBoard = board
+        , moves = moves
+        , players = players
+        , whoseTurn = whoseTurn
+        , selected = Nothing
+        , jumperLocations = []
+        , legalMoves = NoMoves
+        , undoStates = []
+        , jumps = []
+        , winner = winner
+        , testMode = Nothing
+    }
+        |> updateJumperLocations
+
+
+replayMoves : List OneMove -> Player -> Board -> ( Player, Board )
+replayMoves moves whoseTurn board =
+    -- Should this check that the moves are legal?
+    -- List.foldr walks in reverse order, as intended.
+    List.foldr replayMove ( whoseTurn, board ) moves
+
+
+replayMove : OneMove -> ( Player, Board ) -> ( Player, Board )
+replayMove { piece, sequence } ( whoseTurn, board ) =
+    case sequence of
+        OneResign ->
+            ( whoseTurn, board )
+
+        OneSlide { from, to, makeHulk } ->
+            let
+                board2 =
+                    Board.set from Types.emptyPiece board
+            in
+            ( Types.otherPlayer whoseTurn
+            , case makeHulk of
+                Nothing ->
+                    Board.set to piece board2
+
+                Just hulkPos ->
+                    Board.set to Types.emptyPiece board2
+                        |> Board.set hulkPos
+                            { color = Types.playerColor whoseTurn
+                            , pieceType = Hulk
+                            }
+            )
+
+        OneJumpSequence jumps ->
+            ( Types.otherPlayer whoseTurn
+            , List.foldl (replayOneCorruptibleJump whoseTurn piece) board jumps
+            )
+
+
+replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> Board -> Board
+replayOneCorruptibleJump whoseTurn piece { from, over, to, hulkAfterJump } board =
+    board
+        |> Board.set from Types.emptyPiece
+        |> (case hulkAfterJump of
+                NoHulkAfterJump ->
+                    Board.set over
+                        Types.emptyPiece
+
+                CorruptAfterJump ->
+                    Board.set over
+                        { color = Types.playerColor whoseTurn
+                        , pieceType = CorruptedHulk
+                        }
+
+                MakeHulkAfterJump hulkPos ->
+                    Board.set hulkPos
+                        { color = Types.playerColor whoseTurn
+                        , pieceType = Hulk
+                        }
+           )
+        |> Board.set to piece

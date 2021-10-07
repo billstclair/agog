@@ -58,6 +58,7 @@ import Agog.Types as Types
         , Color(..)
         , GameState
         , HulkAfterJump(..)
+        , InitialBoard
         , JumpSequence
         , Message(..)
         , MessageForLog(..)
@@ -1640,6 +1641,21 @@ testModeInitialStateDecoder =
         |> required "legalMoves" movesOrJumpsDecoder
 
 
+encodeInitialBoard : InitialBoard -> Value
+encodeInitialBoard { board, whoseTurn } =
+    JE.object
+        [ ( "board", encodeBoard board )
+        , ( "whoseTurn", encodePlayer whoseTurn )
+        ]
+
+
+initialBoardDecoder : Decoder InitialBoard
+initialBoardDecoder =
+    JD.succeed InitialBoard
+        |> required "board" newBoardDecoder
+        |> required "whoseTurn" playerDecoder
+
+
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
@@ -1655,7 +1671,7 @@ encodeGameState includePrivate gameState =
     in
     JE.object
         [ ( "newBoard", encodeBoard newBoard )
-        , ( "initialBoard", encodeMaybe encodeBoard initialBoard )
+        , ( "initialBoard", encodeMaybe encodeInitialBoard initialBoard )
         , ( "moves", JE.list encodeOneMove moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
@@ -1676,7 +1692,7 @@ gameStateDecoder : Decoder GameState
 gameStateDecoder =
     JD.succeed GameState
         |> required "newBoard" newBoardDecoder
-        |> optional "initialBoard" (JD.nullable newBoardDecoder) Nothing
+        |> optional "initialBoard" (JD.nullable initialBoardDecoder) Nothing
         |> required "moves" (JD.list oneMoveDecoder)
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder
