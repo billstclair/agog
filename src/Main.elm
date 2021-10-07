@@ -3796,6 +3796,13 @@ mainPage bsize model =
                 text ""
 
             else
+                let
+                    threeSpaces =
+                        chars.nbsp ++ chars.nbsp ++ chars.nbsp
+
+                    boldWeight =
+                        style "font-weight" "bold"
+                in
                 span []
                     [ a
                         [ href "#"
@@ -3814,50 +3821,52 @@ mainPage bsize model =
                                 [ text "End review" ]
                             ]
                     , br
-                    , if moveIndex < moveCnt then
-                        span []
-                            [ a
-                                [ href "#"
-                                , onClick <| SetMoveIndex moveCnt
+                    , span [ boldWeight ]
+                        [ if moveIndex < moveCnt then
+                            span []
+                                [ a
+                                    [ href "#"
+                                    , onClick <| SetMoveIndex moveCnt
+                                    ]
+                                    [ text <| chars.nbsp ++ "|<" ++ chars.nbsp ]
+                                , text threeSpaces
+                                , a
+                                    [ href "#"
+                                    , onClick <| SetMoveIndex (moveIndex + 1)
+                                    ]
+                                    [ text <| chars.nbsp ++ "<" ++ chars.nbsp ]
                                 ]
-                                [ text <| chars.nbsp ++ "|<" ++ chars.nbsp ]
-                            , text " "
-                            , a
-                                [ href "#"
-                                , onClick <| SetMoveIndex (moveIndex + 1)
-                                ]
-                                [ text <| chars.nbsp ++ "<" ++ chars.nbsp ]
-                            ]
 
-                      else
-                        span []
-                            [ text <| chars.nbsp ++ "|<" ++ chars.nbsp
-                            , text " "
-                            , text <| chars.nbsp ++ "<" ++ chars.nbsp
-                            ]
-                    , text " "
-                    , if moveIndex > 0 then
-                        span []
-                            [ a
-                                [ href "#"
-                                , onClick <| SetMoveIndex (moveIndex - 1)
+                          else
+                            span []
+                                [ text <| chars.nbsp ++ "|<" ++ chars.nbsp
+                                , text threeSpaces
+                                , text <| chars.nbsp ++ "<" ++ chars.nbsp
                                 ]
-                                [ text <| chars.nbsp ++ ">" ++ chars.nbsp ]
-                            , text " "
-                            , a
-                                [ href "#"
-                                , onClick <| SetMoveIndex 0
+                        , text threeSpaces
+                        , if moveIndex > 0 then
+                            span []
+                                [ a
+                                    [ href "#"
+                                    , onClick <| SetMoveIndex (moveIndex - 1)
+                                    ]
+                                    [ text <| chars.nbsp ++ ">" ++ chars.nbsp ]
+                                , text threeSpaces
+                                , a
+                                    [ href "#"
+                                    , onClick <| SetMoveIndex 0
+                                    ]
+                                    [ text <| chars.nbsp ++ ">|" ++ chars.nbsp ]
                                 ]
-                                [ text <| chars.nbsp ++ ">|" ++ chars.nbsp ]
-                            ]
 
-                      else
-                        span []
-                            [ text <| chars.nbsp ++ ">" ++ chars.nbsp
-                            , text " "
-                            , text <| chars.nbsp ++ ">|" ++ chars.nbsp
-                            ]
-                    , br
+                          else
+                            span []
+                                [ text <| chars.nbsp ++ ">" ++ chars.nbsp
+                                , text threeSpaces
+                                , text <| chars.nbsp ++ ">|" ++ chars.nbsp
+                                ]
+                        , br
+                        ]
                     ]
     in
     div [ align "center" ]
