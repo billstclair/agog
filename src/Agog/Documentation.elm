@@ -233,6 +233,11 @@ The final move of the game ends with a win indicator, this is the "%" character,
 Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format.
 """
           )
+        , ( "GAME REVIEW"
+          , """
+You may review the board position earlier in the game. Click one of the left-pointing arrows ("|<" or "<") under the "Moves" line to enter review mode. The arrows will move up to under the orange or green instructions below the board, to make it less likely for them to be scrolled off the bottom of the screen. You will be informed if it becomes your turn during your review. You may return to play via the "End review" button or the "|>" link. Renaming, switching sessions, and creating new sessions remain active during the review, as does chat.
+"""
+          )
         , ( "MULTIPLE GAMES"
           , """
 You can play multiple simultaneous games. Each of them will be remembered, and each of them will be restored when you visit agog.ninja again from the same browser (global persistence is on the TODO list).
