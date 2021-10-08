@@ -3823,6 +3823,7 @@ mainPage bsize model =
                         , onClick <| SetPage MovesPage
                         ]
                         [ b "Moves:" ]
+                    , text " "
                     , text moveText
                     , if model.showMove == Nothing then
                         text ""
