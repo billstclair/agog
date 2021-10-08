@@ -3868,7 +3868,12 @@ mainPage bsize model =
                     moveString model
             in
             if moveCnt == 0 && model.showMove == Nothing then
-                text ""
+                if not isArchiving then
+                    text ""
+
+                else
+                    button [ onClick <| SetArchiveIndex "-1" ]
+                        [ text "End archive" ]
 
             else
                 let
