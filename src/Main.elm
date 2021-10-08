@@ -5152,8 +5152,24 @@ movesPage bsize model =
         moves =
             List.reverse gameState.moves
 
+        realGame =
+            case model.showArchive of
+                Just ( g, _ ) ->
+                    g
+
+                Nothing ->
+                    case model.showMove of
+                        Nothing ->
+                            game
+
+                        Just ( g, _ ) ->
+                            g
+
+        realMoves =
+            List.reverse realGame.gameState.moves
+
         gameTime =
-            case List.head moves of
+            case List.head realMoves of
                 Just move ->
                     Just move.time
 
