@@ -1,7 +1,6 @@
 # AGOG TODO
 
 1. Periodic "Update" commands sent over wire. In case we miss a message.
-1. Rename "Game" to "Session" in the UI.
 1. "Request Undo" button. If opponent approves, undoes the move.
 1. Save moves from all games in session
    Done. Need a UI for viewing the archives.

@@ -820,7 +820,7 @@ handleGetGameResponse key value model =
     case Debug.log "handleGetGameResponse, gamename" <| gameKeyToName key of
         Nothing ->
             { model
-                | error = Just <| "Unrecognized game key: " ++ key
+                | error = Just <| "Unrecognized session key: " ++ key
             }
                 |> withNoCmd
 
@@ -831,7 +831,7 @@ handleGetGameResponse key value model =
             of
                 Err _ ->
                     { model
-                        | error = Just <| "Couldn't decode game: " ++ gamename
+                        | error = Just <| "Couldn't decode session: " ++ gamename
                     }
                         |> withNoCmd
 
@@ -983,7 +983,7 @@ handleGetChatResponse key value model =
                     case maybeChat of
                         Nothing ->
                             { model2
-                                | error = Debug.log "" (Just <| "Unfound chat for game: " ++ gamename)
+                                | error = Debug.log "" (Just <| "Unfound chat for session: " ++ gamename)
                             }
                                 |> withNoCmd
 
@@ -1184,7 +1184,7 @@ incomingMessageInternal interface maybeGame message model =
                     ( Nothing
                     , { model
                         | error =
-                            Just <| "Bug: there is no game for gameid: " ++ gameid
+                            Just <| "Bug: there is no session for id: " ++ gameid
                       }
                         |> withNoCmd
                     )
@@ -1217,7 +1217,7 @@ incomingMessageInternal interface maybeGame message model =
                                 -- remote server happens to randomly generate a
                                 -- gameid that matches a local one (or vice-versa).
                                 -- TODO: make isLocal an arg to gameFromId
-                                Just <| "Bug: NewRsp found existing gameid: " ++ gameid
+                                Just <| "Bug: NewRsp found existing session id: " ++ gameid
                           }
                             |> withNoCmd
                         )
@@ -1228,7 +1228,7 @@ incomingMessageInternal interface maybeGame message model =
                         ( Nothing
                         , { model
                             | error =
-                                Just <| "Can't find game named \"" ++ gamename ++ "\""
+                                Just <| "Can't find session named \"" ++ gamename ++ "\""
                           }
                             |> withNoCmd
                         )
@@ -1291,7 +1291,7 @@ incomingMessageInternal interface maybeGame message model =
                     ( Nothing
                     , { model
                         | error =
-                            Just <| "JoinRsp found no game for id: " ++ gameid
+                            Just <| "JoinRsp found no session for id: " ++ gameid
                       }
                         |> withNoCmd
                     )
@@ -1349,7 +1349,7 @@ incomingMessageInternal interface maybeGame message model =
 
                             else
                                 playerName player game3
-                                    ++ " joined hidden game "
+                                    ++ " joined hidden session "
                                     ++ game3.gamename
                     in
                     ( Just game3
@@ -1576,7 +1576,7 @@ incomingMessageInternal interface maybeGame message model =
                         Nothing ->
                             { model
                                 | error =
-                                    Just "Bug: Can't restore game."
+                                    Just "Bug: Can't restore session."
                             }
                                 |> withNoCmd
 
@@ -1802,7 +1802,7 @@ socketHandler response state mdl =
                         Nothing ->
                             { model
                                 | error =
-                                    Just "Bug: Can't find a non-local game for an incoming message."
+                                    Just "Bug: Can't find a non-local session for an incoming message."
                             }
                                 |> withNoCmd
 
@@ -1863,7 +1863,7 @@ connectedResponse model =
                         Nothing ->
                             let
                                 mcs =
-                                    Debug.log "connectedResponse: can't find gamname" maybeConnectionSpec
+                                    Debug.log "connectedResponse: can't find gamename" maybeConnectionSpec
                             in
                             Cmd.none
 
@@ -2294,7 +2294,7 @@ updateInternal msg model =
                     Nothing ->
                         { mdl
                             | error =
-                                Just <| "Bug: can't find game named " ++ gamename
+                                Just <| "Bug: can't find session named " ++ gamename
                         }
                             |> withNoCmd
 
@@ -3658,7 +3658,7 @@ mainPage bsize model =
 
                 else
                     ( False
-                    , "Enter \"Your Name\" and either click \"Start Game\" or enter \"Game ID\" and click \"Join\""
+                    , "Enter \"Your Name\" and either click \"Start Session\" or enter \"Session ID\" and click \"Join\""
                     , True
                     )
 
@@ -3822,8 +3822,7 @@ mainPage bsize model =
                         [ href "#"
                         , onClick <| SetPage MovesPage
                         ]
-                        [ b "Moves" ]
-                    , b ": "
+                        [ b "Moves:" ]
                     , text moveText
                     , if model.showMove == Nothing then
                         text ""
@@ -4207,7 +4206,7 @@ mainPage bsize model =
                             "New Game"
                     ]
             , br
-            , b "Game name: "
+            , b "Session name: "
             , input
                 [ onInput SetGameName
                 , value model.gamename
@@ -4240,19 +4239,19 @@ mainPage bsize model =
                         "Rename to the same name? Nope."
 
                     else if cantDelete then
-                        "You may not delete an active network game."
+                        "You may not delete an active network session."
 
                     else if onlyGame then
-                        "You may not delete the only game."
+                        "You may not delete the only session."
 
                     else if delete then
-                        "Delete the current game."
+                        "Delete the current session."
 
                     else if exists then
                         "You may not rename to an existing name."
 
                     else
-                        "Rename the current game."
+                        "Rename the current session."
                 , onClick RenameGame
                 ]
                 [ text <|
@@ -4276,12 +4275,12 @@ mainPage bsize model =
                     , disabled cantMakeNew
                     , title <|
                         if cantMakeNew then
-                            "Type a non-blank \"Game name\" that does not yet exist."
+                            "Type a non-blank \"Session name\" that does not yet exist."
 
                         else
-                            "Make a new game named \"" ++ model.gamename ++ "\""
+                            "Make a new sesion named \"" ++ model.gamename ++ "\""
                     ]
-                    [ text <| toMdashes "-- New Game --" ]
+                    [ text <| toMdashes "-- New Session --" ]
                     :: foldrGames
                         (\agame res ->
                             let
@@ -4293,10 +4292,10 @@ mainPage bsize model =
                                 , selected isCurrent
                                 , title <|
                                     if isCurrent then
-                                        "This is the current game."
+                                        "This is the current session."
 
                                     else
-                                        "Switch to this game."
+                                        "Switch to this session."
                                 ]
                                 [ text agame.gamename ]
                                 :: res
@@ -4413,7 +4412,7 @@ mainPage bsize model =
                 div [ align "center" ]
                     [ if game.isLive then
                         div [ align "center" ]
-                            [ b "Game ID: "
+                            [ b "Session ID: "
                             , text model.gameid
                             , br
                             , button
@@ -4469,9 +4468,9 @@ mainPage bsize model =
                                 [ onClick StartGame
                                 , disabled <| settings.name == ""
                                 ]
-                                [ text "Start Game" ]
+                                [ text "Start Session" ]
                             , br
-                            , b "Game ID: "
+                            , b "Session ID: "
                             , input
                                 [ onInput SetGameid
                                 , value model.gameid
@@ -4712,7 +4711,7 @@ publicPage bsize model =
     rulesDiv False
         [ rulesDiv True
             [ h2 [ align "center" ]
-                [ text "Public Games" ]
+                [ text "Public Sessions" ]
             , playButton
             , p [ align "center" ]
                 [ b "Your Name: "
@@ -4728,7 +4727,7 @@ publicPage bsize model =
                   else
                     span [ style "color" "red" ]
                         [ br
-                        , text "To join a game, you must enter a name."
+                        , text "To join a session, you must enter a name."
                         ]
                 ]
             , p [ align "center" ]

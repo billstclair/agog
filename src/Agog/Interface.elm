@@ -296,7 +296,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                     ""
 
                                 Just _ ->
-                                    "Can't restore existing gameid"
+                                    "Can't restore existing session id"
             in
             if gameidError /= "" then
                 errorRes message state gameidError
@@ -397,7 +397,7 @@ generalMessageProcessorInternal isProxyServer state message =
         JoinReq { gameid, name, isRestore } ->
             case ServerInterface.getGame gameid state of
                 Nothing ->
-                    errorRes message state "Unknown gameid"
+                    errorRes message state "Unknown session id"
 
                 Just gameState ->
                     let
@@ -408,7 +408,7 @@ generalMessageProcessorInternal isProxyServer state message =
                             players
                     in
                     if white /= "" && black /= "" then
-                        errorRes message state "Game already has two players"
+                        errorRes message state "Session already has two players"
 
                     else if name == "" || name == white || name == black then
                         errorRes message

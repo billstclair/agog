@@ -191,20 +191,20 @@ If notifications are available in your browser (and they currently are NOT avail
 
 If you check the "Sound" checkbox, you will hear a sound when pieces move. The sound for an intermediate jump in a sequence is different from the move or last jump sound. In iOS, playing this sound will turn off music; choose accordingly.
 
-Your game state is remembered in your browser's "Local Storage" database. If you refresh the screen with a game in progress, it will attempt to reconnect to the server and resume the game.
+Your session state is remembered in your browser's "Local Storage" database. If you refresh the screen with a game in progress, it will attempt to reconnect to the server and resume the game.
 
-Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local"). To force a reload from the server, bringing a saved web app up to date, click the "Reload" button.
+Sometimes, when I'm uncareful about an update, your session may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local"). To force a reload from the server, bringing a saved web app up to date, click the "Reload" button.
 """
           )
         , ( "SERVER CONNECTION"
           , """
 This implementation of __A•G•O•G__ is a networked, two-player game. It communicates through a server, running on agog.ninja.
 
-Before you can play games, you need to connect through that server to your opponent. Do this by entering "Your Name" and clicking "Start Game". This will display a "Game ID". Copy that, and text it to your opponent. The other player fills in "Your Name", pastes the Game ID, and clicks "Join". The initiating player is white initially. Colors swap with each subsequent game.
+Before you can play games, you need to connect through that server to your opponent. Do this by entering "Your Name" and clicking "Start Session". This will display a "Session ID". Copy that, and text it to your opponent. The other player fills in "Your Name", pastes the Session ID, and clicks "Join". The initiating player is white initially. Colors swap with each subsequent game.
 
-Alternatively, the initiating player can check the "Public" box before clicking "Start Game". This makes the game appear on the "Public" page (available via the link at the bottom of each page). If you fill in "for name" before clicking "Start Game", then only other players with the given "Name" will see it.
+Alternatively, the initiating player can check the "Public" box before clicking "Start Session". This makes the session appear on the "Public" page (available via the link at the bottom of each page). If you fill in "for name" before clicking "Start Session", then only other players with the given "Name" will see it.
 
-To join a public game, enter "Your Name", go to the "Public" page, and click on the underlined GameId.
+To join a public session, enter "Your Name", go to the "Public" page, and click on the underlined Session ID.
 """
           )
         , ( "GAME PLAY"
@@ -240,25 +240,25 @@ You may review the board position earlier in the game. Click one of the left-poi
 During game review, the "Moves" page shows only the moves up to the review point, but it provides an "End review" button to show the entire game.
 """
           )
-        , ( "MULTIPLE GAMES"
+        , ( "MULTIPLE SESSIONS"
           , """
-You can play multiple simultaneous games. Each of them will be remembered, and each of them will be restored when you visit agog.ninja again from the same browser (global persistence is on the TODO list).
+You can play in multiple simultaneous sessions. Each of them will be remembered, and each of them will be restored when you visit agog.ninja again from the same browser (global persistence is on the TODO list).
 
-Multiple games are controlled via the line in the user interface beginning with "Game name". It will normally show the name of the current game, which is "default" by default. If you change that, and press the "Rename" button, it will give the game that new name. If you clear it, the "Rename" button becomes "Delete" (unless there is only one game).
+Multiple sessions are controlled via the line in the user interface beginning with "Session name". It will normally show the name of the current session, which is "default" by default. If you change that, and press the "Rename" button, it will give the session that new name. If you clear it, the "Rename" button becomes "Delete" (unless there is only one session).
 
-To the right of the "Rename" button is a select pop-up containing "-- New Game --" and each of your named games. To create a new game, with the "Game name" you typed, choose "-- New Game --". To switch to another named game, select it from the list.
+To the right of the "Rename" button is a select pop-up containing "-- New Session --" and each of your named games. To create a new game, with the "Session name" you typed, choose "-- New Session --". To switch to another named session, select it from the list.
 """
           )
         , ( "LOCAL MODE"
           , """
-Sometimes you want to play a game locally, without going through the server (except to fetch the HTML and JavaScript for the game itself). You may do this by checking the "Local" checkbox between games. You will then control both players.
+Sometimes you want to play a game locally, without going through the server (except to fetch the HTML and JavaScript for the A•G•O•G itself). You may do this by checking the "Local" checkbox between games. You will then control both players.
 
 Local mode has another feature, "Test Mode". Enable that by checking the "Test Mode" check box. This provides "Erase Board!" and "Initial Setup" buttons, a "Remove clicked" checkbox, which, when checked, causes a click on a piece to remove it from the board, a "Test piece" popup, which allows you to choose a piece type, and "White" & "Black" radio buttons, which choose the piece color. When you click on an empty square on the board, that piece will appear there. Unchecking "Test mode" returns to game play.
 """
           )
         , ( "STATISTICS"
           , """
-The __A•G•O•G__ server keeps track of some statistics about games. These are shown on the "Statistics" page, available from the "Statistics" link at the bottom of the page. It displays a table containing counts for the following:
+The __A•G•O•G__ server keeps track of some statistics about sessions. These are shown on the "Statistics" page, available from the "Statistics" link at the bottom of the page. It displays a table containing counts for the following:
 
 1. Finished Games
 1. Finished Game Total Moves
