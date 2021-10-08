@@ -249,6 +249,11 @@ Multiple sessions are controlled via the line in the user interface beginning wi
 To the right of the "Rename" button is a select pop-up containing "-- New Session --" and each of your named games. To create a new game, with the "Session name" you typed, choose "-- New Session --". To switch to another named session, select it from the list.
 """
           )
+        , ( "ARCHIVES"
+          , """
+Archives are kept of every game in a session. They appear in the "Archives" selector. You may choose one of them to review its moves. Click the "End Archive" button to stop reviewing. As with reviewing moves in the live game, while reviewing an archived game, you will be notified if it becomes your move in the live game, by larger orange text.
+"""
+          )
         , ( "LOCAL MODE"
           , """
 Sometimes you want to play a game locally, without going through the server (except to fetch the HTML and JavaScript for the A•G•O•G itself). You may do this by checking the "Local" checkbox between games. You will then control both players.
