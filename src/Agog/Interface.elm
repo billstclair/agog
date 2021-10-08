@@ -1493,8 +1493,8 @@ updateScore gameState =
         }
 
 
-archiveGame : Maybe InitialBoard -> GameState -> ArchivedGame
-archiveGame initialBoard { moves, players, winner } =
+archiveGame : GameState -> ArchivedGame
+archiveGame { moves, players, winner, initialBoard } =
     ArchivedGame moves players winner initialBoard
 
 

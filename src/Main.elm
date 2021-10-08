@@ -42,7 +42,8 @@ import Agog.EncodeDecode as ED
 import Agog.Interface as Interface
 import Agog.Types as Types
     exposing
-        ( Board
+        ( ArchivedGame
+        , Board
         , Choice(..)
         , ChooseMoveOption(..)
         , Color(..)
@@ -326,6 +327,7 @@ type Msg
     | SetGameName GameName
     | ReviewMoves Int
     | SetMoveIndex Int
+    | SetArchiveIndex String
     | SwitchGame GameName
     | RenameGame
     | SetPage Page
@@ -1519,8 +1521,12 @@ incomingMessageInternal interface maybeGame message model =
                             | gameState = gameState
                             , player = player
                             , archives =
-                                Interface.archiveGame gameState.initialBoard gameState
-                                    :: game.archives
+                                if game.gameState.moves == [] then
+                                    game.archives
+
+                                else
+                                    Interface.archiveGame game.gameState
+                                        :: game.archives
                         }
                     , mdl2 |> withCmd cmd
                     )
@@ -2245,6 +2251,15 @@ updateInternal msg model =
         SetMoveIndex index ->
             setMoveIndex index model
 
+        SetArchiveIndex indexStr ->
+            case String.toInt indexStr of
+                Nothing ->
+                    -- Can't happen
+                    model |> withNoCmd
+
+                Just index ->
+                    setArchiveIndex index model
+
         SwitchGame gamename ->
             let
                 mdl =
@@ -2898,6 +2913,11 @@ setMoveIndex newIdx model =
                 Just ( game, newIndex )
         }
             |> withNoCmd
+
+
+setArchiveIndex : Int -> Model -> ( Model, Cmd Msg )
+setArchiveIndex index model =
+    model |> withNoCmd
 
 
 gameStateToTestModeInitialState : GameState -> TestModeInitialState
@@ -4400,7 +4420,10 @@ mainPage bsize model =
 
               else if game.isLocal then
                 div [ align "center" ]
-                    [ button
+                    [ b "Archives: "
+                    , archiveSelector model
+                    , br
+                    , button
                         [ onClick Disconnect
                         , disabled <|
                             (game.archives == [])
@@ -4415,6 +4438,9 @@ mainPage bsize model =
                         div [ align "center" ]
                             [ b "Session ID: "
                             , text model.gameid
+                            , br
+                            , b "Archives: "
+                            , archiveSelector model
                             , br
                             , button
                                 [ onClick Disconnect ]
@@ -4495,6 +4521,9 @@ mainPage bsize model =
                                 ]
                                 [ text "Join"
                                 ]
+                            , br
+                            , b "Archives: "
+                            , archiveSelector model
                             ]
                     ]
             ]
@@ -4532,6 +4561,79 @@ mainPage bsize model =
                 ]
                 [ text "Reload" ]
             ]
+        ]
+
+
+archiveSelector : Model -> Html Msg
+archiveSelector model =
+    let
+        game =
+            model.game
+
+        archives =
+            game.archives
+    in
+    if archives == [] then
+        text ""
+
+    else
+        let
+            currentArchive =
+                case model.showArchive of
+                    Nothing ->
+                        Nothing
+
+                    Just ( _, index ) ->
+                        Just index
+        in
+        select [ onInput SetArchiveIndex ] <|
+            [ option
+                [ value ""
+                , selected <| currentArchive == Nothing
+                ]
+                [ text "Chose an archived game..." ]
+            ]
+                ++ List.indexedMap (archiveOption model.zone currentArchive) archives
+
+
+archiveOption : Zone -> Maybe Int -> Int -> ArchivedGame -> Html Msg
+archiveOption zone currentIndex index { moves, players, winner } =
+    let
+        { white, black } =
+            players
+
+        timeString =
+            case List.head <| List.reverse moves of
+                Nothing ->
+                    ""
+
+                Just { time } ->
+                    shortDateAndTimeString zone time
+
+        winString =
+            case winner of
+                NoWinner ->
+                    "No winner"
+
+                WhiteWinner reason ->
+                    "white won " ++ winReasonToDescription reason
+
+                BlackWinner reason ->
+                    "black won " ++ winReasonToDescription reason
+    in
+    option
+        [ value <| String.fromInt index
+        , selected <| Just index == currentIndex
+        ]
+        [ text <|
+            (white ++ " vs. " ++ black)
+                ++ (if timeString == "" then
+                        ""
+
+                    else
+                        ", " ++ timeString
+                   )
+                ++ (", " ++ winString)
         ]
 
 
@@ -4837,6 +4939,21 @@ dateAndTimeFormat =
     ]
 
 
+shortDateAndTimeFormat : Format
+shortDateAndTimeFormat =
+    [ DateFormat.dayOfMonthNumber
+    , DateFormat.text "/"
+    , DateFormat.monthNumber
+    , DateFormat.text "/"
+    , DateFormat.yearNumberLastTwo
+    , DateFormat.text " "
+    , DateFormat.hourNumber
+    , DateFormat.text ":"
+    , DateFormat.minuteFixed
+    , DateFormat.amPmLowercase
+    ]
+
+
 formatPosix : Zone -> Format -> Posix -> String
 formatPosix zone format posix =
     DateFormat.format format zone posix
@@ -4850,6 +4967,11 @@ formatUtc format posix =
 dateAndTimeString : Zone -> Posix -> String
 dateAndTimeString zone posix =
     formatPosix zone dateAndTimeFormat posix
+
+
+shortDateAndTimeString : Zone -> Posix -> String
+shortDateAndTimeString zone posix =
+    formatPosix zone shortDateAndTimeFormat posix
 
 
 sFormat : Format
