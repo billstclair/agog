@@ -458,6 +458,7 @@ type alias ArchivedGame =
     { moves : List OneMove
     , players : PlayerNames
     , winner : Winner
+    , initialBoard : Maybe InitialBoard
     }
 
 

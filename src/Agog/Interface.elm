@@ -35,6 +35,7 @@ import Agog.Types as Types
         , Color(..)
         , GameState
         , HulkAfterJump(..)
+        , InitialBoard
         , JumpSequence
         , Message(..)
         , MovesOrJumps(..)
@@ -1492,9 +1493,9 @@ updateScore gameState =
         }
 
 
-archiveGame : GameState -> ArchivedGame
-archiveGame { moves, players, winner } =
-    ArchivedGame moves players winner
+archiveGame : Maybe InitialBoard -> GameState -> ArchivedGame
+archiveGame initialBoard { moves, players, winner } =
+    ArchivedGame moves players winner initialBoard
 
 
 unarchiveGame : ArchivedGame -> GameState -> GameState

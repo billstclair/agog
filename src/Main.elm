@@ -324,6 +324,7 @@ type Msg
     | SetServerUrl String
     | SetGameid String
     | SetGameName GameName
+    | ReviewMoves Int
     | SetMoveIndex Int
     | SwitchGame GameName
     | RenameGame
@@ -343,6 +344,7 @@ type Msg
     | SetTestClear Bool
     | SetTestColor Color
     | SetTestPieceType String
+    | Reload
     | MaybeClearStorage
     | ClearStorage
     | Click ( Int, Int )
@@ -1517,7 +1519,8 @@ incomingMessageInternal interface maybeGame message model =
                             | gameState = gameState
                             , player = player
                             , archives =
-                                Interface.archiveGame gameState :: game.archives
+                                Interface.archiveGame gameState.initialBoard gameState
+                                    :: game.archives
                         }
                     , mdl2 |> withCmd cmd
                     )
@@ -2039,6 +2042,9 @@ update msg model =
                     -- cmd == Cmd.none
                     True
 
+                Reload ->
+                    False
+
                 MaybeClearStorage ->
                     False
 
@@ -2231,6 +2237,10 @@ updateInternal msg model =
         SetGameName gamename ->
             { model | gamename = gamename }
                 |> withNoCmd
+
+        ReviewMoves index ->
+            setMoveIndex (Debug.log "ReviewMoves" index)
+                { model | page = MainPage }
 
         SetMoveIndex index ->
             setMoveIndex index model
@@ -2690,6 +2700,9 @@ updateInternal msg model =
                     }
                         |> withNoCmd
 
+        Reload ->
+            model |> withCmd Navigation.reloadAndSkipCache
+
         MaybeClearStorage ->
             { model
                 | reallyClearStorage = True
@@ -2872,6 +2885,7 @@ setMoveIndex newIdx model =
                     { moves = moves
                     , players = gameState.players
                     , winner = NoWinner
+                    , initialBoard = gameState.initialBoard
                     }
                     gameState
 
@@ -4494,23 +4508,29 @@ mainPage bsize model =
                 []
             ]
         , footerParagraph
-        , let
-            really =
-                model.reallyClearStorage
+        , p []
+            [ let
+                really =
+                    model.reallyClearStorage
 
-            ( msg, label ) =
-                if really then
-                    ( ClearStorage, "Clear Storage Now!" )
+                ( msg, label ) =
+                    if really then
+                        ( ClearStorage, "Clear Storage Now!" )
 
-                else
-                    ( MaybeClearStorage, "Clear Storage!" )
-          in
-          p []
-            [ button
+                    else
+                        ( MaybeClearStorage, "Clear Storage!" )
+              in
+              button
                 [ onClick msg
                 , title "Clear Local Storage. Cannot be undone!"
                 ]
                 [ text label ]
+            , text " "
+            , button
+                [ onClick Reload
+                , title "Reload the page from the web server."
+                ]
+                [ text "Reload" ]
             ]
         ]
 
@@ -5021,11 +5041,79 @@ movesPage bsize model =
 
                 Just time ->
                     span []
-                        [ b "Total time: "
-                        , text <| hmsString True totalTime
+                        [ text <| dateAndTimeString model.zone time
                         , br
-                        , text <| dateAndTimeString model.zone time
+                        , b "Total time: "
+                        , text <| hmsString True totalTime
                         ]
+
+        ( winner, reason ) =
+            case gameState.winner of
+                NoWinner ->
+                    ( Nothing, WinByCapture )
+
+                WhiteWinner reas ->
+                    ( Just WhitePlayer, reas )
+
+                BlackWinner reas ->
+                    ( Just BlackPlayer, reas )
+
+        winString =
+            case winner of
+                Nothing ->
+                    "No winner, yet"
+
+                Just player ->
+                    let
+                        winnerName =
+                            if game.isLocal then
+                                case player of
+                                    WhitePlayer ->
+                                        "White"
+
+                                    BlackPlayer ->
+                                        "Black"
+
+                            else
+                                case player of
+                                    WhitePlayer ->
+                                        white
+
+                                    BlackPlayer ->
+                                        black
+
+                        reasonString =
+                            case reason of
+                                WinByCapture ->
+                                    "capture"
+
+                                WinBySanctum ->
+                                    "sanctum"
+
+                                WinByImmobilization ->
+                                    "immobilization"
+
+                                WinByResignation ->
+                                    "resignation"
+
+                        moveCnt =
+                            (List.length moves + 1) // 2 |> String.fromInt
+                    in
+                    winnerName ++ " won by " ++ reasonString ++ " in " ++ moveCnt
+
+        ( endReview, totalMoveCnt ) =
+            case model.showMove of
+                Nothing ->
+                    ( text "", List.length moves )
+
+                Just ( g, _ ) ->
+                    ( span []
+                        [ br
+                        , button [ onClick <| SetMoveIndex 0 ]
+                            [ text "End review" ]
+                        ]
+                    , List.length g.gameState.moves
+                    )
     in
     rulesDiv False
         [ rulesDiv True
@@ -5034,20 +5122,27 @@ movesPage bsize model =
             , p [] [ playButton ]
             , if game.isLocal then
                 p []
-                    [ gameTimeSpan ]
+                    [ gameTimeSpan
+                    , br
+                    , text winString
+                    , endReview
+                    ]
 
               else
                 p []
-                    [ b "White: "
+                    [ gameTimeSpan
+                    , br
+                    , b "White: "
                     , text white
                     , text ", "
                     , b "Black: "
                     , text black
-                    , span []
-                        [ br
-                        , gameTimeSpan
-                        ]
+                    , br
+                    , text winString
+                    , endReview
                     ]
+            , text "Click in the table see the board after that move"
+            , br
             , table
                 [ class "prettytable"
                 , style "color" "black"
@@ -5061,47 +5156,8 @@ movesPage bsize model =
                     , th chars.nbsp
                     ]
                 ]
-                    ++ List.indexedMap movesRow
+                    ++ List.indexedMap (movesRow totalMoveCnt)
                         (offsetMoves |> pairList)
-                    ++ (let
-                            ( winString, isResign ) =
-                                case List.head moves of
-                                    Nothing ->
-                                        ( "", False )
-
-                                    Just { winner } ->
-                                        let
-                                            winDescription color reason =
-                                                (color ++ " won by ")
-                                                    ++ winReasonToDescription reason
-                                        in
-                                        case winner of
-                                            NoWinner ->
-                                                ( "", False )
-
-                                            WhiteWinner reason ->
-                                                ( winDescription "White" reason
-                                                , reason == WinByResignation
-                                                )
-
-                                            BlackWinner reason ->
-                                                ( winDescription "Black" reason
-                                                , reason == WinByResignation
-                                                )
-                        in
-                        if winString == "" then
-                            [ text "" ]
-
-                        else
-                            [ tr []
-                                [ td
-                                    [ colspan 3
-                                    , alignCenterStyle
-                                    ]
-                                    [ text winString ]
-                                ]
-                            ]
-                       )
             , p [] [ playButton ]
             , footerParagraph
             ]
@@ -5113,8 +5169,8 @@ isEven x =
     x == x // 2 * 2
 
 
-movesRow : Int -> List OneMove -> Html Msg
-movesRow index moves =
+movesRow : Int -> Int -> List OneMove -> Html Msg
+movesRow moveCnt index moves =
     let
         ( maybeWhite, maybeBlack ) =
             case List.take 2 moves of
@@ -5126,12 +5182,34 @@ movesRow index moves =
 
                 _ ->
                     ( Nothing, Nothing )
+
+        beforeWhiteIdx =
+            moveCnt - 2 * index
+
+        whiteIdx =
+            if maybeWhite == Nothing then
+                beforeWhiteIdx
+
+            else
+                beforeWhiteIdx - 1
+
+        blackIdx =
+            if maybeBlack == Nothing then
+                whiteIdx
+
+            else
+                whiteIdx - 1
     in
     tr []
-        [ td [ alignCenterStyle ] [ text (String.fromInt <| index + 1) ]
+        [ td
+            [ alignCenterStyle
+            , onClick <| ReviewMoves beforeWhiteIdx
+            ]
+            [ text (String.fromInt <| index + 1) ]
         , td
             [ alignRightStyle
             , smallTextStyle
+            , onClick <| ReviewMoves beforeWhiteIdx
             ]
             [ case maybeWhite of
                 Nothing ->
@@ -5144,7 +5222,10 @@ movesRow index moves =
                     else
                         text <| hmsString False time
             ]
-        , td [ alignCenterStyle ]
+        , td
+            [ alignCenterStyle
+            , onClick <| ReviewMoves whiteIdx
+            ]
             [ case maybeWhite of
                 Nothing ->
                     text chars.nbsp
@@ -5152,7 +5233,10 @@ movesRow index moves =
                 Just white ->
                     text <| ED.oneMoveToPrettyString white
             ]
-        , td [ alignCenterStyle ]
+        , td
+            [ alignCenterStyle
+            , onClick <| ReviewMoves blackIdx
+            ]
             [ case maybeBlack of
                 Nothing ->
                     text chars.nbsp
@@ -5163,6 +5247,7 @@ movesRow index moves =
         , td
             [ alignRightStyle
             , smallTextStyle
+            , onClick <| ReviewMoves blackIdx
             ]
             [ case maybeBlack of
                 Nothing ->

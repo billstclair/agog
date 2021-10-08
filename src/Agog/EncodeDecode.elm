@@ -1711,13 +1711,14 @@ gameStateDecoder =
 encodeArchivedGame : ArchivedGame -> Value
 encodeArchivedGame gameState =
     let
-        { moves, players, winner } =
+        { moves, players, winner, initialBoard } =
             gameState
     in
     JE.object
         [ ( "moves", JE.list encodeOneMove moves )
         , ( "players", encodePlayerNames players )
         , ( "winner", encodeWinner winner )
+        , ( "initialBoard", encodeMaybe encodeInitialBoard initialBoard )
         ]
 
 
@@ -1727,6 +1728,7 @@ archivedGameDecoder =
         |> required "moves" (JD.list oneMoveDecoder)
         |> required "players" playerNamesDecoder
         |> required "winner" winnerDecoder
+        |> optional "initialBoard" (JD.nullable initialBoardDecoder) Nothing
 
 
 encodeRowCol : RowCol -> Value

@@ -193,7 +193,7 @@ If you check the "Sound" checkbox, you will hear a sound when pieces move. The s
 
 Your game state is remembered in your browser's "Local Storage" database. If you refresh the screen with a game in progress, it will attempt to reconnect to the server and resume the game.
 
-Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local").
+Sometimes, when I'm uncareful about an update, your game may get wedged. If it does that, "Resign" from an existing game, check the "Local" check-box, click the "Clear Storage!" button, twice, and hopefully you'll be back in business (after unchecking "Local"). To force a reload from the server, bringing a saved web app up to date, click the "Reload" button.
 """
           )
         , ( "SERVER CONNECTION"
@@ -236,6 +236,8 @@ Click on the underlined "Moves" heading to go to a page which displays the game'
         , ( "GAME REVIEW"
           , """
 You may review the board position earlier in the game. Click one of the left-pointing arrows ("|<" or "<") under the "Moves" line to enter review mode. The arrows will move up to under the orange or green instructions below the board, to make it less likely for them to be scrolled off the bottom of the screen. You will be informed if it becomes your turn during your review. You may return to play via the "End review" button or the "|>" link. Renaming, switching sessions, and creating new sessions remain active during the review, as does chat.
+
+During game review, the "Moves" page shows only the moves up to the review point, but it provides an "End review" button to show the entire game.
 """
           )
         , ( "MULTIPLE GAMES"
