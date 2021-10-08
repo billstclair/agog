@@ -1104,13 +1104,18 @@ incomingMessage interface message mdl =
         model =
             { mdl | reallyClearStorage = False }
 
-        ( isReviewing, reviewingGame, reviewingIndex ) =
+        ( ( isReviewing, isArchiving ), reviewingGame, reviewingIndex ) =
             case model.showMove of
                 Nothing ->
-                    ( False, Nothing, 0 )
+                    case model.showArchive of
+                        Nothing ->
+                            ( ( False, False ), Nothing, 0 )
+
+                        Just ( g, index ) ->
+                            ( ( False, True ), Just g, index )
 
                 Just ( g, index ) ->
-                    ( True, Just g, index )
+                    ( ( True, False ), Just g, index )
 
         ( gameIsBeingReviewed, ( maybeGame, ( model2, cmd2 ) ) ) =
             case Types.messageToGameid message of
@@ -1128,7 +1133,7 @@ incomingMessage interface message mdl =
                                     Just { game | interface = interface }
 
                         ( game3IsBeingReviewed, maybeGame3 ) =
-                            if not isReviewing then
+                            if not isReviewing && not isArchiving then
                                 ( False, maybeGame2 )
 
                             else
@@ -1153,7 +1158,12 @@ incomingMessage interface message mdl =
 
         Just game ->
             if gameIsBeingReviewed then
-                { model2 | showMove = Just ( game, reviewingIndex ) }
+                (if isReviewing then
+                    { model2 | showMove = Just ( game, reviewingIndex ) }
+
+                 else
+                    { model2 | showArchive = Just ( game, reviewingIndex ) }
+                )
                     |> withCmds [ cmd2, putGame game ]
 
             else
@@ -2917,7 +2927,49 @@ setMoveIndex newIdx model =
 
 setArchiveIndex : Int -> Model -> ( Model, Cmd Msg )
 setArchiveIndex index model =
-    model |> withNoCmd
+    let
+        ( game, currentIndex ) =
+            case model.showArchive of
+                Nothing ->
+                    ( model.game, -1 )
+
+                Just ( g, i ) ->
+                    ( g, i )
+    in
+    if index == currentIndex then
+        model |> withNoCmd
+
+    else if index == -1 then
+        { model
+            | game = game
+            , showArchive = Nothing
+            , showMove = Nothing
+        }
+            |> withNoCmd
+
+    else
+        case LE.getAt index game.archives of
+            Nothing ->
+                { model
+                    | game = game
+                    , showArchive = Nothing
+                    , showMove = Nothing
+                }
+                    |> withNoCmd
+
+            Just archivedGame ->
+                { model
+                    | game =
+                        { game
+                            | gameState =
+                                Interface.unarchiveGame archivedGame
+                                    game.gameState
+                        }
+                    , showArchive =
+                        Just ( game, index )
+                    , showMove = Nothing
+                }
+                    |> withNoCmd
 
 
 gameStateToTestModeInitialState : GameState -> TestModeInitialState
@@ -3633,13 +3685,18 @@ mainPage bsize model =
         { white, black } =
             liveGameState.players
 
-        ( isReviewing, liveGame ) =
-            case model.showMove of
+        ( ( isReviewingOrArchiving, isArchiving ), liveGame ) =
+            case model.showArchive of
                 Nothing ->
-                    ( False, game )
+                    case model.showMove of
+                        Nothing ->
+                            ( ( False, False ), game )
+
+                        Just ( g, _ ) ->
+                            ( ( True, False ), g )
 
                 Just ( g, _ ) ->
-                    ( True, g )
+                    ( ( True, True ), g )
 
         score =
             liveGameState.score
@@ -3648,7 +3705,11 @@ mainPage bsize model =
             liveGame.gameState
 
         reviewingMessage =
-            "You are reviewing the game. Click \"End review\" to resume play."
+            if isArchiving then
+                "You are reviewing an archived game. Click \"End archive\" to resume play."
+
+            else
+                "You are reviewing the game. Click \"End review\" to resume play."
 
         currentPlayer =
             if not liveGame.isLocal then
@@ -3670,7 +3731,7 @@ mainPage bsize model =
 
         ( playing, message, yourTurn ) =
             if not liveGame.isLive then
-                if isReviewing then
+                if isReviewingOrArchiving then
                     ( False
                     , ""
                     , False
@@ -3723,7 +3784,7 @@ mainPage bsize model =
                         let
                             ( prefixp, action, yourTurn2 ) =
                                 if corruptJumped == AskAsk || makeHulk == AskAsk then
-                                    if isReviewing then
+                                    if isReviewingOrArchiving then
                                         ( False
                                         , "It is your move"
                                         , True
@@ -3752,7 +3813,7 @@ mainPage bsize model =
                                     , False
                                     )
 
-                                else if isReviewing then
+                                else if isReviewingOrArchiving then
                                     ( False, "It is your move", True )
 
                                 else
@@ -3799,27 +3860,7 @@ mainPage bsize model =
             Types.typeToStyle model.styleType
 
         messageStyles =
-            [ style "color"
-                (if not yourTurn && (not playing || liveGameState.winner == NoWinner) then
-                    "green"
-
-                 else
-                    "orange"
-                )
-            , style "font-weight"
-                (if liveGameState.winner == NoWinner then
-                    "normal"
-
-                 else
-                    "bold"
-                )
-            , style "font-size" <|
-                if yourTurn then
-                    "125%"
-
-                else
-                    "100%"
-            ]
+            notificationStyles yourTurn playing liveGameState
 
         movesSpan =
             let
@@ -3845,14 +3886,19 @@ mainPage bsize model =
                         [ b "Moves:" ]
                     , text " "
                     , text moveText
-                    , if model.showMove == Nothing then
+                    , if not isReviewingOrArchiving then
                         text ""
 
                       else
                         span []
                             [ text " "
-                            , button [ onClick <| SetMoveIndex 0 ]
-                                [ text "End review" ]
+                            , if isArchiving then
+                                button [ onClick <| SetArchiveIndex "-1" ]
+                                    [ text "End archive" ]
+
+                              else
+                                button [ onClick <| SetMoveIndex 0 ]
+                                    [ text "End review" ]
                             ]
                     , br
                     , span [ boldWeight ]
@@ -3923,7 +3969,7 @@ mainPage bsize model =
                         [ text err
                         , br
                         ]
-            , if not isReviewing then
+            , if not isReviewingOrArchiving then
                 text ""
 
               else
@@ -3938,7 +3984,7 @@ mainPage bsize model =
                 span messageStyles
                     [ text message ]
             , br
-            , if not isReviewing then
+            , if not isReviewingOrArchiving then
                 text ""
 
               else
@@ -3974,7 +4020,7 @@ mainPage bsize model =
                       text label
                     ]
             , if corruptJumped == AskAsk || makeHulk == AskAsk then
-                if isReviewing then
+                if isReviewingOrArchiving then
                     text ""
 
                 else
@@ -4069,7 +4115,7 @@ mainPage bsize model =
 
               else
                 text ""
-            , if isReviewing then
+            , if isReviewingOrArchiving then
                 text ""
 
               else
@@ -4096,7 +4142,7 @@ mainPage bsize model =
                                 ]
                         ]
             , br
-            , if isReviewing then
+            , if isReviewingOrArchiving then
                 text ""
 
               else
@@ -4211,7 +4257,7 @@ mainPage bsize model =
                 ]
                 []
             , text " "
-            , if isReviewing then
+            , if isReviewingOrArchiving then
                 text ""
 
               else
@@ -4323,7 +4369,7 @@ mainPage bsize model =
                         )
                         []
                         model
-            , if isReviewing || not (game.isLocal || WhichServer.isLocal) then
+            , if isReviewingOrArchiving || not (game.isLocal || WhichServer.isLocal) then
                 text ""
 
               else
@@ -4415,22 +4461,28 @@ mainPage bsize model =
                                         ]
                                 ]
                     ]
-            , if isReviewing then
+            , if isReviewingOrArchiving && not isArchiving then
                 text ""
 
-              else if game.isLocal then
+              else if isArchiving then
                 div [ align "center" ]
                     [ b "Archives: "
                     , archiveSelector model
-                    , br
-                    , button
-                        [ onClick Disconnect
-                        , disabled <|
-                            (game.archives == [])
-                                && (gameState.score == Types.zeroScore)
-                        ]
-                        [ text "Clear Archive" ]
                     ]
+
+              else if game.isLocal then
+                if game.archives == [] then
+                    text ""
+
+                else
+                    div [ align "center" ]
+                        [ b "Archives: "
+                        , archiveSelector model
+                        , br
+                        , button
+                            [ onClick Disconnect ]
+                            [ text "Clear Archive" ]
+                        ]
 
               else
                 div [ align "center" ]
@@ -4562,6 +4614,31 @@ mainPage bsize model =
                 [ text "Reload" ]
             ]
         ]
+
+
+notificationStyles : Bool -> Bool -> GameState -> List (Attribute Msg)
+notificationStyles yourTurn playing gameState =
+    [ style "color"
+        (if not yourTurn && (not playing || gameState.winner == NoWinner) then
+            "green"
+
+         else
+            "orange"
+        )
+    , style "font-weight"
+        (if gameState.winner == NoWinner then
+            "normal"
+
+         else
+            "bold"
+        )
+    , style "font-size" <|
+        if yourTurn then
+            "125%"
+
+        else
+            "100%"
+    ]
 
 
 archiveSelector : Model -> Html Msg
@@ -5061,9 +5138,6 @@ movesPage bsize model =
         settings =
             model.settings
 
-        name =
-            settings.name
-
         game =
             model.game
 
@@ -5236,6 +5310,19 @@ movesPage bsize model =
                         ]
                     , List.length g.gameState.moves
                     )
+
+        liveGame =
+            case model.showArchive of
+                Just ( g, _ ) ->
+                    g
+
+                Nothing ->
+                    case model.showMove of
+                        Nothing ->
+                            model.game
+
+                        Just ( g, _ ) ->
+                            g
     in
     rulesDiv False
         [ rulesDiv True
@@ -5262,6 +5349,41 @@ movesPage bsize model =
                     , br
                     , text winString
                     , endReview
+                    , if not liveGame.isLive then
+                        text ""
+
+                      else
+                        let
+                            yourTurn =
+                                liveGame.gameState.whoseTurn == liveGame.player
+                        in
+                        span (notificationStyles yourTurn True liveGame.gameState)
+                            [ if model.showArchive == Nothing then
+                                text ""
+
+                              else
+                                span []
+                                    [ br
+                                    , text "This is an archived game."
+                                    ]
+                            , br
+                            , if yourTurn then
+                                text "It's your turn in the game."
+
+                              else
+                                let
+                                    players =
+                                        liveGame.gameState.players
+
+                                    name =
+                                        if liveGame.player == WhitePlayer then
+                                            players.black
+
+                                        else
+                                            players.white
+                                in
+                                text <| "Waiting for " ++ name ++ " to move"
+                            ]
                     ]
             , text "Click in the table see the board after that move"
             , br

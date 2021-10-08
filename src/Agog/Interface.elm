@@ -1499,10 +1499,10 @@ archiveGame { moves, players, winner, initialBoard } =
 
 
 unarchiveGame : ArchivedGame -> GameState -> GameState
-unarchiveGame { moves, players, winner } gameState =
+unarchiveGame { moves, players, winner, initialBoard } gameState =
     let
         ( firstTurn, aboard ) =
-            case gameState.initialBoard of
+            case initialBoard of
                 Nothing ->
                     ( WhitePlayer, Board.initial )
 
@@ -1514,6 +1514,7 @@ unarchiveGame { moves, players, winner } gameState =
     in
     { gameState
         | newBoard = board
+        , initialBoard = initialBoard
         , moves = moves
         , players = players
         , whoseTurn = whoseTurn
