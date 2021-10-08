@@ -3990,7 +3990,7 @@ mainPage bsize model =
             , if not liveGame.isLocal && liveGame.isLive then
                 span []
                     [ if white == "" || black == "" then
-                        text ""
+                        br
 
                       else
                         case Dict.get model.game.gamename model.chatDict of
