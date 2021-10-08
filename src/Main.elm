@@ -5354,7 +5354,7 @@ movesPage bsize model =
                     , br
                     , text winString
                     , endReview
-                    , if not liveGame.isLive then
+                    , if not liveGame.isLive || liveGame.gameState.winner /= NoWinner then
                         text ""
 
                       else
