@@ -4168,7 +4168,7 @@ mainPage bsize model =
                                     , ElmChat.styledInputBox [ id ids.chatInput ]
                                         []
                                         --width in chars
-                                        40
+                                        30
                                         --id
                                         "Send"
                                         ChatSend
@@ -4279,7 +4279,7 @@ mainPage bsize model =
 
                     DenyUndo msg ->
                         span []
-                            [ text "Denial sent: "
+                            [ text "Undo denial sent: "
                             , text <| maybeNoText msg
                             , br
                             ]
