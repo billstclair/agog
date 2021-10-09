@@ -220,6 +220,11 @@ You may resign on your turn by clicking the "Resign" button.
 When the game is over, either player may click the "New Game" button to start another game, with the white/black assignments reversed.
 """
           )
+        , ( "UNDO REQUESTS"
+          , """
+If you make a move by mistake, and are quick on the draw, you may request that your opponent allow you to undo the move. To do that, optionally enter some text in the "Undo request" box, and press the "Send" button (or the Return/Enter key on your keyboard). Your opponent will be informed of your request and will be able to accept it, deny it, or ignore it by making a move. If your opponent requests an undo you'll see his request message on a line labelled "Undo requested". To accept the undo, click the "Accept" button, the move will be undone, and it will be your opponent's turn again. To deny it, optionally fill in the "Deny undo" box, and press the "Send" button (or the Return/Enter key on your keyboard). Your opponent will be notified of your denial.
+"""
+          )
         , ( "MOVE RECORDING"
           , """
 The previous four moves will be shown in the "Moves" line. They are encoded with ALL the information, more verbose than the standard move encoding described in the "SCOREKEEPING" section of the "Rules" page. If the move begins with an "n", then it is NOT unique, meaning that another piece could have moved to the same destination.

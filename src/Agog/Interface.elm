@@ -540,7 +540,21 @@ generalMessageProcessorInternal isProxyServer state message =
                     Debug.log "PlayReq Err" res
 
                 Ok ( gameid, gameState, player ) ->
-                    if not isProxyServer && gameState.winner == NoWinner && gameState.whoseTurn /= player then
+                    let
+                        isRequestUndo =
+                            case placement of
+                                ChooseRequestUndo _ ->
+                                    True
+
+                                _ ->
+                                    False
+                    in
+                    if
+                        not isProxyServer
+                            && (gameState.winner == NoWinner)
+                            && (not isRequestUndo && gameState.whoseTurn /= player)
+                            || (isRequestUndo && gameState.whoseTurn == player)
+                    then
                         errorRes message state "It's not your turn."
 
                     else

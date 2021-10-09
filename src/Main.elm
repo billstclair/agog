@@ -59,6 +59,7 @@ import Agog.Types as Types
         , PlayerNames
         , PublicGame
         , PublicType(..)
+        , RequestUndo(..)
         , RotateBoard(..)
         , RowCol
         , SavedModel
@@ -292,6 +293,8 @@ type alias Model =
     , rotate : RotateBoard
     , notificationsEnabled : Bool
     , soundEnabled : Bool
+    , requestUndoMessage : String
+    , denyUndoMessage : String
     }
 
 
@@ -319,6 +322,11 @@ type Msg
     | SetRotate RotateBoard
     | SetIsLocal Bool
     | SetDarkMode Bool
+    | SetRequestUndoMessage String
+    | SetDenyUndoMessage String
+    | SendRequestUndo
+    | SendAcceptUndo
+    | SendDenyUndo
     | SetName String
     | SetIsPublic Bool
     | SetForName String
@@ -602,6 +610,8 @@ init flags url key =
             , rotate = RotateWhiteDown
             , notificationsEnabled = False
             , soundEnabled = False
+            , requestUndoMessage = ""
+            , denyUndoMessage = ""
             }
     in
     model
@@ -1021,6 +1031,8 @@ modelToSavedModel model =
     , rotate = model.rotate
     , notificationsEnabled = model.notificationsEnabled
     , soundEnabled = model.soundEnabled
+    , requestUndoMessage = model.requestUndoMessage
+    , denyUndoMessage = model.denyUndoMessage
     }
 
 
@@ -1042,6 +1054,8 @@ savedModelToModel savedModel model =
         , rotate = savedModel.rotate
         , notificationsEnabled = savedModel.notificationsEnabled
         , soundEnabled = savedModel.soundEnabled
+        , requestUndoMessage = savedModel.requestUndoMessage
+        , denyUndoMessage = savedModel.denyUndoMessage
     }
 
 
@@ -2003,6 +2017,19 @@ onKeydown tagger =
     on "keydown" (JD.map tagger keyCode)
 
 
+onEnter : Msg -> Attribute Msg
+onEnter msg =
+    let
+        tagger keycode =
+            if keycode == 13 then
+                msg
+
+            else
+                Noop
+    in
+    onKeydown tagger
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
@@ -2211,6 +2238,59 @@ updateInternal msg model =
                           else
                             Cmd.none
                         ]
+
+        SetRequestUndoMessage message ->
+            { model
+                | requestUndoMessage = message
+                , denyUndoMessage = ""
+            }
+                |> withNoCmd
+
+        SetDenyUndoMessage message ->
+            { model
+                | denyUndoMessage = message
+                , requestUndoMessage = ""
+            }
+                |> withNoCmd
+
+        SendRequestUndo ->
+            { model
+                | requestUndoMessage = ""
+                , denyUndoMessage = ""
+            }
+                |> withCmd
+                    (send game.interface <|
+                        PlayReq
+                            { playerid = game.playerid
+                            , placement = ChooseRequestUndo model.requestUndoMessage
+                            }
+                    )
+
+        SendAcceptUndo ->
+            { model
+                | requestUndoMessage = ""
+                , denyUndoMessage = ""
+            }
+                |> withCmd
+                    (send game.interface <|
+                        PlayReq
+                            { playerid = game.playerid
+                            , placement = ChooseAcceptUndo
+                            }
+                    )
+
+        SendDenyUndo ->
+            { model
+                | denyUndoMessage = ""
+                , requestUndoMessage = ""
+            }
+                |> withCmd
+                    (send game.interface <|
+                        PlayReq
+                            { playerid = game.playerid
+                            , placement = ChooseDenyUndo model.denyUndoMessage
+                            }
+                    )
 
         SetDarkMode darkMode ->
             let
@@ -3670,6 +3750,15 @@ winReasonToDescription reason =
             "by resignation"
 
 
+maybeNoText : String -> String
+maybeNoText msg =
+    if msg == "" then
+        "[no text]"
+
+    else
+        msg
+
+
 mainPage : Int -> Model -> Html Msg
 mainPage bsize model =
     let
@@ -4147,6 +4236,74 @@ mainPage bsize model =
                                 ]
                         ]
             , br
+            , if isReviewingOrArchiving || not game.isLive then
+                text ""
+
+              else if not yourTurn then
+                span []
+                    [ b "Undo request: "
+                    , input
+                        [ onInput SetRequestUndoMessage
+                        , value model.requestUndoMessage
+                        , size 20
+                        , onEnter SendRequestUndo
+                        ]
+                        []
+                    , text " "
+                    , button [ onClick SendRequestUndo ]
+                        [ text "Send" ]
+                    , case gameState.requestUndo of
+                        NoRequestUndo ->
+                            text ""
+
+                        RequestUndo msg ->
+                            span []
+                                [ br
+                                , b "Undo request sent: "
+                                , text <| maybeNoText msg
+                                ]
+
+                        DenyUndo msg ->
+                            span []
+                                [ br
+                                , b "Denied: "
+                                , text <| maybeNoText msg
+                                ]
+                    , br
+                    ]
+
+              else
+                case gameState.requestUndo of
+                    NoRequestUndo ->
+                        text ""
+
+                    DenyUndo msg ->
+                        span []
+                            [ text "Denial sent: "
+                            , text <| maybeNoText msg
+                            , br
+                            ]
+
+                    RequestUndo msg ->
+                        span []
+                            [ b "Undo requested: "
+                            , text <| maybeNoText msg ++ " "
+                            , button [ onClick SendAcceptUndo ]
+                                [ text "Accept" ]
+                            , br
+                            , b "Deny undo: "
+                            , input
+                                [ onInput SetDenyUndoMessage
+                                , value model.denyUndoMessage
+                                , size 20
+                                , onEnter SendDenyUndo
+                                ]
+                                []
+                            , text " "
+                            , button [ onClick SendDenyUndo ]
+                                [ text "Send" ]
+                            , br
+                            ]
             , if isReviewingOrArchiving then
                 text ""
 
@@ -4559,14 +4716,7 @@ mainPage bsize model =
                                 [ onInput SetGameid
                                 , value model.gameid
                                 , size 16
-                                , onKeydown
-                                    (\code ->
-                                        if code == 13 then
-                                            Join
-
-                                        else
-                                            Noop
-                                    )
+                                , onEnter Join
                                 ]
                                 []
                             , text " "

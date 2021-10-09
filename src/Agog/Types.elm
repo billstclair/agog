@@ -311,6 +311,8 @@ type alias SavedModel =
     , rotate : RotateBoard
     , notificationsEnabled : Bool
     , soundEnabled : Bool
+    , requestUndoMessage : String
+    , denyUndoMessage : String
     }
 
 
@@ -428,7 +430,6 @@ type alias InitialBoard =
 type RequestUndo
     = NoRequestUndo
     | RequestUndo String
-    | AcceptUndo
     | DenyUndo String
 
 

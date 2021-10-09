@@ -231,6 +231,8 @@ encodeSavedModel model =
         , ( "rotate", encodeRotateBoard model.rotate )
         , ( "notificationsEnabled", JE.bool model.notificationsEnabled )
         , ( "soundEnabled", JE.bool model.soundEnabled )
+        , ( "requestUndoMessage", JE.string model.requestUndoMessage )
+        , ( "denyUndoMessage", JE.string model.denyUndoMessage )
         ]
 
 
@@ -253,6 +255,8 @@ savedModelDecoder =
         |> optional "rotate" boardRotateDecoder RotateWhiteDown
         |> optional "notificationsEnabled" JD.bool False
         |> optional "soundEnabled" JD.bool False
+        |> optional "requestUndoMessage" JD.string ""
+        |> optional "denyUndoMessage" JD.string ""
 
 
 encodePage : Page -> Value
@@ -1669,9 +1673,6 @@ encodeRequestUndo requestUndo =
                 , ( "message", JE.string message )
                 ]
 
-        AcceptUndo ->
-            JE.string "AcceptUndo"
-
         DenyUndo message ->
             JE.object
                 [ ( "requestUndo", JE.string "deny" )
@@ -1687,9 +1688,6 @@ requestUndoDecoder =
                 (\s ->
                     if s == "NoRequestUndo" then
                         JD.succeed NoRequestUndo
-
-                    else if s == "AcceptUndo" then
-                        JD.succeed AcceptUndo
 
                     else
                         JD.fail <| "Unknown RequestUndo string" ++ s

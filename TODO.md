@@ -6,6 +6,8 @@
 1. S3 persistence
 1. Watchers, can chat, but don't play.
 1. Periodic "Update" commands sent over wire. In case we miss a message.
+1. Store version in app and web site. Periodically compare and notify if
+   updated code available.
 1. "-- New Session --" copies all session state except connection.
 1. ErrorRsp should explicitly encode the xxxReq it came from,
    and include a real Error field, so that code can respond intelligently.
