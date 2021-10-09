@@ -1,7 +1,5 @@
 # AGOG TODO
 
-1. Save moves from all games in session.
-   Done. Need a UI for viewing the archives.
 1. Multiple simultaneous games: alerts for activity in off-screen games.
    Click goes to off-screen game.
 1. "Request Undo" button. If opponent approves, undoes the move.

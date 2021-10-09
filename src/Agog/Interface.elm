@@ -48,6 +48,7 @@ import Agog.Types as Types
         , Player(..)
         , PlayerNames
         , PublicType(..)
+        , RequestUndo(..)
         , RowCol
         , Score
         , ServerState
@@ -91,6 +92,7 @@ emptyGameState players =
     , jumps = []
     , score = Types.zeroScore
     , winner = NoWinner
+    , requestUndo = NoRequestUndo
     , testMode = Nothing
     , testModeInitialState = Nothing
     , private = Types.emptyPrivateGameState
@@ -567,7 +569,10 @@ generalMessageProcessorInternal isProxyServer state message =
                                                 emptyGameState players
 
                                             gs2 =
-                                                { gs | score = gameState.score }
+                                                { gs
+                                                    | score = gameState.score
+                                                    , requestUndo = NoRequestUndo
+                                                }
 
                                             state2 =
                                                 if player == newPlayer then
@@ -612,6 +617,85 @@ generalMessageProcessorInternal isProxyServer state message =
                                                 }
                                         )
 
+                            ChooseRequestUndo msg ->
+                                if player == gameState.whoseTurn then
+                                    errorRes message state "You may not request to undo the other player's move."
+
+                                else if gameState.moves == [] then
+                                    errorRes message state "There is nothing to undo."
+
+                                else
+                                    let
+                                        gs =
+                                            { gameState
+                                                | requestUndo =
+                                                    RequestUndo msg
+                                            }
+                                    in
+                                    ( ServerInterface.updateGame gameid gs state
+                                    , Just <|
+                                        PlayRsp
+                                            { gameid = gameid
+                                            , gameState = gs
+                                            }
+                                    )
+
+                            ChooseAcceptUndo ->
+                                if player /= gameState.whoseTurn then
+                                    errorRes message state "You may only accept an undo request during your turn."
+
+                                else
+                                    case gameState.requestUndo of
+                                        RequestUndo _ ->
+                                            let
+                                                gs =
+                                                    unarchiveGame
+                                                        { moves = List.drop 1 gameState.moves
+                                                        , players = gameState.players
+                                                        , winner = gameState.winner
+                                                        , initialBoard = gameState.initialBoard
+                                                        }
+                                                        { gameState
+                                                            | requestUndo =
+                                                                NoRequestUndo
+                                                        }
+                                            in
+                                            ( ServerInterface.updateGame gameid gs state
+                                            , Just <|
+                                                PlayRsp
+                                                    { gameid = gameid
+                                                    , gameState = gs
+                                                    }
+                                            )
+
+                                        _ ->
+                                            errorRes message state "There was no undo reqeust."
+
+                            ChooseDenyUndo msg ->
+                                if player /= gameState.whoseTurn then
+                                    errorRes message state "You may only deny an undo request during your turn."
+
+                                else
+                                    case gameState.requestUndo of
+                                        RequestUndo _ ->
+                                            let
+                                                gs =
+                                                    { gameState
+                                                        | requestUndo =
+                                                            DenyUndo msg
+                                                    }
+                                            in
+                                            ( ServerInterface.updateGame gameid gs state
+                                            , Just <|
+                                                PlayRsp
+                                                    { gameid = gameid
+                                                    , gameState = gs
+                                                    }
+                                            )
+
+                                        _ ->
+                                            errorRes message state "There was no undo request."
+
                             ChooseResign _ ->
                                 case gameState.winner of
                                     NoWinner ->
@@ -625,7 +709,10 @@ generalMessageProcessorInternal isProxyServer state message =
                                                         WhiteWinner WinByResignation
 
                                             gs =
-                                                { gameState | winner = winner }
+                                                { gameState
+                                                    | winner = winner
+                                                    , requestUndo = NoRequestUndo
+                                                }
                                                     |> populateWinnerInFirstMove time
 
                                             state2 =
@@ -1113,6 +1200,7 @@ chooseMove state message gameid gameState player rowCol option =
                             gs =
                                 { gameState
                                     | moves = move :: gameState.moves
+                                    , requestUndo = NoRequestUndo
                                 }
                                     |> endOfTurn selected rowCol piece option
 
@@ -1267,6 +1355,7 @@ chooseMove state message gameid gameState player rowCol option =
                                             { gameState
                                                 | newBoard = newBoard
                                                 , moves = moves
+                                                , requestUndo = NoRequestUndo
                                             }
 
                                         gs2 =
@@ -1310,6 +1399,7 @@ chooseMove state message gameid gameState player rowCol option =
                                                     Board.set selected Types.emptyPiece board
                                                         |> Board.set rowCol piece
                                                 , moves = moves
+                                                , requestUndo = NoRequestUndo
                                                 , selected = Just rowCol
                                                 , legalMoves = Jumps newSequences
                                                 , undoStates =

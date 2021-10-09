@@ -77,6 +77,7 @@ import Agog.Types as Types
         , PrivateGameState
         , PublicGame
         , PublicType(..)
+        , RequestUndo(..)
         , RotateBoard(..)
         , RowCol
         , SavedModel
@@ -1656,10 +1657,67 @@ initialBoardDecoder =
         |> required "whoseTurn" playerDecoder
 
 
+encodeRequestUndo : RequestUndo -> Value
+encodeRequestUndo requestUndo =
+    case requestUndo of
+        NoRequestUndo ->
+            JE.string "NoRequestUndo"
+
+        RequestUndo message ->
+            JE.object
+                [ ( "requestUndo", JE.string "request" )
+                , ( "message", JE.string message )
+                ]
+
+        AcceptUndo ->
+            JE.string "AcceptUndo"
+
+        DenyUndo message ->
+            JE.object
+                [ ( "requestUndo", JE.string "deny" )
+                , ( "message", JE.string message )
+                ]
+
+
+requestUndoDecoder : Decoder RequestUndo
+requestUndoDecoder =
+    JD.oneOf
+        [ JD.string
+            |> JD.andThen
+                (\s ->
+                    if s == "NoRequestUndo" then
+                        JD.succeed NoRequestUndo
+
+                    else if s == "AcceptUndo" then
+                        JD.succeed AcceptUndo
+
+                    else
+                        JD.fail <| "Unknown RequestUndo string" ++ s
+                )
+        , JD.field "requestUndo" JD.string
+            |> JD.andThen
+                (\s ->
+                    let
+                        tryit tag =
+                            JD.succeed tag
+                                |> required "message" JD.string
+                    in
+                    if s == "request" then
+                        tryit RequestUndo
+
+                    else if s == "deny" then
+                        tryit DenyUndo
+
+                    else
+                        JD.fail <| "Unknown RequestUndo type: " ++ s
+                )
+        ]
+
+
 encodeGameState : Bool -> GameState -> Value
 encodeGameState includePrivate gameState =
     let
-        { newBoard, initialBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, testMode, testModeInitialState } =
+        { newBoard, initialBoard, moves, players, whoseTurn, selected, jumperLocations, legalMoves, undoStates, jumps, score, winner, requestUndo, testMode, testModeInitialState } =
             gameState
 
         privateValue =
@@ -1682,6 +1740,7 @@ encodeGameState includePrivate gameState =
         , ( "jumps", encodeCorruptibleJumpSequence jumps )
         , ( "score", encodeScore score )
         , ( "winner", encodeWinner winner )
+        , ( "requestUndo", encodeRequestUndo requestUndo )
         , ( "testMode", encodeMaybe encodeTestMode testMode )
         , ( "testModeInitialState", encodeMaybe encodeTestModeInitialState testModeInitialState )
         , ( "private", privateValue )
@@ -1703,6 +1762,7 @@ gameStateDecoder =
         |> required "jumps" corruptibleJumpSequenceDecoder
         |> required "score" scoreDecoder
         |> required "winner" winnerDecoder
+        |> optional "requestUndo" requestUndoDecoder NoRequestUndo
         |> required "testMode" (JD.nullable testModeDecoder)
         |> optional "testModeInitialState" (JD.nullable testModeInitialStateDecoder) Nothing
         |> required "private" privateGameStateDecoder
@@ -1953,6 +2013,15 @@ encodeChoice choice =
             ChooseUndoJump undoWhichJumps ->
                 ( "ChooseUndoJump", encodeUndoWhichJumps undoWhichJumps )
 
+            ChooseRequestUndo message ->
+                ( "ChooseRequestUndo", JE.string message )
+
+            ChooseAcceptUndo ->
+                ( "ChooseAcceptUndo", JE.bool True )
+
+            ChooseDenyUndo message ->
+                ( "ChooseDenyUndo", JE.string message )
+
             ChooseResign player ->
                 ( "ChooseResign", encodePlayer player )
 
@@ -1979,6 +2048,12 @@ choiceDecoder =
                 ]
         , JD.field "ChooseUndoJump" undoWhichJumpsDecoder
             |> JD.andThen (ChooseUndoJump >> JD.succeed)
+        , JD.field "ChooseRequestUndo" JD.string
+            |> JD.andThen (ChooseRequestUndo >> JD.succeed)
+        , JD.field "ChooseAcceptUndo" JD.bool
+            |> JD.andThen (\_ -> JD.succeed ChooseAcceptUndo)
+        , JD.field "ChooseDenyUndo" JD.string
+            |> JD.andThen (ChooseDenyUndo >> JD.succeed)
         , JD.field "ChooseResign" playerDecoder
             |> JD.andThen (ChooseResign >> JD.succeed)
         , JD.field "ChooseNew" playerDecoder

@@ -38,6 +38,7 @@ module Agog.Types exposing
     , PrivateGameState
     , PublicGame
     , PublicType(..)
+    , RequestUndo(..)
     , RotateBoard(..)
     , RowCol
     , SavedModel
@@ -424,6 +425,13 @@ type alias InitialBoard =
     }
 
 
+type RequestUndo
+    = NoRequestUndo
+    | RequestUndo String
+    | AcceptUndo
+    | DenyUndo String
+
+
 type alias GameState =
     { newBoard : Board
     , initialBoard : Maybe InitialBoard
@@ -439,6 +447,7 @@ type alias GameState =
     , jumps : List OneCorruptibleJump
     , score : Score
     , winner : Winner
+    , requestUndo : RequestUndo
     , testMode : Maybe TestMode
     , testModeInitialState : Maybe TestModeInitialState
     , private : PrivateGameState --not sent over the wire
@@ -504,6 +513,9 @@ type Choice
     = ChoosePiece RowCol
     | ChooseMove RowCol ChooseMoveOption
     | ChooseUndoJump UndoWhichJumps
+    | ChooseRequestUndo String
+    | ChooseAcceptUndo
+    | ChooseDenyUndo String
     | ChooseResign Player
     | ChooseNew Player
 
