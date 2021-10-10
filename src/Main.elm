@@ -4322,7 +4322,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                localizedPlayerName game.player game
+                                localizedPlayerName (Types.otherPlayer game.player) game
 
                     --, br
                     ]

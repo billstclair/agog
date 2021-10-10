@@ -6,6 +6,9 @@
    Chat check-box for initial public game. Button to turn it on and off
    while playing.
    Indication of how many spectators there are.
+1. Background session notification needs work. It should have its own
+   `select` item to choose a session with activity since you were
+   last there.
 1. Public games are not subscribed if you start up on that page
    (same for Moves page?)
 1. Multiple simultaneous games: alerts for activity in off-screen games.
