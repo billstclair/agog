@@ -254,6 +254,11 @@ Multiple sessions are controlled via the line in the user interface beginning wi
 To the right of the "Rename" button is a select pop-up containing "-- New Session --" and each of your named games. To create a new game, with the "Session name" you typed, choose "-- New Session --". To switch to another named session, select it from the list.
 """
           )
+        , ( "WATCHING"
+          , """
+If you join a game by pasting its "Session ID" and pressing the "Join" button, and there are already two players, you will join as a non-playing member of the crowd watching the game. You will be able to chat, and review the current and archived games, but you will have no control over the game.
+"""
+          )
         , ( "ARCHIVES"
           , """
 Archives are kept of every game in a session. They appear in the "Archives" selector. You may choose one of them to review its moves. Click the "End Archive" button to stop reviewing. As with reviewing moves in the live game, while reviewing an archived game, you will be notified if it becomes your move in the live game, by larger orange text.

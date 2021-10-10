@@ -1338,29 +1338,31 @@ incomingMessageInternal interface maybeGame message model =
                         ( watcherName, player, error ) =
                             case participant of
                                 PlayingParticipant p ->
-                                    ( Nothing, p, Nothing )
+                                    ( game.watcherName, p, Nothing )
 
                                 CrowdParticipant name ->
+                                    let
+                                        forGame =
+                                            if game.gamename == model.game.gamename then
+                                                ""
+
+                                            else
+                                                " for hidden session "
+                                                    ++ game.gamename
+                                    in
                                     ( case playerid of
                                         Nothing ->
-                                            Nothing
+                                            game.watcherName
 
                                         _ ->
                                             Just name
                                     , WhitePlayer
                                     , if playerid /= Nothing then
-                                        Just "You have joined the crowd for the session."
+                                        Just <|
+                                            "You have joined the crowd"
+                                                ++ (forGame ++ ".")
 
                                       else
-                                        let
-                                            forGame =
-                                                if game.gamename == model.game.gamename then
-                                                    ""
-
-                                                else
-                                                    " for hidden session "
-                                                        ++ game.gamename
-                                        in
                                         Just <|
                                             ("New crowd member: " ++ name)
                                                 ++ (forGame ++ ".")
@@ -1427,6 +1429,7 @@ incomingMessageInternal interface maybeGame message model =
 
         LeaveRsp { gameid, participant } ->
             let
+                body : Game -> Player -> ( Maybe Game, ( Model, Cmd Msg ) )
                 body game player =
                     let
                         name =
@@ -1469,12 +1472,35 @@ incomingMessageInternal interface maybeGame message model =
                                 ]
                         )
 
-                err name =
-                    ( Nothing
+                err : Game -> String -> ( Maybe Game, ( Model, Cmd Msg ) )
+                err game name =
+                    let
+                        isYourGame =
+                            Just name == game.watcherName
+
+                        ( game2, needsUpdate ) =
+                            if isYourGame then
+                                ( { game
+                                    | gameid = ""
+                                    , playerid = ""
+                                    , otherPlayerid = ""
+                                    , isLive = False
+                                  }
+                                , True
+                                )
+
+                            else
+                                ( game, False )
+                    in
+                    ( if needsUpdate then
+                        Just game2
+
+                      else
+                        Nothing
                     , { model
                         | error =
-                            if isWatcher model then
-                                Just "You left the session."
+                            if isYourGame then
+                                Just "You left the crowd."
 
                             else
                                 Just <| "Crowd member left: " ++ name ++ "."
@@ -1484,7 +1510,7 @@ incomingMessageInternal interface maybeGame message model =
             in
             withRequiredGame gameid
                 (\game ->
-                    Interface.ensuringPlayer participant err <| body game
+                    Interface.ensuringPlayer participant (err game) (body game)
                 )
 
         UpdateRsp { gameid, gameState } ->
@@ -2427,7 +2453,7 @@ updateInternal msg model =
                 |> withNoCmd
 
         ReviewMoves index ->
-            setMoveIndex (Debug.log "ReviewMoves" index)
+            setMoveIndex index
                 { model | page = MainPage }
 
         SetMoveIndex index ->
