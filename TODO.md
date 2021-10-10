@@ -1,9 +1,16 @@
 # AGOG TODO
 
+1. Public sessions stay in the public games list until they end.
+   Spectators may join from there.
+   Separate table for active games.
+   Chat check-box for initial public game. Button to turn it on and off
+   while playing.
+   Indication of how many spectators there are.
+1. Public games are not subscribed if you start up on that page
+   (same for Moves page?)
 1. Multiple simultaneous games: alerts for activity in off-screen games.
-   Click goes to off-screen game.
+   Click brings off-screen game to the screen.
 1. S3 persistence
-1. Watchers, can chat, but don't play.
 1. Periodic "Update" commands sent over wire. In case we miss a message.
 1. Store version in app and web site. Periodically compare and notify if
    updated code available.

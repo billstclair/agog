@@ -1075,6 +1075,19 @@ playerName player game =
             players.black
 
 
+localizedPlayerName : Player -> Game -> String
+localizedPlayerName player game =
+    let
+        name =
+            playerName player game
+    in
+    if name == "" || game.isLocal || player /= game.player || game.watcherName /= Nothing then
+        name
+
+    else
+        "You (" ++ name ++ ")"
+
+
 findGame : (Game -> Bool) -> Model -> Maybe Game
 findGame predicate model =
     if predicate model.game then
@@ -3974,15 +3987,8 @@ mainPage bsize model =
                 let
                     winString player reason =
                         let
-                            rawName =
-                                playerName player liveGame
-
                             name =
-                                if liveGame.isLocal || player /= liveGame.player || inCrowd then
-                                    rawName
-
-                                else
-                                    "You (" ++ rawName ++ ")"
+                                localizedPlayerName player liveGame
                         in
                         name ++ " won " ++ winReasonToDescription reason ++ "!"
                 in
@@ -4011,7 +4017,7 @@ mainPage bsize model =
 
                                 else if inCrowd then
                                     ( False
-                                    , "You are watching this game, not playing"
+                                    , chars.watchingMessage
                                     , False
                                     )
 
@@ -4230,26 +4236,7 @@ mainPage bsize model =
               else
                 span []
                     [ b "Whose turn: "
-                    , let
-                        ( name, color ) =
-                            case gameState.whoseTurn of
-                                WhitePlayer ->
-                                    ( gameState.players.white, "white" )
-
-                                BlackPlayer ->
-                                    ( gameState.players.black, "black" )
-
-                        label =
-                            if game.isLocal then
-                                color
-
-                            else if game.player == gameState.whoseTurn && not inCrowd then
-                                "You (" ++ name ++ "), " ++ color
-
-                            else
-                                name ++ ", " ++ color
-                      in
-                      text label
+                    , text <| localizedPlayerName game.player game
                     ]
             , if corruptJumped == AskAsk || makeHulk == AskAsk then
                 if isReviewingOrArchiving then
@@ -4323,11 +4310,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                if game.player == WhitePlayer && not inCrowd then
-                                    "You (" ++ white ++ ")"
-
-                                else
-                                    white
+                                localizedPlayerName game.player game
                     , br
                     , b "Black: "
                     , text <|
@@ -4336,11 +4319,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                if game.player == BlackPlayer && not inCrowd then
-                                    "You (" ++ black ++ ")"
-
-                                else
-                                    black
+                                localizedPlayerName game.player game
 
                     --, br
                     ]
@@ -4472,11 +4451,10 @@ mainPage bsize model =
                             )
 
                         else
-                            ( "You ("
-                                ++ playerName player liveGame
-                                ++ ") won "
+                            ( localizedPlayerName player liveGame
+                                ++ " won "
                                 ++ String.fromInt yourWins
-                            , playerName otherPlayer liveGame
+                            , localizedPlayerName otherPlayer liveGame
                                 ++ " won "
                                 ++ String.fromInt (games - yourWins)
                             )
@@ -5206,7 +5184,12 @@ publicPage bsize model =
             , p [ align "center" ]
                 [ if game.isLive then
                     p [ style "color" "red" ]
-                        [ text "You're playing a game. What are you doing here?" ]
+                        [ if game.watcherName == Nothing then
+                            text "You're playing a game. What are you doing here?"
+
+                          else
+                            text "You're watching a live game. Disconnect to join a new one."
+                        ]
 
                   else
                     text ""
@@ -5225,7 +5208,7 @@ publicPage bsize model =
                             ]
                       ]
                     , List.map
-                        (renderPublicGameRow model.game.gameid name game.isLive)
+                        (renderPublicGameRow game.gameid name game.isLive)
                         model.publicGames
                     ]
             , playButton
@@ -5632,6 +5615,9 @@ movesPage bsize model =
 
                         Just ( g, _ ) ->
                             g
+
+        inCrowd =
+            liveGame.watcherName /= Nothing
     in
     rulesDiv False
         [ rulesDiv True
@@ -5663,8 +5649,11 @@ movesPage bsize model =
 
                       else
                         let
+                            whoseTurn =
+                                liveGame.gameState.whoseTurn
+
                             yourTurn =
-                                liveGame.gameState.whoseTurn == liveGame.player
+                                not inCrowd && whoseTurn == liveGame.player
                         in
                         span (notificationStyles yourTurn True liveGame.gameState)
                             [ if model.showArchive == Nothing then
@@ -5676,7 +5665,16 @@ movesPage bsize model =
                                     , text "This is an archived game."
                                     ]
                             , br
-                            , if yourTurn then
+                            , if inCrowd then
+                                span []
+                                    [ text chars.watchingMessage
+                                    , br
+                                    , text "It's "
+                                    , text <| playerName whoseTurn liveGame
+                                    , text "'s turn to move."
+                                    ]
+
+                              else if yourTurn then
                                 text "It's your turn in the game."
 
                               else
@@ -6031,6 +6029,7 @@ chars =
     , copyright = codestr 0xA9
     , nbsp = codestr 0xA0
     , mdash = codestr 0x2014
+    , watchingMessage = "You are watching this game, not playing."
     }
 
 
