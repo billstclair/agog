@@ -413,10 +413,10 @@ generalMessageProcessorInternal isProxyServer state message =
                         }
                 )
 
-        JoinReq { gameid, name, isRestore } ->
+        JoinReq { gameid, name, isRestore, inCrowd } ->
             case ServerInterface.getGame gameid state of
                 Nothing ->
-                    errorRes message state "Unknown session id"
+                    errorRes message state "Unknown session id. Try again when a player has joined."
 
                 Just gameState ->
                     let
@@ -426,13 +426,67 @@ generalMessageProcessorInternal isProxyServer state message =
                         { white, black } =
                             players
                     in
-                    if white /= "" && black /= "" then
-                        errorRes message state "Session already has two players"
-
-                    else if name == "" || name == white || name == black then
+                    if name == "" || name == white || name == black then
                         errorRes message
                             state
-                            ("Blank or existing name: " ++ name)
+                            ("Blank or existing name: \"" ++ name ++ "\"")
+
+                    else if (white /= "" && black /= "") || inCrowd then
+                        let
+                            nameExists ids =
+                                case ids of
+                                    [] ->
+                                        False
+
+                                    id :: tail ->
+                                        case ServerInterface.getPlayer id state of
+                                            Nothing ->
+                                                -- Can't happen
+                                                nameExists tail
+
+                                            Just playerInfo ->
+                                                case playerInfo.player of
+                                                    PlayingParticipant _ ->
+                                                        -- Checked above
+                                                        False
+
+                                                    CrowdParticipant idname ->
+                                                        if idname == name then
+                                                            True
+
+                                                        else
+                                                            nameExists tail
+                        in
+                        if nameExists <| ServerInterface.getGamePlayers gameid state then
+                            errorRes message state <|
+                                "Already a participant name: "
+                                    ++ name
+
+                        else
+                            let
+                                ( playerid, state2 ) =
+                                    ServerInterface.newPlayerid state
+
+                                participant =
+                                    CrowdParticipant name
+
+                                state3 =
+                                    ServerInterface.addPlayer playerid
+                                        { gameid = gameid
+                                        , player = participant
+                                        }
+                                        state2
+                            in
+                            ( state3
+                            , Just <|
+                                JoinRsp
+                                    { gameid = gameid
+                                    , playerid = Just playerid
+                                    , participant = participant
+                                    , gameState = gameState
+                                    , wasRestored = isRestore
+                                    }
+                            )
 
                     else
                         let
@@ -475,7 +529,7 @@ generalMessageProcessorInternal isProxyServer state message =
                             JoinRsp
                                 { gameid = gameid
                                 , playerid = Just playerid
-                                , player = player
+                                , participant = participant
                                 , gameState = gameState2
                                 , wasRestored = isRestore
                                 }
@@ -913,38 +967,40 @@ generalMessageProcessorInternal isProxyServer state message =
             )
 
         ChatReq { playerid, text } ->
-            let
-                body gameid gameState player =
-                    let
-                        players =
-                            gameState.players
-
-                        name =
-                            case player of
-                                WhitePlayer ->
-                                    players.white
-
-                                BlackPlayer ->
-                                    players.black
-                    in
-                    ( state
-                    , Just <|
-                        ChatRsp
-                            { gameid = gameid
-                            , name = name
-                            , text = text
-                            }
-                    )
-
-                err _ =
-                    notForPeonsError message state "ChatReq"
-            in
             case lookupGame message playerid state of
                 Err res ->
                     res
 
                 Ok ( gameid, gameState, participant ) ->
-                    ensuringPlayer participant err <| body gameid gameState
+                    let
+                        body name =
+                            ( state
+                            , Just <|
+                                ChatRsp
+                                    { gameid = gameid
+                                    , name = name
+                                    , text = text
+                                    }
+                            )
+                    in
+                    case participant of
+                        CrowdParticipant name ->
+                            body name
+
+                        PlayingParticipant player ->
+                            let
+                                players =
+                                    gameState.players
+
+                                name =
+                                    case player of
+                                        WhitePlayer ->
+                                            players.white
+
+                                        BlackPlayer ->
+                                            players.black
+                            in
+                            body name
 
         _ ->
             errorRes message state "Received a non-request."

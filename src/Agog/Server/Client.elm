@@ -326,6 +326,7 @@ validMessages model =
             { gameid = gameid
             , name = "Chris"
             , isRestore = False
+            , inCrowd = False
             }
         , newReq
         ]

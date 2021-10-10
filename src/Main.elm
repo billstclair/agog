@@ -513,6 +513,7 @@ initialGame seed =
     , serverUrl = WhichServer.serverUrl
     , otherPlayerid = ""
     , player = WhitePlayer
+    , watcherName = Nothing
     , playerid = ""
     , isLive = False
     , yourWins = 0
@@ -1300,6 +1301,7 @@ incomingMessageInternal interface maybeGame message model =
                                             { gameid = gameid
                                             , name = "Black"
                                             , isRestore = False
+                                            , inCrowd = False
                                             }
 
                                   else
@@ -1308,11 +1310,12 @@ incomingMessageInternal interface maybeGame message model =
                                             { gameid = gameid
                                             , name = "White"
                                             , isRestore = False
+                                            , inCrowd = False
                                             }
                                 ]
                         )
 
-        JoinRsp { gameid, playerid, player, gameState, wasRestored } ->
+        JoinRsp { gameid, playerid, participant, gameState, wasRestored } ->
             case maybeGame of
                 Nothing ->
                     ( Nothing
@@ -1332,17 +1335,51 @@ incomingMessageInternal interface maybeGame message model =
                             else
                                 model |> withNoCmd
 
+                        ( watcherName, player, error ) =
+                            case participant of
+                                PlayingParticipant p ->
+                                    ( Nothing, p, Nothing )
+
+                                CrowdParticipant name ->
+                                    ( case playerid of
+                                        Nothing ->
+                                            Nothing
+
+                                        _ ->
+                                            Just name
+                                    , WhitePlayer
+                                    , if playerid /= Nothing then
+                                        Just "You have joined the crowd for the session."
+
+                                      else
+                                        let
+                                            forGame =
+                                                if game.gamename == model.game.gamename then
+                                                    ""
+
+                                                else
+                                                    " for hidden session "
+                                                        ++ game.gamename
+                                        in
+                                        Just <|
+                                            ("New crowd member: " ++ name)
+                                                ++ (forGame ++ ".")
+                                    )
+
+                        newPlayer =
+                            if playerid == Nothing then
+                                game.player
+
+                            else
+                                player
+
                         game2 =
                             { game
                                 | gameid = gameid
                                 , gameState = gameState
                                 , isLive = True
-                                , player =
-                                    if playerid == Nothing then
-                                        game.player
-
-                                    else
-                                        player
+                                , player = newPlayer
+                                , watcherName = watcherName
                                 , yourWins = 0
                                 , interface = interface
                             }
@@ -1371,7 +1408,7 @@ incomingMessageInternal interface maybeGame message model =
                             updateGame game3.gamename (always game3) model2
 
                         msg =
-                            if game3.gamename == model.gamename then
+                            if game3.gamename == model.game.gamename then
                                 "The game is on!"
 
                             else
@@ -1380,7 +1417,7 @@ incomingMessageInternal interface maybeGame message model =
                                     ++ game3.gamename
                     in
                     ( Just game3
-                    , model3
+                    , { model3 | error = error }
                         |> withCmds
                             [ chatCmd
                             , setPage MainPage
@@ -1398,7 +1435,7 @@ incomingMessageInternal interface maybeGame message model =
                                 game
 
                         leftMsg =
-                            name ++ " left"
+                            name ++ " left" ++ "."
 
                         game2 =
                             { game
@@ -1435,7 +1472,12 @@ incomingMessageInternal interface maybeGame message model =
                 err name =
                     ( Nothing
                     , { model
-                        | error = Just <| "Crowd participant left: " ++ name
+                        | error =
+                            if isWatcher model then
+                                Just "You left the session."
+
+                            else
+                                Just <| "Crowd member left: " ++ name ++ "."
                       }
                         |> withNoCmd
                     )
@@ -1469,6 +1511,21 @@ incomingMessageInternal interface maybeGame message model =
 
                             else
                                 Cmd.none
+
+                        error =
+                            if game.watcherName == Nothing then
+                                Nothing
+
+                            else
+                                case gameState.requestUndo of
+                                    NoRequestUndo ->
+                                        Nothing
+
+                                    RequestUndo msg ->
+                                        Just <| "Undo requested: " ++ maybeNoText msg
+
+                                    DenyUndo msg ->
+                                        Just <| "Undo denied: " ++ maybeNoText msg
                     in
                     if not game.isLocal then
                         ( Just
@@ -1476,7 +1533,7 @@ incomingMessageInternal interface maybeGame message model =
                                 | gameState = gameState
                                 , yourWins = computeYourWins gameState model
                             }
-                        , model
+                        , { model | error = error }
                             |> withCmds
                                 [ maybeSendNotification
                                     game
@@ -1785,10 +1842,13 @@ notificationHandler response state mdl =
                 |> withNoCmd
 
 
+{-| TODO: properly notify crowd members on unshown session change.
+-}
 maybeSendNotification : Game -> Bool -> String -> Model -> Cmd Msg
 maybeSendNotification game ignoreWhoseTurn title model =
     if
         model.notificationsEnabled
+            && (game.watcherName == Nothing)
             && (ignoreWhoseTurn || game.gameState.whoseTurn == game.player)
             && not game.isLocal
             && not model.visible
@@ -1953,6 +2013,7 @@ processConnectionReason game connectionReason model =
                     { gameid = gameid
                     , name = model.settings.name
                     , isRestore = False
+                    , inCrowd = False
                     }
 
         PublicGamesConnection ->
@@ -1975,26 +2036,33 @@ processConnectionReason game connectionReason model =
                     { playerid = playerid }
 
         RestoreGameConnection localGame ->
-            let
-                player =
-                    localGame.player
+            case game.watcherName of
+                Just _ ->
+                    processConnectionReason game
+                        (JoinRestoredGameConnection game.gameid)
+                        model
 
-                name =
-                    playerName player localGame
-            in
-            if name == "" then
-                Cmd.none
+                Nothing ->
+                    let
+                        player =
+                            localGame.player
 
-            else
-                send interface <|
-                    NewReq
-                        { name = name
-                        , player = player
-                        , publicType = NotPublic
-                        , gamename = localGame.gamename
-                        , restoreState = Just localGame.gameState
-                        , maybeGameid = Just localGame.gameid
-                        }
+                        name =
+                            playerName player localGame
+                    in
+                    if name == "" then
+                        Cmd.none
+
+                    else
+                        send interface <|
+                            NewReq
+                                { name = name
+                                , player = player
+                                , publicType = NotPublic
+                                , gamename = localGame.gamename
+                                , restoreState = Just localGame.gameState
+                                , maybeGameid = Just localGame.gameid
+                                }
 
         JoinRestoredGameConnection gameid ->
             -- Errors are generated in ErrorRsp handler,
@@ -2005,8 +2073,13 @@ processConnectionReason game connectionReason model =
 
                 Just localGame ->
                     let
-                        name =
-                            playerName localGame.player localGame
+                        ( name, inCrowd ) =
+                            case game.watcherName of
+                                Nothing ->
+                                    ( playerName localGame.player localGame, False )
+
+                                Just n ->
+                                    ( n, True )
                     in
                     if name == "" then
                         Cmd.none
@@ -2017,6 +2090,7 @@ processConnectionReason game connectionReason model =
                                 { gameid = gameid
                                 , name = name
                                 , isRestore = True
+                                , inCrowd = inCrowd
                                 }
 
 
@@ -2144,6 +2218,11 @@ update msg model =
 showingArchiveOrMove : Model -> Bool
 showingArchiveOrMove model =
     model.showArchive /= Nothing || model.showMove /= Nothing
+
+
+isWatcher : Model -> Bool
+isWatcher model =
+    model.game.watcherName /= Nothing
 
 
 updateInternal : Msg -> Model -> ( Model, Cmd Msg )
@@ -2842,7 +2921,7 @@ updateInternal msg model =
                 |> withCmds [ clearStorage ]
 
         Click ( row, col ) ->
-            if showingArchiveOrMove model then
+            if showingArchiveOrMove model || isWatcher model then
                 model |> withNoCmd
 
             else if gameState.testMode /= Nothing then
@@ -3787,6 +3866,12 @@ mainPage bsize model =
         { white, black } =
             liveGameState.players
 
+        hasBothPlayers =
+            white /= "" && black /= ""
+
+        inCrowd =
+            game.watcherName /= Nothing
+
         ( ( isReviewingOrArchiving, isArchiving ), liveGame ) =
             case model.showArchive of
                 Nothing ->
@@ -3867,7 +3952,7 @@ mainPage bsize model =
                                 playerName player liveGame
 
                             name =
-                                if liveGame.isLocal || player /= liveGame.player then
+                                if liveGame.isLocal || player /= liveGame.player || inCrowd then
                                     rawName
 
                                 else
@@ -3897,6 +3982,12 @@ mainPage bsize model =
                                         , "follow the instructions in the orange-outlined box below"
                                         , True
                                         )
+
+                                else if inCrowd then
+                                    ( False
+                                    , "You are watching this game, not playing"
+                                    , False
+                                    )
 
                                 else if
                                     not liveGame.isLocal
@@ -3956,7 +4047,14 @@ mainPage bsize model =
                                 else
                                     ""
                         in
-                        ( True, prefix ++ action ++ ".", yourTurn2 )
+                        ( True
+                        , if action == "" then
+                            ""
+
+                          else
+                            prefix ++ action ++ "."
+                        , yourTurn2
+                        )
 
         theStyle =
             Types.typeToStyle model.styleType
@@ -4089,8 +4187,9 @@ mainPage bsize model =
 
               else
                 span messageStyles
-                    [ text message ]
-            , br
+                    [ text message
+                    , br
+                    ]
             , if not isReviewingOrArchiving then
                 text ""
 
@@ -4252,7 +4351,7 @@ mainPage bsize model =
             , if isReviewingOrArchiving || not game.isLive || gameState.winner /= NoWinner then
                 text ""
 
-              else if not yourTurn then
+              else if not yourTurn && hasBothPlayers then
                 span []
                     [ b "Undo request: "
                     , input
@@ -4432,7 +4531,7 @@ mainPage bsize model =
                 ]
                 []
             , text " "
-            , if isReviewingOrArchiving then
+            , if isReviewingOrArchiving || inCrowd then
                 text ""
 
               else
@@ -4544,7 +4643,7 @@ mainPage bsize model =
                         )
                         []
                         model
-            , if isReviewingOrArchiving || not (game.isLocal || WhichServer.isLocal) then
+            , if isReviewingOrArchiving || not (game.isLocal || WhichServer.isLocal) || inCrowd then
                 text ""
 
               else

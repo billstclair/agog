@@ -2225,11 +2225,12 @@ messageEncoderInternal includePrivate message =
               ]
             )
 
-        JoinReq { gameid, name, isRestore } ->
+        JoinReq { gameid, name, isRestore, inCrowd } ->
             ( Req "join"
             , [ ( "gameid", JE.string gameid )
               , ( "name", JE.string name )
               , ( "isRestore", JE.bool isRestore )
+              , ( "inCrowd", JE.bool inCrowd )
               ]
             )
 
@@ -2240,11 +2241,11 @@ messageEncoderInternal includePrivate message =
               ]
             )
 
-        JoinRsp { gameid, playerid, player, gameState, wasRestored } ->
+        JoinRsp { gameid, playerid, participant, gameState, wasRestored } ->
             ( Rsp "join"
             , [ ( "gameid", JE.string gameid )
               , ( "playerid", encodeMaybe JE.string playerid )
-              , ( "player", encodePlayer player )
+              , ( "participant", encodeParticipant participant )
               , ( "gameState", encodeGameState includePrivate gameState )
               , ( "wasRestored", JE.bool wasRestored )
               ]
@@ -2410,16 +2411,18 @@ newReqDecoder =
 joinReqDecoder : Decoder Message
 joinReqDecoder =
     JD.succeed
-        (\gameid name isRestore ->
+        (\gameid name isRestore inCrowd ->
             JoinReq
                 { gameid = gameid
                 , name = name
                 , isRestore = isRestore
+                , inCrowd = inCrowd
                 }
         )
         |> required "gameid" JD.string
         |> required "name" JD.string
         |> optional "isRestore" JD.bool False
+        |> optional "inCrowd" JD.bool False
 
 
 rejoinReqDecoder : Decoder Message
@@ -2524,18 +2527,18 @@ newRspDecoder =
 joinRspDecoder : Decoder Message
 joinRspDecoder =
     JD.succeed
-        (\gameid playerid player gameState wasRestored ->
+        (\gameid playerid participant gameState wasRestored ->
             JoinRsp
                 { gameid = gameid
                 , playerid = playerid
-                , player = player
+                , participant = participant
                 , gameState = gameState
                 , wasRestored = wasRestored
                 }
         )
         |> required "gameid" JD.string
         |> required "playerid" (JD.nullable JD.string)
-        |> required "player" playerDecoder
+        |> required "participant" participantDecoder
         |> required "gameState" gameStateDecoder
         |> optional "wasRestored" JD.bool False
 
@@ -2817,6 +2820,7 @@ encodeNamedGame game =
         , ( "serverUrl", JE.string game.serverUrl )
         , ( "otherPlayerid", JE.string game.otherPlayerid )
         , ( "player", encodePlayer game.player )
+        , ( "watcherName", encodeMaybe JE.string game.watcherName )
         , ( "playerid", JE.string game.playerid )
         , ( "isLive", JE.bool game.isLive )
         , ( "yourWins", JE.int game.yourWins )
@@ -2834,6 +2838,7 @@ namedGameDecoder proxyServer =
         |> required "serverUrl" JD.string
         |> required "otherPlayerid" JD.string
         |> required "player" playerDecoder
+        |> optional "watcherName" (JD.nullable JD.string) Nothing
         |> required "playerid" JD.string
         |> required "isLive" JD.bool
         |> required "yourWins" JD.int
@@ -2884,11 +2889,11 @@ messageToLogMessage message =
         ReJoinReq rec ->
             RejoinReqLog rec
 
-        JoinRsp { gameid, playerid, player, gameState, wasRestored } ->
+        JoinRsp { gameid, playerid, participant, gameState, wasRestored } ->
             JoinRspLog
                 { gameid = gameid
                 , playerid = playerid
-                , player = player
+                , participant = participant
                 , gameState = gameStateString gameState
                 , wasRestored = wasRestored
                 }

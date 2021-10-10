@@ -65,7 +65,6 @@ module Agog.Types exposing
     , emptyPrivateGameState
     , emptySettings
     , gameStateIsVerbose
-    , gamesEqual
     , lightStyle
     , maybeMakeHulkOption
     , messageToGameid
@@ -585,6 +584,7 @@ type Message
         { gameid : GameId
         , name : String
         , isRestore : Bool
+        , inCrowd : Bool
         }
     | ReJoinReq
         { gameid : GameId
@@ -593,7 +593,7 @@ type Message
     | JoinRsp
         { gameid : GameId
         , playerid : Maybe PlayerId
-        , player : Player
+        , participant : Participant
         , gameState : GameState
         , wasRestored : Bool
         }
@@ -783,6 +783,7 @@ type MessageForLog
         { gameid : GameId
         , name : String
         , isRestore : Bool
+        , inCrowd : Bool
         }
     | RejoinReqLog
         { gameid : GameId
@@ -791,7 +792,7 @@ type MessageForLog
     | JoinRspLog
         { gameid : GameId
         , playerid : Maybe PlayerId
-        , player : Player
+        , participant : Participant
         , gameState : String
         , wasRestored : Bool
         }
@@ -949,6 +950,7 @@ type alias NamedGame msg =
     , serverUrl : String
     , otherPlayerid : PlayerId
     , player : Player
+    , watcherName : Maybe String
     , playerid : PlayerId
     , isLive : Bool
     , yourWins : Int
@@ -958,19 +960,3 @@ type alias NamedGame msg =
     , interfaceIsProxy : Bool
     , interface : ServerInterface msg
     }
-
-
-{-| Should probably handle interface specially, since it's uncomparable
--}
-gamesEqual : NamedGame msg -> NamedGame msg -> Bool
-gamesEqual g1 g2 =
-    (g1.gamename == g2.gamename)
-        && (g1.gameid == g2.gameid)
-        && (g1.gameState == g2.gameState)
-        && (g1.isLocal == g2.isLocal)
-        && (g1.serverUrl == g2.serverUrl)
-        && (g1.otherPlayerid == g2.otherPlayerid)
-        && (g1.player == g2.player)
-        && (g1.playerid == g2.playerid)
-        && (g1.isLive == g2.isLive)
-        && (g1.yourWins == g2.yourWins)
