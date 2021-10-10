@@ -4386,8 +4386,10 @@ mainPage bsize model =
                         DenyUndo msg ->
                             span []
                                 [ br
-                                , b "Denied: "
-                                , text <| maybeNoText msg
+                                , span [ style "color" "red" ]
+                                    [ text "Denied: "
+                                    , text <| maybeNoText msg
+                                    ]
                                 ]
                     , br
                     ]
@@ -4406,8 +4408,10 @@ mainPage bsize model =
 
                     RequestUndo msg ->
                         span []
-                            [ b "Undo requested: "
-                            , text <| maybeNoText msg ++ " "
+                            [ span [ style "color" "red" ]
+                                [ text "Undo requested: "
+                                , text <| maybeNoText msg ++ " "
+                                ]
                             , button [ onClick SendAcceptUndo ]
                                 [ text "Accept" ]
                             , br
