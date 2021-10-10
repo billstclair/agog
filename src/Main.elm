@@ -4243,7 +4243,7 @@ mainPage bsize model =
                             if game.isLocal then
                                 color
 
-                            else if game.player == gameState.whoseTurn then
+                            else if game.player == gameState.whoseTurn && not inCrowd then
                                 "You (" ++ name ++ "), " ++ color
 
                             else
@@ -4323,7 +4323,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                if game.player == WhitePlayer then
+                                if game.player == WhitePlayer && not inCrowd then
                                     "You (" ++ white ++ ")"
 
                                 else
@@ -4336,7 +4336,7 @@ mainPage bsize model =
                                 ""
 
                             _ ->
-                                if game.player == BlackPlayer then
+                                if game.player == BlackPlayer && not inCrowd then
                                     "You (" ++ black ++ ")"
 
                                 else
@@ -4374,7 +4374,7 @@ mainPage bsize model =
                                 ]
                         ]
             , br
-            , if isReviewingOrArchiving || not game.isLive || gameState.winner /= NoWinner then
+            , if isReviewingOrArchiving || not game.isLive || gameState.winner /= NoWinner || inCrowd then
                 text ""
 
               else if not yourTurn && hasBothPlayers then
