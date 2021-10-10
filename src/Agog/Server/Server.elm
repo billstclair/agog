@@ -6,9 +6,11 @@ import Agog.Types as Types
     exposing
         ( GameState
         , Message(..)
+        , Participant(..)
         , Player
         , PlayerNames
         , PublicType(..)
+        , ServerState
         , SubscriptionSet
         )
 import Set exposing (Set)
@@ -35,11 +37,7 @@ import WebSocketFramework.Types
 
 
 type alias Model =
-    WebSocketFramework.Server.Model ServerModel Message GameState Player
-
-
-type alias ServerState =
-    WebSocketFramework.Types.ServerState GameState Player
+    WebSocketFramework.Server.Model ServerModel Message GameState Participant
 
 
 type alias ServerModel =
@@ -96,7 +94,7 @@ deathRowDuration =
     14 * 24 * 60 * 60 * 1000
 
 
-messageSender : ServerMessageSender ServerModel Message GameState Player
+messageSender : ServerMessageSender ServerModel Message GameState Participant
 messageSender mdl socket state request response =
     let
         time =
@@ -552,7 +550,7 @@ gamesDeleter model gameids state =
             )
 
 
-userFunctions : UserFunctions ServerModel Message GameState Player
+userFunctions : UserFunctions ServerModel Message GameState Participant
 userFunctions =
     { encodeDecode = encodeDecode
     , messageProcessor = Interface.messageProcessor
