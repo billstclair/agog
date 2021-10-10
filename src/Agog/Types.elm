@@ -38,6 +38,7 @@ module Agog.Types exposing
     , PlayerNames
     , PrivateGameState
     , PublicGame
+    , PublicGameAndPlayers
     , PublicType(..)
     , RequestUndo(..)
     , RotateBoard(..)
@@ -638,9 +639,11 @@ type Message
         , forName : String
         , gameid : Maybe GameId
         }
-    | PublicGamesRsp { games : List PublicGame }
+    | PublicGamesRsp
+        { games : List PublicGameAndPlayers
+        }
     | PublicGamesUpdateRsp
-        { added : List PublicGame
+        { added : List PublicGameAndPlayers
         , removed : List String
         }
     | StatisticsReq
@@ -673,6 +676,13 @@ type alias PublicGame =
     , creator : String
     , player : Player
     , forName : Maybe String
+    }
+
+
+type alias PublicGameAndPlayers =
+    { publicGame : PublicGame
+    , players : PlayerNames
+    , watchers : Int
     }
 
 
@@ -837,9 +847,9 @@ type MessageForLog
         , forName : String
         , gameid : Maybe GameId
         }
-    | PublicGamesRspLog { games : List PublicGame }
+    | PublicGamesRspLog { games : List PublicGameAndPlayers }
     | PublicGamesUpdateRspLog
-        { added : List PublicGame
+        { added : List PublicGameAndPlayers
         , removed : List String
         }
     | StatisticsReqLog

@@ -59,6 +59,7 @@ import Agog.Types as Types
         , Player(..)
         , PlayerNames
         , PublicGame
+        , PublicGameAndPlayers
         , PublicType(..)
         , RequestUndo(..)
         , RotateBoard(..)
@@ -268,7 +269,7 @@ type alias Model =
     , windowSize : ( Int, Int )
     , started : Bool --True when persistent storage is available
     , error : Maybe String
-    , publicGames : List PublicGame
+    , publicGames : List PublicGameAndPlayers
     , time : Posix
     , requestedNew : Bool
     , chooseMoveOptionsUI : ChooseMoveOptionsUI
@@ -1683,7 +1684,9 @@ incomingMessageInternal interface maybeGame message model =
             let
                 games =
                     List.filter
-                        (\{ gameid } -> not <| List.member gameid removed)
+                        (\pgaps ->
+                            not <| List.member pgaps.publicGame.gameid removed
+                        )
                         model.publicGames
             in
             ( Nothing
@@ -5217,9 +5220,12 @@ publicPage bsize model =
         ]
 
 
-renderPublicGameRow : String -> String -> Bool -> PublicGame -> Html Msg
-renderPublicGameRow myGameid name connected { gameid, creator, player, forName } =
+renderPublicGameRow : String -> String -> Bool -> PublicGameAndPlayers -> Html Msg
+renderPublicGameRow myGameid name connected { publicGame } =
     let
+        { gameid, creator, player, forName } =
+            publicGame
+
         center =
             style "text-align" "center"
     in

@@ -518,13 +518,37 @@ generalMessageProcessorInternal isProxyServer state message =
                                     gameState2
                                     state3
                                     |> bumpStatistic .activeGames
+
+                            removePublicGame =
+                                case
+                                    LE.find (\pg -> gameid == pg.gameid)
+                                        state4.publicGames
+                                of
+                                    Nothing ->
+                                        False
+
+                                    Just pg ->
+                                        -- Remove only undecodable and non-private "public" games.
+                                        case ED.frameworkToPublicGame pg of
+                                            Nothing ->
+                                                True
+
+                                            Just { forName } ->
+                                                forName /= Nothing
+
+                            state5 =
+                                if not removePublicGame then
+                                    state4
+
+                                else
+                                    { state4
+                                        | publicGames =
+                                            ServerInterface.removePublicGame
+                                                gameid
+                                                state4.publicGames
+                                    }
                         in
-                        ( { state4
-                            | publicGames =
-                                ServerInterface.removePublicGame
-                                    gameid
-                                    state4.publicGames
-                          }
+                        ( state5
                         , Just <|
                             JoinRsp
                                 { gameid = gameid
@@ -936,6 +960,23 @@ generalMessageProcessorInternal isProxyServer state message =
                                 else
                                     Nothing
                             )
+                        |> List.map
+                            (\publicGame ->
+                                { publicGame = publicGame
+                                , players =
+                                    case ServerInterface.getGame publicGame.gameid state of
+                                        Nothing ->
+                                            { white = "White"
+                                            , black = ""
+                                            }
+
+                                        Just gameState ->
+                                            gameState.players
+                                , watchers =
+                                    getCrowdParticipants publicGame.gameid state
+                                        |> List.length
+                                }
+                            )
             in
             ( state, Just <| PublicGamesRsp { games = games } )
 
@@ -1004,6 +1045,41 @@ generalMessageProcessorInternal isProxyServer state message =
 
         _ ->
             errorRes message state "Received a non-request."
+
+
+isCrowdParticipant : Participant -> Bool
+isCrowdParticipant participant =
+    case participant of
+        CrowdParticipant _ ->
+            True
+
+        _ ->
+            False
+
+
+isPlayingParticipant : Participant -> Bool
+isPlayingParticipant =
+    isCrowdParticipant >> not
+
+
+getGameParticipants : GameId -> Types.ServerState -> List Participant
+getGameParticipants gameid state =
+    ServerInterface.getGamePlayers gameid state
+        |> List.filterMap
+            (\playerid ->
+                case ServerInterface.getPlayer playerid state of
+                    Nothing ->
+                        Nothing
+
+                    Just info ->
+                        Just info.player
+            )
+
+
+getCrowdParticipants : GameId -> Types.ServerState -> List Participant
+getCrowdParticipants gameid state =
+    getGameParticipants gameid state
+        |> List.filter isCrowdParticipant
 
 
 updateJumperLocations : GameState -> GameState

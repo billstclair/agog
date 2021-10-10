@@ -391,7 +391,7 @@ sendNewRsp model state response socket =
 
                 Just gs ->
                     case response of
-                        NewRsp { gameid, player, name, publicType } ->
+                        NewRsp { gameid, player, name, publicType, gameState } ->
                             if publicType == NotPublic then
                                 []
 
@@ -410,10 +410,16 @@ sendNewRsp model state response socket =
                                                     Nothing
                                         }
 
+                                    publicGameAndPlayers =
+                                        { publicGame = publicGame
+                                        , players = gameState.players
+                                        , watchers = 0
+                                        }
+
                                     notification =
                                         sendToOne
                                             (PublicGamesUpdateRsp
-                                                { added = [ publicGame ]
+                                                { added = [ publicGameAndPlayers ]
                                                 , removed = []
                                                 }
                                             )

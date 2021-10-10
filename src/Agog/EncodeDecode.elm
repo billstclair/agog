@@ -21,6 +21,7 @@ module Agog.EncodeDecode exposing
     , encodeNamedGame
     , encodeOneMove
     , encodeParticipant
+    , encodePublicGameAndPlayers
     , encodeSavedModel
     , frameworkToPublicGame
     , gameStateDecoder
@@ -41,6 +42,7 @@ module Agog.EncodeDecode exposing
     , oneMovesToString
     , participantDecoder
     , pieceToString
+    , publicGameAndPlayersDecoder
     , publicGameToFramework
     , stringToBoard
     , stringToFromSlashOver
@@ -79,6 +81,7 @@ import Agog.Types as Types
         , PlayerNames
         , PrivateGameState
         , PublicGame
+        , PublicGameAndPlayers
         , PublicType(..)
         , RequestUndo(..)
         , RotateBoard(..)
@@ -2115,30 +2118,35 @@ publicGameDecoder =
         |> required "forName" (JD.nullable JD.string)
 
 
+encodePublicGameAndPlayers : PublicGameAndPlayers -> Value
+encodePublicGameAndPlayers { publicGame, players, watchers } =
+    JE.object
+        [ ( "publicGame", encodePublicGame publicGame )
+        , ( "players", encodePlayerNames players )
+        , ( "watchers", JE.int watchers )
+        ]
+
+
+publicGameAndPlayersDecoder : Decoder PublicGameAndPlayers
+publicGameAndPlayersDecoder =
+    JD.succeed PublicGameAndPlayers
+        |> required "publicGame" publicGameDecoder
+        |> required "players" playerNamesDecoder
+        |> required "watchers" JD.int
+
+
 publicGameToFramework : PublicGame -> WebSocketFramework.Types.PublicGame
-publicGameToFramework { gameid, creator, player, forName } =
-    { gameid = gameid
+publicGameToFramework publicGame =
+    { gameid = publicGame.gameid
     , playerName =
-        JE.object
-            [ ( "creator", JE.string creator )
-            , ( "player", encodePlayer player )
-            , ( "forName", encodeMaybe JE.string forName )
-            ]
+        encodePublicGame publicGame
             |> JE.encode 0
     }
 
 
 frameworkToPublicGame : WebSocketFramework.Types.PublicGame -> Maybe PublicGame
 frameworkToPublicGame { gameid, playerName } =
-    JD.decodeString
-        (JD.succeed
-            (\creator player forName ->
-                PublicGame gameid creator player forName
-            )
-            |> required "creator" JD.string
-            |> required "player" playerDecoder
-            |> required "forName" (JD.nullable JD.string)
-        )
+    JD.decodeString publicGameDecoder
         playerName
         |> Result.toMaybe
 
@@ -2329,7 +2337,7 @@ messageEncoderInternal includePrivate message =
 
         PublicGamesRsp { games } ->
             ( Rsp "publicGames"
-            , [ ( "games", JE.list encodePublicGame games )
+            , [ ( "games", JE.list encodePublicGameAndPlayers games )
               ]
             )
 
@@ -2341,7 +2349,7 @@ messageEncoderInternal includePrivate message =
                         []
 
                     games ->
-                        [ ( "added", JE.list encodePublicGame games ) ]
+                        [ ( "added", JE.list encodePublicGameAndPlayers games ) ]
                 , case removed of
                     [] ->
                         []
@@ -2655,11 +2663,34 @@ publicGamesReqDecoder =
 
 publicGamesRspDecoder : Decoder Message
 publicGamesRspDecoder =
-    JD.succeed
-        (\games ->
-            PublicGamesRsp { games = games }
-        )
-        |> required "games" (JD.list publicGameDecoder)
+    JD.oneOf
+        [ JD.succeed
+            (\games ->
+                PublicGamesRsp { games = games }
+            )
+            |> required "games" (JD.list publicGameAndPlayersDecoder)
+
+        -- backward compatability
+        , JD.succeed
+            (\games ->
+                let
+                    pgToPgap : PublicGame -> PublicGameAndPlayers
+                    pgToPgap publicGame =
+                        { publicGame = publicGame
+                        , players =
+                            { white = "White"
+                            , black = ""
+                            }
+                        , watchers = 0
+                        }
+                in
+                PublicGamesRsp
+                    { games =
+                        List.map pgToPgap games
+                    }
+            )
+            |> required "games" (JD.list publicGameDecoder)
+        ]
 
 
 publicGamesUpdateRspDecoder : Decoder Message
@@ -2671,7 +2702,7 @@ publicGamesUpdateRspDecoder =
                 , removed = removed
                 }
         )
-        |> optional "added" (JD.list publicGameDecoder) []
+        |> optional "added" (JD.list publicGameAndPlayersDecoder) []
         |> optional "removed" (JD.list JD.string) []
 
 
