@@ -4239,7 +4239,7 @@ mainPage bsize model =
               else
                 span []
                     [ b "Whose turn: "
-                    , text <| localizedPlayerName game.player game
+                    , text <| localizedPlayerName gameState.whoseTurn game
                     ]
             , if corruptJumped == AskAsk || makeHulk == AskAsk then
                 if isReviewingOrArchiving then
