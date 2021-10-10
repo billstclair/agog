@@ -31,6 +31,7 @@ module Agog.Types exposing
     , OneMoveSequence(..)
     , OneSlideRecord
     , Page(..)
+    , Participant(..)
     , Piece
     , PieceType(..)
     , Player(..)
@@ -149,11 +150,12 @@ type Player
 
 otherPlayer : Player -> Player
 otherPlayer player =
-    if player == WhitePlayer then
-        BlackPlayer
+    case player of
+        WhitePlayer ->
+            BlackPlayer
 
-    else
-        WhitePlayer
+        BlackPlayer ->
+            WhitePlayer
 
 
 playerColor : Player -> Color
@@ -164,6 +166,11 @@ playerColor player =
 
         BlackPlayer ->
             BlackColor
+
+
+type Participant
+    = PlayingParticipant Player
+    | CrowdParticipant String
 
 
 type WinReason
@@ -591,7 +598,7 @@ type Message
         , wasRestored : Bool
         }
     | LeaveReq { playerid : PlayerId }
-    | LeaveRsp { gameid : GameId, player : Player }
+    | LeaveRsp { gameid : GameId, participant : Participant }
       -- Disallowed if Agog.WhichServer.allowGameState is False
     | SetGameStateReq
         { playerid : PlayerId
@@ -789,7 +796,7 @@ type MessageForLog
         , wasRestored : Bool
         }
     | LeaveReqLog { playerid : PlayerId }
-    | LeaveRspLog { gameid : GameId, player : Player }
+    | LeaveRspLog { gameid : GameId, participant : Participant }
       -- Disallowed if Agog.WhichServer.allowGameState is False
     | SetGameStateReqLog
         { playerid : PlayerId
@@ -860,7 +867,7 @@ type MessageForLog
 
 
 type alias ServerState =
-    WebSocketFramework.Types.ServerState GameState Player
+    WebSocketFramework.Types.ServerState GameState Participant
 
 
 serverIsVerbose : ServerState -> Bool
@@ -922,7 +929,7 @@ statisticsKeyOrder =
 
 
 type alias ServerInterface msg =
-    WebSocketFramework.Types.ServerInterface GameState Player Message msg
+    WebSocketFramework.Types.ServerInterface GameState Participant Message msg
 
 
 type alias ChatSettings msg =

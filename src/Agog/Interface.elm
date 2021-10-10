@@ -15,6 +15,7 @@ module Agog.Interface exposing
     ( archiveGame
     , bumpStatistic
     , emptyGameState
+    , ensuringPlayer
     , forNameMatches
     , getStatisticsChanged
     , isFirstJumpTo
@@ -43,6 +44,7 @@ import Agog.Types as Types
         , OneJump
         , OneMove
         , OneMoveSequence(..)
+        , Participant(..)
         , Piece
         , PieceType(..)
         , Player(..)
@@ -110,13 +112,18 @@ errorRes message state text =
     )
 
 
+notForPeonsError : Message -> Types.ServerState -> String -> ( Types.ServerState, Maybe Message )
+notForPeonsError message state messageName =
+    errorRes message state <| messageName ++ " is not permitted to crowd participants."
+
+
 forNameMatches : String -> Maybe String -> Bool
 forNameMatches name1 name2 =
     (name1 |> String.toLower)
         == (Maybe.withDefault "" name2 |> String.toLower)
 
 
-lookupGame : Message -> PlayerId -> Types.ServerState -> Result ( Types.ServerState, Maybe Message ) ( GameId, GameState, Player )
+lookupGame : Message -> PlayerId -> Types.ServerState -> Result ( Types.ServerState, Maybe Message ) ( GameId, GameState, Participant )
 lookupGame message playerid state =
     let
         err text =
@@ -278,6 +285,16 @@ logSeed prefix state =
     state
 
 
+ensuringPlayer : Participant -> (String -> res) -> (Player -> res) -> res
+ensuringPlayer participant errorThunk thunk =
+    case participant of
+        PlayingParticipant player ->
+            thunk player
+
+        CrowdParticipant name ->
+            errorThunk name
+
+
 generalMessageProcessorInternal : Bool -> Types.ServerState -> Message -> ( Types.ServerState, Maybe Message )
 generalMessageProcessorInternal isProxyServer state message =
     let
@@ -342,7 +359,7 @@ generalMessageProcessorInternal isProxyServer state message =
                         ServerInterface.newPlayerid state2
 
                     playerInfo =
-                        { gameid = gameid, player = player }
+                        { gameid = gameid, player = PlayingParticipant player }
 
                     state4 =
                         ServerInterface.addGame gameid gameState state3
@@ -429,10 +446,13 @@ generalMessageProcessorInternal isProxyServer state message =
                             ( playerid, state2 ) =
                                 ServerInterface.newPlayerid state
 
+                            participant =
+                                PlayingParticipant player
+
                             state3 =
                                 ServerInterface.addPlayer playerid
                                     { gameid = gameid
-                                    , player = player
+                                    , player = participant
                                     }
                                     state2
 
@@ -462,11 +482,8 @@ generalMessageProcessorInternal isProxyServer state message =
                         )
 
         LeaveReq { playerid } ->
-            case lookupGame message playerid state of
-                Err res ->
-                    res
-
-                Ok ( gameid, gameState, player ) ->
+            let
+                body gameid gameState participant player =
                     let
                         players =
                             gameState.players
@@ -488,20 +505,34 @@ generalMessageProcessorInternal isProxyServer state message =
                     , Just <|
                         LeaveRsp
                             { gameid = gameid
-                            , player = player
+                            , participant = participant
                             }
                     )
+
+                err gameid participant _ =
+                    ( ServerInterface.removePlayer playerid state
+                    , Just <|
+                        LeaveRsp
+                            { gameid = gameid
+                            , participant = participant
+                            }
+                    )
+            in
+            case lookupGame message playerid state of
+                Err res ->
+                    res
+
+                Ok ( gameid, gameState, participant ) ->
+                    ensuringPlayer participant (err gameid participant) <|
+                        body gameid gameState participant
 
         SetGameStateReq { playerid, gameState } ->
             if not isProxyServer && not WhichServer.isLocal then
                 errorRes message state "SetGameStateReq is disabled."
 
             else
-                case lookupGame message playerid state of
-                    Err res ->
-                        res
-
-                    Ok ( gameid, _, _ ) ->
+                let
+                    body gameid player =
                         let
                             gs =
                                 gameState
@@ -520,12 +551,22 @@ generalMessageProcessorInternal isProxyServer state message =
                                 }
                         )
 
+                    err _ =
+                        notForPeonsError message state "SetGameStateReq"
+                in
+                case lookupGame message playerid state of
+                    Err res ->
+                        res
+
+                    Ok ( gameid, _, participant ) ->
+                        ensuringPlayer participant err <| body gameid
+
         UpdateReq { playerid } ->
             case lookupGame message playerid state of
                 Err res ->
                     res
 
-                Ok ( gameid, gameState, player ) ->
+                Ok ( gameid, gameState, _ ) ->
                     ( state
                     , Just <|
                         UpdateRsp
@@ -535,11 +576,8 @@ generalMessageProcessorInternal isProxyServer state message =
                     )
 
         PlayReq { playerid, placement } ->
-            case lookupGame message playerid state of
-                Err res ->
-                    Debug.log "PlayReq Err" res
-
-                Ok ( gameid, gameState, player ) ->
+            let
+                body gameid gameState player =
                     let
                         isRequestUndo =
                             case placement of
@@ -609,11 +647,14 @@ generalMessageProcessorInternal isProxyServer state message =
                                                                     else
                                                                         Types.otherPlayer
                                                                             newPlayer
+
+                                                                participant =
+                                                                    PlayingParticipant pl
                                                             in
                                                             ServerInterface.updatePlayer
                                                                 id
                                                                 { gameid = gameid
-                                                                , player = pl
+                                                                , player = participant
                                                                 }
                                                                 st
                                                     in
@@ -799,6 +840,16 @@ generalMessageProcessorInternal isProxyServer state message =
                             ChooseUndoJump undoWhichJumps ->
                                 chooseUndoJump state message gameid gameState undoWhichJumps
 
+                err _ =
+                    notForPeonsError message state "PlayReq"
+            in
+            case lookupGame message playerid state of
+                Err res ->
+                    Debug.log "PlayReq Err" res
+
+                Ok ( gameid, gameState, participant ) ->
+                    ensuringPlayer participant err <| body gameid gameState
+
         PublicGamesReq { subscribe, forName, gameid } ->
             -- subscribe is processed by the server code only
             let
@@ -862,11 +913,8 @@ generalMessageProcessorInternal isProxyServer state message =
             )
 
         ChatReq { playerid, text } ->
-            case lookupGame message playerid state of
-                Err res ->
-                    res
-
-                Ok ( gameid, gameState, player ) ->
+            let
+                body gameid gameState player =
                     let
                         players =
                             gameState.players
@@ -887,6 +935,16 @@ generalMessageProcessorInternal isProxyServer state message =
                             , text = text
                             }
                     )
+
+                err _ =
+                    notForPeonsError message state "ChatReq"
+            in
+            case lookupGame message playerid state of
+                Err res ->
+                    res
+
+                Ok ( gameid, gameState, participant ) ->
+                    ensuringPlayer participant err <| body gameid gameState
 
         _ ->
             errorRes message state "Received a non-request."

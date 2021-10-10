@@ -54,6 +54,7 @@ import Agog.Types as Types
         , OneMove
         , OneMoveSequence(..)
         , Page(..)
+        , Participant(..)
         , PieceType(..)
         , Player(..)
         , PlayerNames
@@ -413,7 +414,7 @@ errorMessageEncoder error =
         }
 
 
-fullProcessor : ServerMessageProcessor GameState Player Message
+fullProcessor : ServerMessageProcessor GameState Participant Message
 fullProcessor =
     ServerInterface.fullMessageProcessor encodeDecode Interface.proxyMessageProcessor
 
@@ -1387,9 +1388,9 @@ incomingMessageInternal interface maybeGame message model =
                             ]
                     )
 
-        LeaveRsp { gameid, player } ->
-            withRequiredGame gameid
-                (\game ->
+        LeaveRsp { gameid, participant } ->
+            let
+                body game player =
                     let
                         name =
                             playerName
@@ -1430,6 +1431,18 @@ incomingMessageInternal interface maybeGame message model =
                                     Cmd.none
                                 ]
                         )
+
+                err name =
+                    ( Nothing
+                    , { model
+                        | error = Just <| "Crowd participant left: " ++ name
+                      }
+                        |> withNoCmd
+                    )
+            in
+            withRequiredGame gameid
+                (\game ->
+                    Interface.ensuringPlayer participant err <| body game
                 )
 
         UpdateRsp { gameid, gameState } ->
@@ -4236,7 +4249,7 @@ mainPage bsize model =
                                 ]
                         ]
             , br
-            , if isReviewingOrArchiving || not game.isLive then
+            , if isReviewingOrArchiving || not game.isLive || gameState.winner /= NoWinner then
                 text ""
 
               else if not yourTurn then

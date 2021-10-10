@@ -2,7 +2,6 @@
 
 1. Multiple simultaneous games: alerts for activity in off-screen games.
    Click goes to off-screen game.
-1. "Request Undo" button. If opponent approves, undoes the move.
 1. S3 persistence
 1. Watchers, can chat, but don't play.
 1. Periodic "Update" commands sent over wire. In case we miss a message.

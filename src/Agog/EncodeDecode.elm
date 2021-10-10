@@ -20,6 +20,7 @@ module Agog.EncodeDecode exposing
     , encodeMoves
     , encodeNamedGame
     , encodeOneMove
+    , encodeParticipant
     , encodeSavedModel
     , frameworkToPublicGame
     , gameStateDecoder
@@ -38,6 +39,7 @@ module Agog.EncodeDecode exposing
     , oneMoveToPrettyString
     , oneMoveToString
     , oneMovesToString
+    , participantDecoder
     , pieceToString
     , publicGameToFramework
     , stringToBoard
@@ -70,6 +72,7 @@ import Agog.Types as Types
         , OneMoveSequence(..)
         , OneSlideRecord
         , Page(..)
+        , Participant(..)
         , Piece
         , PieceType(..)
         , Player(..)
@@ -336,6 +339,26 @@ playerDecoder =
                     _ ->
                         JD.fail <| "Unknown player: " ++ s
             )
+
+
+encodeParticipant : Participant -> Value
+encodeParticipant participant =
+    case participant of
+        PlayingParticipant player ->
+            JE.object [ ( "PlayingParticipant", encodePlayer player ) ]
+
+        CrowdParticipant name ->
+            JE.object [ ( "CrowdParticipant", JE.string name ) ]
+
+
+participantDecoder : Decoder Participant
+participantDecoder =
+    JD.oneOf
+        [ JD.succeed PlayingParticipant
+            |> required "PlayingParticipant" playerDecoder
+        , JD.succeed CrowdParticipant
+            |> required "CrowdParticipant" JD.string
+        ]
 
 
 winReasonToString : WinReason -> String
@@ -2232,10 +2255,10 @@ messageEncoderInternal includePrivate message =
             , [ ( "playerid", JE.string playerid ) ]
             )
 
-        LeaveRsp { gameid, player } ->
+        LeaveRsp { gameid, participant } ->
             ( Rsp "leave"
             , [ ( "gameid", JE.string gameid )
-              , ( "player", encodePlayer player )
+              , ( "participant", encodeParticipant participant )
               ]
             )
 
@@ -2519,15 +2542,28 @@ joinRspDecoder =
 
 leaveRspDecoder : Decoder Message
 leaveRspDecoder =
-    JD.succeed
-        (\gameid player ->
-            LeaveRsp
-                { gameid = gameid
-                , player = player
-                }
-        )
-        |> required "gameid" JD.string
-        |> required "player" playerDecoder
+    JD.oneOf
+        [ JD.succeed
+            (\gameid participant ->
+                LeaveRsp
+                    { gameid = gameid
+                    , participant = participant
+                    }
+            )
+            |> required "gameid" JD.string
+            |> required "participant" participantDecoder
+
+        -- Backward compatibility
+        , JD.succeed
+            (\gameid player ->
+                LeaveRsp
+                    { gameid = gameid
+                    , participant = PlayingParticipant player
+                    }
+            )
+            |> required "gameid" JD.string
+            |> required "player" playerDecoder
+        ]
 
 
 updateRspDecoder : Decoder Message
