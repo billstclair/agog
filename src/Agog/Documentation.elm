@@ -227,15 +227,9 @@ If you make a move by mistake, and are quick on the draw, you may request that y
           )
         , ( "MOVE RECORDING"
           , """
-The previous four moves will be shown in the "Moves" line. They are encoded with ALL the information, more verbose than the standard move encoding described in the "SCOREKEEPING" section of the "Rules" page. If the move begins with an "n", then it is NOT unique, meaning that another piece could have moved to the same destination.
+The previous four moves are shown in the "Moves" line, encoded as documented on the "Rules" page.
 
-A move is encoded with a letter for the piece, the from location, a dash, and the to location. White pieces get upper-case letters and black pieces get lower-case letters. For example, an opening move of a white golem from d3 to d4 is encoded as nGd3-d4.
-
-A jump is encoded with a letter for the piece, a from location, an x or +, for jump and remove or jump and convert to corrupted hulk, and a to location. Multiple jumps are denoted by more pairs of x or + and destionation location. For example, if the black journeyman on e6 jumps white golems on e5, e3, d2, and b2, converting the one on e5 to a corrupted hulk, the move will be represented as je6+e4xe2xc2xa2.
-
-The final move of the game ends with a win indicator, this is the "%" character, followed by W or B for white or black winning, followed by C, S, I, or R, for win by Capture, Sanctum, Immobilization, or Resignation.
-
-Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format.
+Click on the underlined "Moves" heading to go to a page which displays the game's moves in standard two-column format. Click on any move there to display the screen after that move, or navigate as described in "GAME REVIEW".
 """
           )
         , ( "GAME REVIEW"
@@ -252,6 +246,8 @@ You can play in multiple simultaneous sessions. Each of them will be remembered,
 Multiple sessions are controlled via the line in the user interface beginning with "Session name". It will normally show the name of the current session, which is "default" by default. If you change that, and press the "Rename" button, it will give the session that new name. If you clear it, the "Rename" button becomes "Delete" (unless there is only one session).
 
 To the right of the "Rename" button is a select pop-up containing "-- New Session --" and each of your named games. To create a new game, with the "Session name" you typed, choose "-- New Session --". To switch to another named session, select it from the list.
+
+I plan to add a notifications selector, keeping track of which off-screen sessions have new content you may be interested in.
 """
           )
         , ( "WATCHING"
