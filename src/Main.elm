@@ -257,6 +257,12 @@ type alias Game =
     NamedGame Msg
 
 
+type alias MessageQueueEntry =
+    { isSend : Bool
+    , message : Message
+    }
+
+
 type alias Model =
     { tick : Posix
     , zone : Zone
@@ -283,6 +289,7 @@ type alias Model =
     , soundFile : Maybe String
     , showArchive : Maybe ( Game, Int )
     , showMove : Maybe ( Game, Int )
+    , messageQueue : Fifo MessageQueueEntry
 
     -- persistent below here
     , gamename : String
@@ -320,6 +327,7 @@ type Msg
     = Noop
     | Tick Posix
     | IncomingMessage ServerInterface Message
+    | RecordMessage Bool Message
     | SetChooseFirst Player
     | SetRotate RotateBoard
     | SetIsLocal Bool
@@ -603,6 +611,7 @@ init flags url key =
             , soundFile = Nothing
             , showArchive = Nothing
             , showMove = Nothing
+            , messageQueue = Fifo.empty
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -2271,6 +2280,36 @@ update msg model =
             ]
 
 
+messageQueueLength : Int
+messageQueueLength =
+    20
+
+
+fifoLength : Fifo a -> Int
+fifoLength fifo =
+    List.length <| Fifo.toList fifo
+
+
+recordMessage : Bool -> Message -> Model -> Model
+recordMessage isSend message model =
+    let
+        queue =
+            if fifoLength model.messageQueue >= messageQueueLength then
+                let
+                    ( _, q ) =
+                        Fifo.remove model.messageQueue
+                in
+                q
+
+            else
+                model.messageQueue
+    in
+    { model
+        | messageQueue =
+            Fifo.insert (MessageQueueEntry isSend message) queue
+    }
+
+
 showingArchiveOrMove : Model -> Bool
 showingArchiveOrMove model =
     model.showArchive /= Nothing || model.showMove /= Nothing
@@ -2330,7 +2369,12 @@ updateInternal msg model =
                     )
 
         IncomingMessage interface message ->
-            incomingMessage interface message model
+            incomingMessage interface message <|
+                recordMessage False message model
+
+        RecordMessage isSend message ->
+            recordMessage isSend message model
+                |> withNoCmd
 
         SetChooseFirst player ->
             { model | chooseFirst = player }
@@ -3504,7 +3548,10 @@ send interface message =
         logMessage =
             Debug.log "send" <| ED.messageToLogMessage message
     in
-    ServerInterface.send interface message
+    Cmd.batch
+        [ ServerInterface.send interface message
+        , Task.perform (RecordMessage True) <| Task.succeed message
+        ]
 
 
 doTestClick : Int -> Int -> Model -> ( Model, Cmd Msg )
@@ -3975,7 +4022,7 @@ mainPage bsize model =
                 "You are reviewing the game. Click \"End review\" to resume play."
 
         currentPlayer =
-            if not liveGame.isLocal then
+            if not liveGame.isLocal && liveGame.watcherName == Nothing then
                 Just liveGame.player
 
             else

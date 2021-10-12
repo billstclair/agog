@@ -1,5 +1,8 @@
 # AGOG TODO
 
+1. Add a "Communication" page, showing the raw network traffic over
+   the web socket link. Make it viewable in split-screen with the rest
+   of the game.
 1. Chat check-box for initial public game. Button to turn it on and off
    while playing.
 1. Put the archive in the GameState, not the client-only Game.
@@ -10,8 +13,6 @@
    last there.
    * Proper OS notifications, which bring the session responsible to
      the front when clicked.
-1. Public games are not subscribed if you start up on that page
-   (same for Moves page?)
 1. S3 persistence
 1. Periodic "Update" commands sent over wire. In case we miss a message.
 1. Store version in app and web site. Periodically compare and notify if
@@ -25,9 +26,6 @@
 1. Initial position on new network game, from Test Mode and/or a saved game
 1. New network session can reproduce entire session, just current
    gamestate, or nothing.
-1. Add a "Communication" page, showing the raw network traffic over
-   the web socket link. Make it viewable in split-screen with the rest
-   of the game.
 1. Handicapping
 1. Game review can be shared in a network session
 1. Automatic dark mode. User sets times. Default to 7am-8pm light
