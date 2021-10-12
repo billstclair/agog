@@ -290,6 +290,7 @@ type alias Model =
     , showArchive : Maybe ( Game, Int )
     , showMove : Maybe ( Game, Int )
     , messageQueue : Fifo MessageQueueEntry
+    , showMessageQueue : Bool
 
     -- persistent below here
     , gamename : String
@@ -357,6 +358,7 @@ type Msg
     | JoinGameAsWatcher GameId
     | Disconnect
     | SetTestMode Bool
+    | SetShowMessageQueue Bool
     | SetNotificationsEnabled Bool
     | SetSoundEnabled Bool
     | EraseBoard
@@ -612,6 +614,7 @@ init flags url key =
             , showArchive = Nothing
             , showMove = Nothing
             , messageQueue = Fifo.empty
+            , showMessageQueue = False
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -2877,6 +2880,10 @@ updateInternal msg model =
                                     Cmd.none
                                 )
 
+        SetShowMessageQueue showMessageQueue ->
+            { model | showMessageQueue = showMessageQueue }
+                |> withNoCmd
+
         SetSoundEnabled bool ->
             { model | soundEnabled = bool }
                 |> withNoCmd
@@ -3974,6 +3981,47 @@ maybeNoText msg =
         msg
 
 
+messageQueueDiv : Style -> Model -> Html Msg
+messageQueueDiv theStyle model =
+    let
+        messages =
+            model.messageQueue |> Fifo.toList |> List.reverse
+
+        tableRow { isSend, message } =
+            let
+                sendText =
+                    if isSend then
+                        "sent: "
+
+                    else
+                        "rcvd: "
+
+                messageText =
+                    message
+                        |> WSFED.encodeMessage ED.messageEncoder
+            in
+            tr []
+                [ Html.th [ style "vertical-align" "top" ]
+                    [ text sendText ]
+                , td [] [ text messageText ]
+                ]
+    in
+    if messages == [] then
+        text ""
+
+    else
+        div
+            [ align "center"
+            , style "overflow-y" "scroll"
+            , style "border" ("1px solid " ++ theStyle.lineColor)
+            , style "resize" "vertical"
+            , style "height" "12em"
+            ]
+            [ table [] <|
+                List.map tableRow messages
+            ]
+
+
 mainPage : Int -> Model -> Html Msg
 mainPage bsize model =
     let
@@ -4269,6 +4317,17 @@ mainPage bsize model =
                         , br
                         ]
                     ]
+
+        showMessageQueueCheckBox =
+            span []
+                [ b "Show protocol: "
+                , input
+                    [ type_ "checkbox"
+                    , checked model.showMessageQueue
+                    , onCheck SetShowMessageQueue
+                    ]
+                    []
+                ]
     in
     div [ align "center" ]
         [ Lazy.lazy6 Board.render
@@ -4562,7 +4621,15 @@ mainPage bsize model =
                     , text " "
                     , br
                     ]
-            , br
+            , if model.showMessageQueue then
+                span []
+                    [ messageQueueDiv theStyle model
+                    , showMessageQueueCheckBox
+                    , br
+                    ]
+
+              else
+                br
             , b "Rotate: "
             , radio "rotate"
                 "white down"
@@ -4939,7 +5006,12 @@ mainPage bsize model =
                     ]
             ]
         , p []
-            [ b " Dark Mode: "
+            [ if model.showMessageQueue then
+                text ""
+
+              else
+                showMessageQueueCheckBox
+            , b " Dark mode: "
             , input
                 [ type_ "checkbox"
                 , checked <| model.styleType == DarkStyle
@@ -5305,7 +5377,7 @@ publicPage bsize model =
                                     ]
                               ]
                             , List.map
-                                (renderPublicGameRow game.gameid name game.isLive)
+                                (renderPublicGameRow name game.isLive model)
                                 waiting
                             ]
                     ]
@@ -5402,7 +5474,7 @@ renderInplayPublicGameRow tick zone gameids connected name model { publicGame, p
     in
     tr []
         [ td [ center ]
-            [ if dontLink || name == "" then
+            [ if dontLink || name == "" || name == white || name == black then
                 text gameid
 
               else
@@ -5442,18 +5514,26 @@ renderInplayPublicGameRow tick zone gameids connected name model { publicGame, p
         ]
 
 
-renderPublicGameRow : String -> String -> Bool -> PublicGameAndPlayers -> Html Msg
-renderPublicGameRow myGameid name connected { publicGame } =
+renderPublicGameRow : String -> Bool -> Model -> PublicGameAndPlayers -> Html Msg
+renderPublicGameRow name connected model { publicGame } =
     let
         { gameid, creator, player, forName } =
             publicGame
+
+        isMyGame =
+            case gameFromId gameid model of
+                Nothing ->
+                    False
+
+                Just _ ->
+                    True
 
         center =
             style "text-align" "center"
     in
     tr []
         [ td [ center ]
-            [ if gameid == myGameid || connected || name == "" then
+            [ if isMyGame || connected || name == "" then
                 text gameid
 
               else
@@ -5464,7 +5544,7 @@ renderPublicGameRow myGameid name connected { publicGame } =
                     [ text gameid ]
             ]
         , td [ center ]
-            [ if gameid == myGameid then
+            [ if isMyGame then
                 text <| "You (" ++ creator ++ ")"
 
               else
@@ -5472,7 +5552,7 @@ renderPublicGameRow myGameid name connected { publicGame } =
             ]
         , td [ center ] [ text <| playerString player ]
         , td [ center ]
-            [ if myGameid == gameid then
+            [ if isMyGame then
                 text <| Maybe.withDefault "" forName
 
               else

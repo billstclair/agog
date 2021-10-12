@@ -1,5 +1,9 @@
 # AGOG TODO
 
+1. Fix waiting games table: If you are the creator of one of the games,
+   but currently viewing another, the link should take you to the
+   session for the game, not get an error in joining on the other session.
+   It should also let you know that you are the creator in that case.
 1. Add a "Communication" page, showing the raw network traffic over
    the web socket link. Make it viewable in split-screen with the rest
    of the game.

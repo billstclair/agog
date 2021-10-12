@@ -183,7 +183,7 @@ instructions setHomePageMsg maybeFooter =
           , """
 The green text below the __A•G•O•G__ board is instructions about what you are expected to do (or wait for). If there was a problem, an error message will appear in red between the board and the green line.
 
-At night, you may prefer to display the screen in "Dark Mode". Check that box to do that. Uncheck to return to the default appearance.
+At night, you may prefer to display the screen in "Dark mode". Check that box to do that. Uncheck to return to the default appearance.
 
 You may choose to rotate the board by 180 degrees, if you're playing black, (or black has the move in local mode). Do so by choosing the "player down" radio button instead of "white down" for "Rotate".
 
@@ -267,6 +267,8 @@ Archives are kept of every game in a session. They appear in the "Archives" sele
 Sometimes you want to play a game locally, without going through the server (except to fetch the HTML and JavaScript for the A•G•O•G itself). You may do this by checking the "Local" checkbox between games. You will then control both players.
 
 Local mode has another feature, "Test Mode". Enable that by checking the "Test Mode" check box. This provides "Erase Board!" and "Initial Setup" buttons, a "Remove clicked" checkbox, which, when checked, causes a click on a piece to remove it from the board, a "Test piece" popup, which allows you to choose a piece type, and "White" & "Black" radio buttons, which choose the piece color. When you click on an empty square on the board, that piece will appear there. Unchecking "Test mode" returns to game play.
+
+To the left of the "Dark mode" checkbox is a "Show protocol" checkbox. Check this to show the low-level messages that are passed over the connection to the server.
 """
           )
         , ( "STATISTICS"
