@@ -1,12 +1,16 @@
 # AGOG TODO
 
-1. Fix waiting games table: If you are the creator of one of the games,
-   but currently viewing another, the link should take you to the
-   session for the game, not get an error in joining on the other session.
-   It should also let you know that you are the creator in that case.
-1. Add a "Communication" page, showing the raw network traffic over
-   the web socket link. Make it viewable in split-screen with the rest
-   of the game.
+1. Segregate local and remote messages in Model.messageQueue
+1. Reduce size of timestamps in encoded moves.
+   1. All in seconds, not milliseconds
+   2. All but first is a delta, not absolute.
+1. If you're watching a game in a background session, and it has ended
+   since you reloaded the game, the message is confusing.
+   Messages for games that are not on-screen should go somewhere else,
+   or be dropped on the floor.
+   It would be nice to remember that the background game is not active,
+   but I think it will have to just remain unconnected for now.
+   This only happens when the server gets restarted.
 1. Chat check-box for initial public game. Button to turn it on and off
    while playing.
 1. Put the archive in the GameState, not the client-only Game.

@@ -2406,6 +2406,7 @@ updateInternal msg model =
                             , isLive = False
                             , playerid = ""
                             , otherPlayerid = ""
+                            , watcherName = Nothing
                             , interface = interface
                             , interfaceIsProxy = isLocal
                         }
@@ -3520,7 +3521,10 @@ disconnect model =
 
         game2 =
             if not game.isLocal then
-                { game | isLive = False }
+                { game
+                    | isLive = False
+                    , watcherName = Nothing
+                }
 
             else
                 { game
@@ -5458,7 +5462,9 @@ renderInplayPublicGameRow tick zone gameids connected name model { publicGame, p
         ( dontLink, ( whiteText, blackText, watcherText ) ) =
             case gameFromId gameid model of
                 Nothing ->
-                    ( connected, ( text, text, text ) )
+                    ( connected || name == "" || name == white || name == black
+                    , ( text, text, text )
+                    )
 
                 Just game ->
                     if game.watcherName /= Nothing then
@@ -5474,7 +5480,7 @@ renderInplayPublicGameRow tick zone gameids connected name model { publicGame, p
     in
     tr []
         [ td [ center ]
-            [ if dontLink || name == "" || name == white || name == black then
+            [ if dontLink then
                 text gameid
 
               else
