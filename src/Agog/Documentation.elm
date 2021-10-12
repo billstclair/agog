@@ -27,7 +27,7 @@ br =
 rulesDiv : Bool -> List (Html msg) -> Html msg
 rulesDiv alignCenter body =
     div
-        [ style "width" "25em"
+        [ style "width" "40em"
         , style "max-width" "95%"
         , if alignCenter then
             align "center"
@@ -205,6 +205,8 @@ Before you can play games, you need to connect through that server to your oppon
 Alternatively, the initiating player can check the "Public" box before clicking "Start Session". This makes the session appear on the "Public" page (available via the link at the bottom of each page). If you fill in "for name" before clicking "Start Session", then only other players with the given "Name" will see it.
 
 To join a public session, enter "Your Name", go to the "Public" page, and click on the underlined Session ID.
+
+A "Games that you may observe" table will be on the "Public" page if there are public games that are already in play. Click on one of the "Session ID" links to observe it (or to switch to the session already playing in or observing that game).
 """
           )
         , ( "GAME PLAY"

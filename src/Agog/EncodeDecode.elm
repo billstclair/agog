@@ -2119,11 +2119,14 @@ publicGameDecoder =
 
 
 encodePublicGameAndPlayers : PublicGameAndPlayers -> Value
-encodePublicGameAndPlayers { publicGame, players, watchers } =
+encodePublicGameAndPlayers { publicGame, players, watchers, moves, startTime, endTime } =
     JE.object
         [ ( "publicGame", encodePublicGame publicGame )
         , ( "players", encodePlayerNames players )
         , ( "watchers", JE.int watchers )
+        , ( "moves", JE.int moves )
+        , ( "startTime", JE.int <| Time.posixToMillis startTime )
+        , ( "endTime", JE.int <| Time.posixToMillis endTime )
         ]
 
 
@@ -2133,6 +2136,9 @@ publicGameAndPlayersDecoder =
         |> required "publicGame" publicGameDecoder
         |> required "players" playerNamesDecoder
         |> required "watchers" JD.int
+        |> optional "moves" JD.int 0
+        |> optional "startTime" (JD.int |> JD.andThen (Time.millisToPosix >> JD.succeed)) Types.posixZero
+        |> optional "endTime" (JD.int |> JD.andThen (Time.millisToPosix >> JD.succeed)) Types.posixZero
 
 
 publicGameToFramework : PublicGame -> WebSocketFramework.Types.PublicGame
@@ -2682,6 +2688,9 @@ publicGamesRspDecoder =
                             , black = ""
                             }
                         , watchers = 0
+                        , moves = 0
+                        , startTime = Types.posixZero
+                        , endTime = Types.posixZero
                         }
                 in
                 PublicGamesRsp

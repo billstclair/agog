@@ -13,6 +13,7 @@ import Agog.Types as Types
         , ServerState
         , SubscriptionSet
         )
+import List.Extra as LE
 import Set exposing (Set)
 import Time exposing (Posix)
 import WebSocketFramework.Server
@@ -161,10 +162,15 @@ messageSender mdl socket state request response =
 
                 _ ->
                     case response of
-                        LeaveRsp { gameid } ->
+                        LeaveRsp { gameid, participant } ->
                             let
                                 ( model2, cmd2 ) =
-                                    gamesDeleter model [ gameid ] state2
+                                    case participant of
+                                        PlayingParticipant _ ->
+                                            gamesDeleter model [ gameid ] state2
+
+                                        _ ->
+                                            ( model, Cmd.none )
                             in
                             ( WebSocketFramework.Server.getState model2, cmd2 )
 
@@ -173,6 +179,17 @@ messageSender mdl socket state request response =
 
         ( state4, cmd4 ) =
             computeStatisticsSubscriberSends time state3
+
+        cmd5 =
+            case response of
+                JoinRsp { gameid } ->
+                    sendToPublicGameSubscribers gameid state
+
+                PlayRsp { gameid } ->
+                    sendToPublicGameSubscribers gameid state
+
+                _ ->
+                    Cmd.none
 
         sender =
             case request of
@@ -208,8 +225,46 @@ messageSender mdl socket state request response =
                             sendToAll model
     in
     ( WebSocketFramework.Server.setState model state4
-    , Cmd.batch [ cmd3, cmd4, sender response socket ]
+    , Cmd.batch [ cmd3, cmd4, cmd5, sender response socket ]
     )
+
+
+sendToPublicGameSubscribers : GameId -> ServerState -> Cmd Msg
+sendToPublicGameSubscribers gameid state =
+    case LE.find (.gameid >> (==) gameid) state.publicGames of
+        Nothing ->
+            Cmd.none
+
+        Just publicGame ->
+            case state.state of
+                Nothing ->
+                    Cmd.none
+
+                Just gs ->
+                    case ED.frameworkToPublicGame publicGame of
+                        Nothing ->
+                            Cmd.none
+
+                        Just pg ->
+                            let
+                                pgap =
+                                    Interface.publicGameAddPlayers state pg
+
+                                notification =
+                                    sendToOne
+                                        (PublicGamesUpdateRsp
+                                            { added = [ pgap ]
+                                            , removed = [ publicGame.gameid ]
+                                            }
+                                        )
+                            in
+                            gs.private.subscribers
+                                |> Set.toList
+                                |> List.map
+                                    (\( sock, _ ) ->
+                                        notification sock
+                                    )
+                                |> Cmd.batch
 
 
 getStatisticsTimes : Maybe Int -> ServerState -> ( ServerState, Maybe Int, Maybe Int )
@@ -414,6 +469,9 @@ sendNewRsp model state response socket =
                                         { publicGame = publicGame
                                         , players = gameState.players
                                         , watchers = 0
+                                        , moves = 0
+                                        , startTime = Types.posixZero
+                                        , endTime = Types.posixZero
                                         }
 
                                     notification =

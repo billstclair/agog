@@ -216,7 +216,7 @@ type alias ServerInterface =
 
 type ConnectionReason
     = StartGameConnection
-    | JoinGameConnection GameId
+    | JoinGameConnection GameId Bool
     | PublicGamesConnection
     | StatisticsConnection
     | UpdateConnection PlayerId
@@ -346,6 +346,7 @@ type Msg
     | StartGame
     | Join
     | JoinGame GameId
+    | JoinGameAsWatcher GameId
     | Disconnect
     | SetTestMode Bool
     | SetNotificationsEnabled Bool
@@ -374,6 +375,7 @@ type Msg
     | HandleUrlRequest UrlRequest
     | HandleUrlChange Url
     | DoConnectedResponse
+    | RestoreSubscriptions String
     | Process Value
 
 
@@ -710,8 +712,11 @@ handleListKeysResponse label prefix keys model =
                             [ cmd
                             , getLabeled pk.game key
                             ]
+
+                    getCmds =
+                        List.foldr getter Cmd.none <| Debug.log "Getting games" keys
                 in
-                ( model, List.foldr getter Cmd.none <| Debug.log "Getting games" keys )
+                ( model, getCmds )
 
             else
                 model |> withNoCmd
@@ -892,6 +897,29 @@ handleGetGameResponse key value model =
                         model4 |> withCmds [ getChatCmd, cmd4 ]
 
 
+maybeRestoreSubscriptions : String -> Model -> ( Model, Cmd Msg )
+maybeRestoreSubscriptions gamename model =
+    if model.game.gamename == gamename then
+        let
+            restoreSubscription connectionType =
+                model
+                    |> webSocketConnect
+                        model.game
+                        (ConnectionSpec gamename connectionType)
+        in
+        if model.page == PublicPage then
+            restoreSubscription PublicGamesConnection
+
+        else if model.page == StatisticsPage then
+            restoreSubscription StatisticsConnection
+
+        else
+            model |> withNoCmd
+
+    else
+        model |> withNoCmd
+
+
 reconnectToGame : Game -> Model -> ( Model, Cmd Msg )
 reconnectToGame game model =
     let
@@ -908,24 +936,9 @@ reconnectToGame game model =
         model
             |> withCmd (initialNewReqCmd game model)
 
-    else if gamename == model.game.gamename then
-        if model.page == PublicPage then
-            { model | gameid = "" }
-                |> webSocketConnect
-                    game
-                    (ConnectionSpec gamename PublicGamesConnection)
-
-        else if model.page == StatisticsPage then
-            { model | gameid = "" }
-                |> webSocketConnect
-                    game
-                    (ConnectionSpec gamename StatisticsConnection)
-
-        else
-            model |> withNoCmd
-
     else
-        model |> withNoCmd
+        -- Need to set gameid to ""?
+        maybeRestoreSubscriptions game.gamename model
 
 
 updateChat : String -> Model -> (ChatSettings -> ChatSettings) -> ( Model, Maybe ChatSettings )
@@ -1373,12 +1386,12 @@ incomingMessageInternal interface maybeGame message model =
                                     , WhitePlayer
                                     , if playerid /= Nothing then
                                         Just <|
-                                            "You have joined the crowd"
+                                            "You are observing"
                                                 ++ (forGame ++ ".")
 
                                       else
                                         Just <|
-                                            ("New crowd member: " ++ name)
+                                            ("New observer: " ++ name)
                                                 ++ (forGame ++ ".")
                                     )
 
@@ -1436,7 +1449,6 @@ incomingMessageInternal interface maybeGame message model =
                     , { model3 | error = error }
                         |> withCmds
                             [ chatCmd
-                            , setPage MainPage
                             , maybeSendNotification game3 False msg model2
                             ]
                     )
@@ -1514,10 +1526,10 @@ incomingMessageInternal interface maybeGame message model =
                     , { model
                         | error =
                             if isYourGame then
-                                Just "You left the crowd."
+                                Just "You stopped observing."
 
                             else
-                                Just <| "Crowd member left: " ++ name ++ "."
+                                Just <| "Observer left: " ++ name ++ "."
                       }
                         |> withNoCmd
                     )
@@ -1531,7 +1543,11 @@ incomingMessageInternal interface maybeGame message model =
             withRequiredGame gameid
                 (\game ->
                     ( Just { game | gameState = gameState }
-                    , model |> withNoCmd
+                    , model
+                        |> withCmd
+                            (Task.perform RestoreSubscriptions <|
+                                Task.succeed game.gamename
+                            )
                     )
                 )
 
@@ -2049,13 +2065,13 @@ processConnectionReason game connectionReason model =
                     , maybeGameid = Nothing
                     }
 
-        JoinGameConnection gameid ->
+        JoinGameConnection gameid inCrowd ->
             send interface <|
                 JoinReq
                     { gameid = gameid
                     , name = model.settings.name
                     , isRestore = False
-                    , inCrowd = False
+                    , inCrowd = inCrowd
                     }
 
         PublicGamesConnection ->
@@ -2766,10 +2782,22 @@ updateInternal msg model =
             startGame model
 
         Join ->
-            join model
+            join model False
 
         JoinGame gameid ->
-            join { model | gameid = gameid }
+            join { model | gameid = gameid } False
+
+        JoinGameAsWatcher gameid ->
+            case gameFromId gameid model of
+                Nothing ->
+                    join { model | gameid = gameid } True
+
+                Just agame ->
+                    model
+                        |> withCmds
+                            [ Task.perform SwitchGame <| Task.succeed agame.gamename
+                            , setPage MainPage
+                            ]
 
         Disconnect ->
             if showingArchiveOrMove model then
@@ -3070,6 +3098,9 @@ updateInternal msg model =
 
         DoConnectedResponse ->
             connectedResponse model
+
+        RestoreSubscriptions gamename ->
+            maybeRestoreSubscriptions gamename model
 
         Process value ->
             case
@@ -3395,8 +3426,8 @@ startGame model =
         model
 
 
-join : Model -> ( Model, Cmd Msg )
-join model =
+join : Model -> Bool -> ( Model, Cmd Msg )
+join model inCrowd =
     let
         gameid =
             model.gameid
@@ -3410,10 +3441,15 @@ join model =
                     -- Needed by JoinRsp
                     { game | gameid = gameid }
             }
+
+        ( model3, cmd3 ) =
+            webSocketConnect model2.game
+                (ConnectionSpec model.game.gamename <|
+                    JoinGameConnection gameid inCrowd
+                )
+                model2
     in
-    webSocketConnect model2.game
-        (ConnectionSpec model.game.gamename (JoinGameConnection gameid))
-        model2
+    model3 |> withCmds [ cmd3, setPage MainPage ]
 
 
 disconnect : Model -> ( Model, Cmd Msg )
@@ -5165,6 +5201,9 @@ publicPage bsize model =
 
         name =
             settings.name
+
+        ( waiting, inplay ) =
+            discriminatePublicGames model.publicGames
     in
     rulesDiv False
         [ rulesDiv True
@@ -5195,31 +5234,147 @@ publicPage bsize model =
                             text "You're playing a game. What are you doing here?"
 
                           else
-                            text "You're watching a live game. Disconnect to join a new one."
+                            text "You are observing a live game. Disconnect or create a new session to join a new one."
                         ]
 
                   else
                     text ""
                 ]
-            , table
-                [ class "prettytable"
-                , style "color" "black"
-                ]
-              <|
-                List.concat
-                    [ [ tr []
-                            [ th "GameId"
-                            , th "Creator"
-                            , th "Player"
-                            , th "For you"
+            , if waiting == [] then
+                h3 [] [ text "There are no games waiting for an opponent." ]
+
+              else
+                span []
+                    [ h3 [] [ text "Games waiting for an opponent:" ]
+                    , table
+                        [ class "prettytable"
+                        , style "color" "black"
+                        ]
+                      <|
+                        List.concat
+                            [ [ tr []
+                                    [ th "Session ID"
+                                    , th "Creator"
+                                    , th "Player"
+                                    , th "For you"
+                                    ]
+                              ]
+                            , List.map
+                                (renderPublicGameRow game.gameid name game.isLive)
+                                waiting
                             ]
-                      ]
-                    , List.map
-                        (renderPublicGameRow game.gameid name game.isLive)
-                        model.publicGames
+                    ]
+            , if inplay == [] then
+                text ""
+
+              else
+                span []
+                    [ h3 [] [ text <| "Games that you may observe:" ]
+                    , table
+                        [ class "prettytable"
+                        , style "color" "black"
+                        ]
+                      <|
+                        List.concat
+                            [ [ tr []
+                                    [ th "Session ID"
+                                    , th "White"
+                                    , th "Black"
+                                    , th "Watchers"
+                                    , th "Started"
+                                    , th "Moves"
+                                    , th "Last Move"
+                                    ]
+                              ]
+                            , List.map
+                                (renderInplayPublicGameRow model.tick
+                                    model.zone
+                                    (sessionGameIds model)
+                                    game.isLive
+                                    name
+                                )
+                                inplay
+                            ]
                     ]
             , playButton
             , footerParagraph
+            ]
+        ]
+
+
+sessionGameIds : Model -> List GameId
+sessionGameIds model =
+    Dict.values model.gameDict
+        |> List.map .gameid
+
+
+discriminatePublicGames : List PublicGameAndPlayers -> ( List PublicGameAndPlayers, List PublicGameAndPlayers )
+discriminatePublicGames games =
+    let
+        folder game ( waiting, inplay ) =
+            let
+                { white, black } =
+                    game.players
+            in
+            if white /= "" && black /= "" then
+                ( waiting, game :: inplay )
+
+            else
+                ( game :: waiting, inplay )
+    in
+    List.foldr folder ( [], [] ) games
+
+
+renderInplayPublicGameRow : Posix -> Zone -> List GameId -> Bool -> String -> PublicGameAndPlayers -> Html Msg
+renderInplayPublicGameRow tick zone gameids connected name { publicGame, players, watchers, moves, startTime, endTime } =
+    let
+        { gameid } =
+            publicGame
+
+        { white, black } =
+            players
+
+        center =
+            style "text-align" "center"
+    in
+    tr []
+        [ td [ center ]
+            [ if name == "" then
+                text gameid
+
+              else
+                a
+                    [ href "#"
+                    , onClick <| JoinGameAsWatcher gameid
+                    ]
+                    [ text gameid ]
+            ]
+        , td [ center ]
+            [ text white ]
+        , td [ center ]
+            [ text black ]
+        , td [ center ]
+            [ text <| String.fromInt watchers ]
+        , td [ center ]
+            [ if moves == 0 then
+                text chars.nbsp
+
+              else
+                text <| shortDateAndTimeString zone startTime
+            ]
+        , td [ center ]
+            [ text <| String.fromInt moves ]
+        , td [ center ]
+            [ if moves == 0 then
+                text chars.nbsp
+
+              else
+                text <|
+                    DateFormat.Relative.relativeTime
+                        tick
+                        (min (Time.posixToMillis endTime) (Time.posixToMillis tick)
+                            |> Time.millisToPosix
+                        )
             ]
         ]
 
@@ -5304,9 +5459,9 @@ dateAndTimeFormat =
 
 shortDateAndTimeFormat : Format
 shortDateAndTimeFormat =
-    [ DateFormat.dayOfMonthNumber
+    [ DateFormat.monthNumber
     , DateFormat.text "/"
-    , DateFormat.monthNumber
+    , DateFormat.dayOfMonthNumber
     , DateFormat.text "/"
     , DateFormat.yearNumberLastTwo
     , DateFormat.text " "
@@ -5677,7 +5832,7 @@ movesPage bsize model =
                             , br
                             , if inCrowd then
                                 span []
-                                    [ text chars.watchingMessage
+                                    [ text <| chars.watchingMessage ++ "."
                                     , br
                                     , text "It's "
                                     , text <| playerName whoseTurn liveGame
@@ -6039,7 +6194,7 @@ chars =
     , copyright = codestr 0xA9
     , nbsp = codestr 0xA0
     , mdash = codestr 0x2014
-    , watchingMessage = "You are watching this game, not playing."
+    , watchingMessage = "You are observing this game, not playing"
     }
 
 

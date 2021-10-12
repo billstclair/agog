@@ -21,6 +21,7 @@ module Agog.Interface exposing
     , isFirstJumpTo
     , messageProcessor
     , proxyMessageProcessor
+    , publicGameAddPlayers
     , setStatisticsChanged
     , unarchiveGame
     )
@@ -49,6 +50,8 @@ import Agog.Types as Types
         , PieceType(..)
         , Player(..)
         , PlayerNames
+        , PublicGame
+        , PublicGameAndPlayers
         , PublicType(..)
         , RequestUndo(..)
         , RowCol
@@ -960,23 +963,7 @@ generalMessageProcessorInternal isProxyServer state message =
                                 else
                                     Nothing
                             )
-                        |> List.map
-                            (\publicGame ->
-                                { publicGame = publicGame
-                                , players =
-                                    case ServerInterface.getGame publicGame.gameid state of
-                                        Nothing ->
-                                            { white = "White"
-                                            , black = ""
-                                            }
-
-                                        Just gameState ->
-                                            gameState.players
-                                , watchers =
-                                    getCrowdParticipants publicGame.gameid state
-                                        |> List.length
-                                }
-                            )
+                        |> List.map (publicGameAddPlayers state)
             in
             ( state, Just <| PublicGamesRsp { games = games } )
 
@@ -1045,6 +1032,48 @@ generalMessageProcessorInternal isProxyServer state message =
 
         _ ->
             errorRes message state "Received a non-request."
+
+
+publicGameAddPlayers : Types.ServerState -> PublicGame -> PublicGameAndPlayers
+publicGameAddPlayers state publicGame =
+    let
+        ( moves, players ) =
+            case ServerInterface.getGame publicGame.gameid state of
+                Nothing ->
+                    ( []
+                    , { white = "White"
+                      , black = ""
+                      }
+                    )
+
+                Just gameState ->
+                    ( gameState.moves
+                    , gameState.players
+                    )
+
+        ( startTime, endTime ) =
+            case List.head moves of
+                Nothing ->
+                    ( Types.posixZero, Types.posixZero )
+
+                Just lastMove ->
+                    case List.head <| List.reverse moves of
+                        Nothing ->
+                            -- Can't happen
+                            ( lastMove.time, lastMove.time )
+
+                        Just firstMove ->
+                            ( firstMove.time, lastMove.time )
+    in
+    { publicGame = publicGame
+    , players = players
+    , watchers =
+        getCrowdParticipants publicGame.gameid state
+            |> List.length
+    , moves = List.length moves
+    , startTime = startTime
+    , endTime = endTime
+    }
 
 
 isCrowdParticipant : Participant -> Bool
