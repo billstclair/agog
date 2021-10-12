@@ -206,7 +206,7 @@ Alternatively, the initiating player can check the "Public" box before clicking 
 
 To join a public session, enter "Your Name", go to the "Public" page, and click on the underlined Session ID.
 
-A "Games that you may observe" table will be on the "Public" page if there are public games that are already in play. Click on one of the "Session ID" links to observe it (or to switch to the session already playing in or observing that game).
+A "Games that you may observe" table will be on the "Public" page if there are public games that are already in play. Click on one of the "Session ID" links to observe it. In that table, if the "White", "Black", or "Observing" entry is bold for a session, then you are already playing in or observing that session, and clicking the link will go to the existing session.
 """
           )
         , ( "GAME PLAY"

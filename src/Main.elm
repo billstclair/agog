@@ -1385,9 +1385,7 @@ incomingMessageInternal interface maybeGame message model =
                                             Just name
                                     , WhitePlayer
                                     , if playerid /= Nothing then
-                                        Just <|
-                                            "You are observing"
-                                                ++ (forGame ++ ".")
+                                        Nothing
 
                                       else
                                         Just <|
@@ -5280,7 +5278,7 @@ publicPage bsize model =
                                     [ th "Session ID"
                                     , th "White"
                                     , th "Black"
-                                    , th "Watchers"
+                                    , th "Observing"
                                     , th "Started"
                                     , th "Moves"
                                     , th "Last Move"
@@ -5292,6 +5290,7 @@ publicPage bsize model =
                                     (sessionGameIds model)
                                     game.isLive
                                     name
+                                    model
                                 )
                                 inplay
                             ]
@@ -5325,8 +5324,8 @@ discriminatePublicGames games =
     List.foldr folder ( [], [] ) games
 
 
-renderInplayPublicGameRow : Posix -> Zone -> List GameId -> Bool -> String -> PublicGameAndPlayers -> Html Msg
-renderInplayPublicGameRow tick zone gameids connected name { publicGame, players, watchers, moves, startTime, endTime } =
+renderInplayPublicGameRow : Posix -> Zone -> List GameId -> Bool -> String -> Model -> PublicGameAndPlayers -> Html Msg
+renderInplayPublicGameRow tick zone gameids connected name model { publicGame, players, watchers, moves, startTime, endTime } =
     let
         { gameid } =
             publicGame
@@ -5336,10 +5335,27 @@ renderInplayPublicGameRow tick zone gameids connected name { publicGame, players
 
         center =
             style "text-align" "center"
+
+        ( dontLink, ( whiteText, blackText, watcherText ) ) =
+            case gameFromId gameid model of
+                Nothing ->
+                    ( connected, ( text, text, text ) )
+
+                Just game ->
+                    if game.watcherName /= Nothing then
+                        ( False, ( text, text, b ) )
+
+                    else
+                        case game.player of
+                            WhitePlayer ->
+                                ( False, ( b, text, text ) )
+
+                            BlackPlayer ->
+                                ( False, ( text, b, text ) )
     in
     tr []
         [ td [ center ]
-            [ if name == "" then
+            [ if dontLink || name == "" then
                 text gameid
 
               else
@@ -5350,11 +5366,11 @@ renderInplayPublicGameRow tick zone gameids connected name { publicGame, players
                     [ text gameid ]
             ]
         , td [ center ]
-            [ text white ]
+            [ whiteText white ]
         , td [ center ]
-            [ text black ]
+            [ blackText black ]
         , td [ center ]
-            [ text <| String.fromInt watchers ]
+            [ watcherText <| String.fromInt watchers ]
         , td [ center ]
             [ if moves == 0 then
                 text chars.nbsp
