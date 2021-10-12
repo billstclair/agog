@@ -1,5 +1,6 @@
 # AGOG TODO
 
+1. Repeatedly watching and disconnecting gets very confused.
 1. Segregate local and remote messages in Model.messageQueue
 1. Reduce size of timestamps in encoded moves.
    1. All in seconds, not milliseconds

@@ -1521,6 +1521,7 @@ incomingMessageInternal interface maybeGame message model =
                                     , playerid = ""
                                     , otherPlayerid = ""
                                     , isLive = False
+                                    , watcherName = Nothing
                                   }
                                 , True
                                 )
@@ -1732,29 +1733,34 @@ incomingMessageInternal interface maybeGame message model =
         ErrorRsp { request, text } ->
             let
                 errorReturn () =
-                    { model | error = Just text }
+                    ( Nothing
+                    , { model | error = Just text }
                         |> withNoCmd
+                    )
             in
-            ( Nothing
-            , case WSFED.decodeMessage ED.messageDecoder request of
+            case WSFED.decodeMessage ED.messageDecoder request of
                 Ok (UpdateReq { playerid }) ->
                     -- Server has forgotten the game.
                     -- Restore it.
                     case gameFromPlayerId playerid model of
                         Nothing ->
-                            { model
+                            ( Nothing
+                            , { model
                                 | error =
                                     Just "Bug: Can't restore session."
-                            }
+                              }
                                 |> withNoCmd
+                            )
 
                         Just game ->
-                            webSocketConnect
+                            ( Nothing
+                            , webSocketConnect
                                 game
                                 (ConnectionSpec game.gamename <|
                                     RestoreGameConnection game
                                 )
                                 model
+                            )
 
                 Ok (NewReq { maybeGameid }) ->
                     case maybeGameid of
@@ -1772,16 +1778,34 @@ incomingMessageInternal interface maybeGame message model =
                                             errorReturn ()
 
                                         _ ->
-                                            webSocketConnect
+                                            ( Nothing
+                                            , webSocketConnect
                                                 restoredGame
                                                 (ConnectionSpec restoredGame.gamename <|
                                                     JoinRestoredGameConnection gameid
                                                 )
                                                 model
+                                            )
+
+                Ok (LeaveReq { playerid }) ->
+                    case gameFromPlayerId playerid model of
+                        Nothing ->
+                            errorReturn ()
+
+                        Just game ->
+                            ( Just
+                                { game
+                                    | gameid = ""
+                                    , playerid = ""
+                                    , otherPlayerid = ""
+                                    , isLive = False
+                                    , watcherName = Nothing
+                                }
+                            , model |> withNoCmd
+                            )
 
                 _ ->
                     errorReturn ()
-            )
 
         ChatRsp { gameid, name, text } ->
             withRequiredGame gameid
@@ -3523,7 +3547,6 @@ disconnect model =
             if not game.isLocal then
                 { game
                     | isLive = False
-                    , watcherName = Nothing
                 }
 
             else
