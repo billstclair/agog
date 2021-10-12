@@ -258,7 +258,8 @@ type alias Game =
 
 
 type alias MessageQueueEntry =
-    { isSend : Bool
+    { isLocal : Bool
+    , isSend : Bool
     , message : Message
     }
 
@@ -1447,7 +1448,10 @@ incomingMessageInternal interface maybeGame message model =
                             updateGame game3.gamename (always game3) model2
 
                         msg =
-                            if game3.gamename == model.game.gamename then
+                            if
+                                (game3.gamename == model.game.gamename)
+                                    && (watcherName == Nothing)
+                            then
                                 "The game is on!"
 
                             else
@@ -2333,7 +2337,7 @@ recordMessage isSend message model =
     in
     { model
         | messageQueue =
-            Fifo.insert (MessageQueueEntry isSend message) queue
+            Fifo.insert (MessageQueueEntry model.game.isLocal isSend message) queue
     }
 
 
@@ -4011,8 +4015,14 @@ maybeNoText msg =
 messageQueueDiv : Style -> Model -> Html Msg
 messageQueueDiv theStyle model =
     let
+        gameIsLocal =
+            model.game.isLocal
+
         messages =
-            model.messageQueue |> Fifo.toList |> List.reverse
+            model.messageQueue
+                |> Fifo.toList
+                |> List.reverse
+                |> List.filter (\{ isLocal } -> isLocal == gameIsLocal)
 
         tableRow { isSend, message } =
             let

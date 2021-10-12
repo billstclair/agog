@@ -20,6 +20,7 @@ module Agog.EncodeDecode exposing
     , encodeMoves
     , encodeNamedGame
     , encodeOneMove
+    , encodeOneMoveList
     , encodeParticipant
     , encodePublicGameAndPlayers
     , encodeSavedModel
@@ -36,6 +37,7 @@ module Agog.EncodeDecode exposing
     , namedGameDecoder
     , newBoardToString
     , oneMoveDecoder
+    , oneMoveListDecoder
     , oneMoveSequenceToString
     , oneMoveToPrettyString
     , oneMoveToString
@@ -1632,7 +1634,7 @@ encodeUndoState : UndoState -> Value
 encodeUndoState { board, moves, selected, legalMoves } =
     JE.object
         [ ( "board", encodeBoard board )
-        , ( "moves", JE.list encodeOneMove moves )
+        , ( "moves", encodeOneMoveList moves )
         , ( "selected", encodeMaybe encodeRowCol selected )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
         ]
@@ -1642,9 +1644,78 @@ undoStateDecoder : Decoder UndoState
 undoStateDecoder =
     JD.succeed UndoState
         |> required "board" newBoardDecoder
-        |> required "moves" (JD.list oneMoveDecoder)
+        |> required "moves" oneMoveListDecoder
         |> required "selected" (JD.nullable rowColDecoder)
         |> required "legalMoves" movesOrJumpsDecoder
+
+
+encodeOneMoveList : List OneMove -> Value
+encodeOneMoveList moves =
+    let
+        mapper : OneMove -> ( Int, List OneMove ) -> ( Int, List OneMove )
+        mapper move ( lastTime, res ) =
+            let
+                time =
+                    move.time |> Time.posixToMillis
+
+                adjusted =
+                    -- I get negatives if I just do "// 100" here
+                    (time - lastTime)
+                        |> toFloat
+                        |> (*) 0.01
+                        |> round
+            in
+            ( time
+            , { move | time = adjusted |> Time.millisToPosix }
+                :: res
+            )
+
+        reducedMoves =
+            List.foldr mapper ( 0, [] ) moves
+                |> Tuple.second
+    in
+    JE.list encodeOneMove reducedMoves
+
+
+tenYearsInTenthsOfSeconds : Int
+tenYearsInTenthsOfSeconds =
+    10 * 60 * 60 * 24 * 365 * 10
+
+
+oneMoveListDecoder : Decoder (List OneMove)
+oneMoveListDecoder =
+    JD.list oneMoveDecoder
+        |> JD.andThen
+            (\moves ->
+                case List.head moves of
+                    Nothing ->
+                        JD.succeed moves
+
+                    Just firstMove ->
+                        if Time.posixToMillis firstMove.time > tenYearsInTenthsOfSeconds then
+                            -- Backward compatibility
+                            JD.succeed moves
+
+                        else
+                            let
+                                mapper : OneMove -> ( Int, List OneMove ) -> ( Int, List OneMove )
+                                mapper move ( lastTime, res ) =
+                                    let
+                                        time =
+                                            move.time |> Time.posixToMillis
+
+                                        adjusted =
+                                            time * 100 + lastTime
+                                    in
+                                    ( adjusted
+                                    , { move | time = adjusted |> Time.millisToPosix }
+                                        :: res
+                                    )
+                            in
+                            List.foldr mapper ( 0, [] ) moves
+                                |> Tuple.second
+                                |> JD.succeed
+            )
 
 
 encodeTestModeInitialState : TestModeInitialState -> Value
@@ -1655,7 +1726,7 @@ encodeTestModeInitialState state =
     in
     JE.object
         [ ( "board", encodeBoard board )
-        , ( "moves", JE.list encodeOneMove moves )
+        , ( "moves", encodeOneMoveList moves )
         , ( "whoseTurn", encodePlayer whoseTurn )
         , ( "selected", encodeMaybe encodeRowCol selected )
         , ( "legalMoves", encodeMovesOrJumps legalMoves )
@@ -1666,7 +1737,7 @@ testModeInitialStateDecoder : Decoder TestModeInitialState
 testModeInitialStateDecoder =
     JD.succeed TestModeInitialState
         |> required "board" newBoardDecoder
-        |> required "moves" (JD.list oneMoveDecoder)
+        |> required "moves" oneMoveListDecoder
         |> required "whoseTurn" playerDecoder
         |> required "selected" (JD.nullable rowColDecoder)
         |> required "legalMoves" movesOrJumpsDecoder
@@ -1754,7 +1825,7 @@ encodeGameState includePrivate gameState =
     JE.object
         [ ( "newBoard", encodeBoard newBoard )
         , ( "initialBoard", encodeMaybe encodeInitialBoard initialBoard )
-        , ( "moves", JE.list encodeOneMove moves )
+        , ( "moves", encodeOneMoveList moves )
         , ( "players", encodePlayerNames players )
         , ( "whoseTurn", encodePlayer whoseTurn )
         , ( "selected", encodeMaybe encodeRowCol selected )
@@ -1776,7 +1847,7 @@ gameStateDecoder =
     JD.succeed GameState
         |> required "newBoard" newBoardDecoder
         |> optional "initialBoard" (JD.nullable initialBoardDecoder) Nothing
-        |> required "moves" (JD.list oneMoveDecoder)
+        |> required "moves" oneMoveListDecoder
         |> required "players" playerNamesDecoder
         |> required "whoseTurn" playerDecoder
         |> required "selected" (JD.nullable rowColDecoder)
@@ -1799,7 +1870,7 @@ encodeArchivedGame gameState =
             gameState
     in
     JE.object
-        [ ( "moves", JE.list encodeOneMove moves )
+        [ ( "moves", encodeOneMoveList moves )
         , ( "players", encodePlayerNames players )
         , ( "winner", encodeWinner winner )
         , ( "initialBoard", encodeMaybe encodeInitialBoard initialBoard )
@@ -1809,7 +1880,7 @@ encodeArchivedGame gameState =
 archivedGameDecoder : Decoder ArchivedGame
 archivedGameDecoder =
     JD.succeed ArchivedGame
-        |> required "moves" (JD.list oneMoveDecoder)
+        |> required "moves" oneMoveListDecoder
         |> required "players" playerNamesDecoder
         |> required "winner" winnerDecoder
         |> optional "initialBoard" (JD.nullable initialBoardDecoder) Nothing
