@@ -5,7 +5,7 @@
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
--- See LICENSE.txt
+-- See LICENSE
 --
 ----------------------------------------------------------------------
 ---
@@ -1402,7 +1402,7 @@ incomingMessageInternal interface maybeGame message model =
 
                                       else
                                         Just <|
-                                            ("New observer: " ++ name)
+                                            ("New spectator: " ++ name)
                                                 ++ (forGame ++ ".")
                                     )
 
@@ -1541,10 +1541,10 @@ incomingMessageInternal interface maybeGame message model =
                     , { model
                         | error =
                             if isYourGame then
-                                Just "You stopped observing."
+                                Just "You stopped spectating."
 
                             else
-                                Just <| "Observer left: " ++ name ++ "."
+                                Just <| "Spectator left: " ++ name ++ "."
                       }
                         |> withNoCmd
                     )
@@ -5388,7 +5388,7 @@ publicPage bsize model =
                             text "You're playing a game. What are you doing here?"
 
                           else
-                            text "You are observing a live game. Disconnect or create a new session to join a new one."
+                            text "You a spectator for a live game. Disconnect or create a new session to join a new one."
                         ]
 
                   else
@@ -6376,7 +6376,7 @@ chars =
     , copyright = codestr 0xA9
     , nbsp = codestr 0xA0
     , mdash = codestr 0x2014
-    , watchingMessage = "You are observing this game, not playing"
+    , watchingMessage = "You a spectator for this game, not playing"
     }
 
 

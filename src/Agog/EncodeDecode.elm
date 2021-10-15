@@ -5,7 +5,7 @@
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
--- See LICENSE.txt
+-- See LICENSE
 --
 ----------------------------------------------------------------------
 
@@ -23,7 +23,9 @@ module Agog.EncodeDecode exposing
     , encodeOneMoveList
     , encodeParticipant
     , encodePublicGameAndPlayers
+    , encodeRowCol
     , encodeSavedModel
+    , encodeWithTimestamp
     , frameworkToPublicGame
     , gameStateDecoder
     , maybeOneMoveSequenceToString
@@ -46,11 +48,13 @@ module Agog.EncodeDecode exposing
     , pieceToString
     , publicGameAndPlayersDecoder
     , publicGameToFramework
+    , rowColDecoder
     , stringToBoard
     , stringToFromSlashOver
     , stringToOneMove
     , stringToOneMoveSequence
     , stringToPiece
+    , withTimestampDecoder
     )
 
 import Agog.Board as Board exposing (rc)
@@ -1887,18 +1891,30 @@ archivedGameDecoder =
 
 
 encodeRowCol : RowCol -> Value
-encodeRowCol { row, col } =
-    JE.object
-        [ ( "row", JE.int row )
-        , ( "col", JE.int col )
-        ]
+encodeRowCol rc =
+    Board.rowColToString rc |> JE.string
 
 
 rowColDecoder : Decoder RowCol
 rowColDecoder =
-    JD.succeed RowCol
-        |> required "row" JD.int
-        |> required "col" JD.int
+    JD.oneOf
+        [ JD.string
+            |> JD.andThen
+                (\s ->
+                    let
+                        rc =
+                            Board.stringToRowCol s
+                    in
+                    if Board.isRowColLegal rc then
+                        JD.succeed rc
+
+                    else
+                        JD.fail <| "Not a valid board location: " ++ s
+                )
+        , JD.succeed RowCol
+            |> required "row" JD.int
+            |> required "col" JD.int
+        ]
 
 
 encodeRowColList : List RowCol -> Value
@@ -3082,3 +3098,28 @@ messageToLogMessage message =
 
         ChatRsp rec ->
             ChatRspLog rec
+
+
+encodeWithTimestamp : ( Int, Value ) -> Value
+encodeWithTimestamp ( timestamp, value ) =
+    [ JE.int timestamp, value ]
+        |> JE.list identity
+
+
+withTimestampDecoder : Decoder ( Int, Value )
+withTimestampDecoder =
+    JD.list JD.value
+        |> JD.andThen
+            (\list ->
+                case list of
+                    [ ts, v ] ->
+                        case JD.decodeValue JD.int ts of
+                            Ok timestamp ->
+                                JD.succeed ( timestamp, v )
+
+                            Err _ ->
+                                JD.fail <| "Not an integer: " ++ JE.encode 0 ts
+
+                    _ ->
+                        JD.fail "Not a two-element array"
+            )

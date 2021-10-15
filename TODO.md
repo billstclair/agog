@@ -1,9 +1,6 @@
 # AGOG TODO
 
-1. Segregate local and remote messages in Model.messageQueue
-1. Reduce size of timestamps in encoded moves.
-   1. All in seconds, not milliseconds
-   2. All but first is a delta, not absolute.
+1. S3 persistence
 1. If you're watching a game in a background session, and it has ended
    since you reloaded the game, the message is confusing.
    Messages for games that are not on-screen should go somewhere else,
@@ -16,13 +13,15 @@
 1. Put the archive in the GameState, not the client-only Game.
    Restore the public state of a game, when the server needs reminding,
    so that it will return to the public games list for watchers.
+   Not the GameState. Somewhere else, but persisted on the server.
 1. Background session notification needs work. It should have its own
    `select` item to choose a session with activity since you were
    last there.
    * Proper OS notifications, which bring the session responsible to
      the front when clicked.
-1. S3 persistence
 1. Periodic "Update" commands sent over wire. In case we miss a message.
+   This bug is actually due to web sockets connections getting confused.
+   Hard to debug, since I don't know how to reproduce it.
 1. Store version in app and web site. Periodically compare and notify if
    updated code available.
 1. "-- New Session --" should be able to copy all session state except connection.

@@ -6,7 +6,7 @@
 -- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
--- See LICENSE.txt
+-- See LICENSE
 --
 ----------------------------------------------------------------------
 
@@ -1893,6 +1893,7 @@ replayOneCorruptibleJump : Player -> Piece -> OneCorruptibleJump -> Board -> Boa
 replayOneCorruptibleJump whoseTurn piece { from, over, to, hulkAfterJump } board =
     board
         |> Board.set from Types.emptyPiece
+        |> Board.set to piece
         |> (case hulkAfterJump of
                 NoHulkAfterJump ->
                     Board.set over
@@ -1905,9 +1906,9 @@ replayOneCorruptibleJump whoseTurn piece { from, over, to, hulkAfterJump } board
                         }
 
                 MakeHulkAfterJump hulkPos ->
-                    Board.set hulkPos
-                        { color = Types.playerColor whoseTurn
-                        , pieceType = Hulk
-                        }
+                    Board.set to Types.emptyPiece
+                        >> Board.set hulkPos
+                            { color = Types.playerColor whoseTurn
+                            , pieceType = Hulk
+                            }
            )
-        |> Board.set to piece
