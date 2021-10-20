@@ -328,8 +328,8 @@ type alias GameName =
 type Msg
     = Noop
     | Tick Posix
-    | IncomingMessage ServerInterface Message
-    | RecordMessage Bool Message
+    | IncomingMessage Bool ServerInterface Message
+    | RecordMessage Bool Bool Message
     | SetChooseFirst Player
     | SetRotate RotateBoard
     | SetIsLocal Bool
@@ -476,7 +476,7 @@ updateServerSeed maybeSeed serverInterface =
 
 proxyServer : Maybe Seed -> ServerInterface
 proxyServer seed =
-    ServerInterface.makeProxyServer fullProcessor IncomingMessage
+    ServerInterface.makeProxyServer fullProcessor (IncomingMessage True)
         |> updateServerSeed seed
 
 
@@ -1035,7 +1035,7 @@ handleGetChatResponse key value model =
 
 initialNewReqCmd : Game -> Model -> Cmd Msg
 initialNewReqCmd game model =
-    send game.interface <|
+    send game.isLocal game.interface <|
         let
             req =
                 initialNewReqBody game.gamename
@@ -1336,7 +1336,7 @@ incomingMessageInternal interface maybeGame message model =
                                     Cmd.none
 
                                   else if player == WhitePlayer then
-                                    send interface <|
+                                    send game2.isLocal interface <|
                                         JoinReq
                                             { gameid = gameid
                                             , name = "Black"
@@ -1345,7 +1345,7 @@ incomingMessageInternal interface maybeGame message model =
                                             }
 
                                   else
-                                    send interface <|
+                                    send game2.isLocal interface <|
                                         JoinReq
                                             { gameid = gameid
                                             , name = "White"
@@ -2008,7 +2008,7 @@ socketHandler response state mdl =
                         Just game ->
                             { model | error = Nothing }
                                 |> withCmd
-                                    (Task.perform (IncomingMessage game.interface) <|
+                                    (Task.perform (IncomingMessage False game.interface) <|
                                         Task.succeed message
                                     )
 
@@ -2076,6 +2076,9 @@ processConnectionReason game connectionReason model =
     let
         interface =
             game.interface
+
+        isLocal =
+            game.isLocal
     in
     case Debug.log "processConnectionReason" connectionReason of
         StartGameConnection ->
@@ -2083,7 +2086,7 @@ processConnectionReason game connectionReason model =
                 settings =
                     model.settings
             in
-            send interface <|
+            send isLocal interface <|
                 NewReq
                     { name = model.settings.name
                     , player = model.chooseFirst
@@ -2104,7 +2107,7 @@ processConnectionReason game connectionReason model =
                     }
 
         JoinGameConnection gameid inCrowd ->
-            send interface <|
+            send isLocal interface <|
                 JoinReq
                     { gameid = gameid
                     , name = model.settings.name
@@ -2113,7 +2116,7 @@ processConnectionReason game connectionReason model =
                     }
 
         PublicGamesConnection ->
-            send interface <|
+            send isLocal interface <|
                 PublicGamesReq
                     { subscribe = model.page == PublicPage
                     , forName = model.settings.name
@@ -2121,13 +2124,13 @@ processConnectionReason game connectionReason model =
                     }
 
         StatisticsConnection ->
-            send interface <|
+            send isLocal interface <|
                 StatisticsReq
                     { subscribe = model.page == StatisticsPage
                     }
 
         UpdateConnection playerid ->
-            send interface <|
+            send isLocal interface <|
                 UpdateReq
                     { playerid = playerid }
 
@@ -2150,7 +2153,7 @@ processConnectionReason game connectionReason model =
                         Cmd.none
 
                     else
-                        send interface <|
+                        send isLocal interface <|
                             NewReq
                                 { name = name
                                 , player = player
@@ -2181,7 +2184,7 @@ processConnectionReason game connectionReason model =
                         Cmd.none
 
                     else
-                        send interface <|
+                        send isLocal interface <|
                             JoinReq
                                 { gameid = gameid
                                 , name = name
@@ -2264,7 +2267,7 @@ update msg model =
                 Process _ ->
                     False
 
-                IncomingMessage _ _ ->
+                IncomingMessage _ _ _ ->
                     -- cmd == Cmd.none
                     True
 
@@ -2321,8 +2324,8 @@ fifoLength fifo =
     List.length <| Fifo.toList fifo
 
 
-recordMessage : Bool -> Message -> Model -> Model
-recordMessage isSend message model =
+recordMessage : Bool -> Bool -> Message -> Model -> Model
+recordMessage interfaceIsLocal isSend message model =
     let
         queue =
             if fifoLength model.messageQueue >= messageQueueLength then
@@ -2337,7 +2340,7 @@ recordMessage isSend message model =
     in
     { model
         | messageQueue =
-            Fifo.insert (MessageQueueEntry model.game.isLocal isSend message) queue
+            Fifo.insert (MessageQueueEntry interfaceIsLocal isSend message) queue
     }
 
 
@@ -2399,12 +2402,12 @@ updateInternal msg model =
                         Cmd.none
                     )
 
-        IncomingMessage interface message ->
+        IncomingMessage interfaceIsLocal interface message ->
             incomingMessage interface message <|
-                recordMessage False message model
+                recordMessage interfaceIsLocal False message model
 
-        RecordMessage isSend message ->
-            recordMessage isSend message model
+        RecordMessage interfaceIsLocal isSend message ->
+            recordMessage interfaceIsLocal isSend message model
                 |> withNoCmd
 
         SetChooseFirst player ->
@@ -2451,7 +2454,7 @@ updateInternal msg model =
                         , if isLocal && not game.isLocal then
                             Cmd.batch
                                 [ if game.isLive then
-                                    send interface <|
+                                    send game.isLocal interface <|
                                         LeaveReq { playerid = game.playerid }
 
                                   else
@@ -2483,7 +2486,7 @@ updateInternal msg model =
                 , denyUndoMessage = ""
             }
                 |> withCmd
-                    (send game.interface <|
+                    (send game.isLocal game.interface <|
                         PlayReq
                             { playerid = game.playerid
                             , placement = ChooseRequestUndo model.requestUndoMessage
@@ -2496,7 +2499,7 @@ updateInternal msg model =
                 , denyUndoMessage = ""
             }
                 |> withCmd
-                    (send game.interface <|
+                    (send game.isLocal game.interface <|
                         PlayReq
                             { playerid = game.playerid
                             , placement = ChooseAcceptUndo
@@ -2509,7 +2512,7 @@ updateInternal msg model =
                 , requestUndoMessage = ""
             }
                 |> withCmd
-                    (send game.interface <|
+                    (send game.isLocal game.interface <|
                         PlayReq
                             { playerid = game.playerid
                             , placement = ChooseDenyUndo model.denyUndoMessage
@@ -2759,11 +2762,11 @@ updateInternal msg model =
 
                 cmd2 =
                     if page == StatisticsPage then
-                        send interface <|
+                        send game.isLocal interface <|
                             StatisticsReq { subscribe = True }
 
                     else if model.page == StatisticsPage then
-                        send interface <|
+                        send game.isLocal interface <|
                             StatisticsReq { subscribe = False }
 
                     else if page == MainPage then
@@ -2779,7 +2782,7 @@ updateInternal msg model =
 
                 cmd3 =
                     if page == PublicPage then
-                        send interface <|
+                        send game.isLocal interface <|
                             PublicGamesReq
                                 { subscribe = True
                                 , forName = ""
@@ -2787,7 +2790,7 @@ updateInternal msg model =
                                 }
 
                     else if model.page == PublicPage then
-                        send interface <|
+                        send game.isLocal interface <|
                             PublicGamesReq
                                 { subscribe = False
                                 , forName = ""
@@ -2845,7 +2848,7 @@ updateInternal msg model =
             in
             { model | requestedNew = True }
                 |> withCmd
-                    (send model.game.interface <|
+                    (send model.game.isLocal model.game.interface <|
                         PlayReq
                             { playerid = playerid
                             , placement = placement
@@ -3110,7 +3113,8 @@ updateInternal msg model =
         SendUndoJumps undoWhichJumps ->
             model
                 |> withCmd
-                    (send model.game.interface
+                    (send model.game.isLocal
+                        model.game.interface
                         (PlayReq
                             { playerid = game.playerid
                             , placement = ChooseUndoJump undoWhichJumps
@@ -3358,7 +3362,8 @@ setTestMode isTestMode model =
 
             cmd =
                 if not isTestMode then
-                    send model.game.interface
+                    send model.game.isLocal
+                        model.game.interface
                         (SetGameStateReq
                             { playerid = game.playerid
                             , gameState =
@@ -3432,7 +3437,7 @@ chatSendInternal line chatSettings model =
     in
     model2
         |> withCmd
-            (send model2.game.interface <|
+            (send model2.game.isLocal model2.game.interface <|
                 ChatReq
                     { playerid = model.game.playerid
                     , text = line
@@ -3563,13 +3568,13 @@ disconnect model =
         |> withCmds
             [ putGame game2
             , if game.isLive && not game.isLocal then
-                send model.game.interface <|
+                send model.game.isLocal model.game.interface <|
                     LeaveReq { playerid = game.playerid }
 
               else
                 Cmd.none
             , if game.isLocal then
-                send model.game.interface <|
+                send model.game.isLocal model.game.interface <|
                     SetGameStateReq
                         { playerid = game.playerid
                         , gameState = gameState
@@ -3580,15 +3585,15 @@ disconnect model =
             ]
 
 
-send : ServerInterface -> Message -> Cmd Msg
-send interface message =
+send : Bool -> ServerInterface -> Message -> Cmd Msg
+send interfaceIsLocal interface message =
     let
         logMessage =
             Debug.log "send" <| ED.messageToLogMessage message
     in
     Cmd.batch
         [ ServerInterface.send interface message
-        , Task.perform (RecordMessage True) <| Task.succeed message
+        , Task.perform (RecordMessage interfaceIsLocal True) <| Task.succeed message
         ]
 
 
@@ -3837,7 +3842,8 @@ delayedClick rowCol model =
 
         withPlayReq playerid placement =
             withCmd <|
-                send game.interface
+                send game.isLocal
+                    game.interface
                     (PlayReq
                         { playerid = playerid
                         , placement = placement
