@@ -5394,7 +5394,7 @@ publicPage bsize model =
                             text "You're playing a game. What are you doing here?"
 
                           else
-                            text "You a spectator for a live game. Disconnect or create a new session to join a new one."
+                            text "You are a spectator for a live game. Disconnect or create a new session to join a new one."
                         ]
 
                   else
@@ -6382,7 +6382,7 @@ chars =
     , copyright = codestr 0xA9
     , nbsp = codestr 0xA0
     , mdash = codestr 0x2014
-    , watchingMessage = "You a spectator for this game, not playing"
+    , watchingMessage = "You are a spectator for this game, not playing"
     }
 
 
