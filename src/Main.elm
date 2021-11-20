@@ -162,6 +162,8 @@ import PortFunnel.Notification as Notification exposing (Permission(..))
 import PortFunnel.WebSocket as WebSocket exposing (Response(..))
 import PortFunnels exposing (FunnelDict, Handler(..), State)
 import Random exposing (Seed)
+import S3
+import S3.Types
 import Svg exposing (Svg, foreignObject, g, line, rect, svg)
 import Svg.Attributes
     exposing
@@ -292,6 +294,7 @@ type alias Model =
     , showMove : Maybe ( Game, Int )
     , messageQueue : Fifo MessageQueueEntry
     , showMessageQueue : Bool
+    , s3Info : Maybe S3Info
 
     -- persistent below here
     , gamename : String
@@ -387,6 +390,9 @@ type Msg
     | HandleUrlChange Url
     | DoConnectedResponse
     | RestoreSubscriptions String
+    | S3ReceiveChat (Result S3.Types.Error String)
+    | S3ReceiveGame (Result S3.Types.Error String)
+    | S3ReceiveGameKeys (Result S3.Types.Error S3.Types.KeyList)
     | Process Value
 
 
@@ -616,6 +622,7 @@ init flags url key =
             , showMove = Nothing
             , messageQueue = Fifo.empty
             , showMessageQueue = False
+            , s3Info = Nothing
             , styleType = LightStyle
             , lastTestMode = Nothing
 
@@ -3183,6 +3190,18 @@ updateInternal msg model =
 
         RestoreSubscriptions gamename ->
             maybeRestoreSubscriptions gamename model
+
+        S3ReceiveChat result ->
+            -- TODO
+            model |> withNoCmd
+
+        S3ReceiveGame result ->
+            -- TODO
+            model |> withNoCmd
+
+        S3ReceiveGameKeys result ->
+            -- TODO
+            model |> withNoCmd
 
         Process value ->
             case
@@ -6405,9 +6424,6 @@ putModel model =
 
         value =
             ED.encodeSavedModel savedModel
-
-        playerid =
-            model.game.playerid
     in
     put pk.model <| Just value
 
@@ -6560,3 +6576,113 @@ chatKeyToName key =
 
     else
         Just <| String.dropLeft len key
+
+
+
+---
+--- S3 persistence
+---
+
+
+sendS3Request : S3.Types.Account -> (Result S3.Types.Error a -> Msg) -> S3.Request a -> Cmd Msg
+sendS3Request account tagger request =
+    S3.send account request
+        |> Task.attempt tagger
+
+
+type alias S3Info =
+    { account : S3.Types.Account
+    , bucket : S3.Types.Bucket
+    }
+
+
+s3PutModel : Model -> Cmd Msg
+s3PutModel model =
+    case model.s3Info of
+        Nothing ->
+            Cmd.none
+
+        Just { account, bucket } ->
+            let
+                savedModel =
+                    modelToSavedModel model
+
+                value =
+                    ED.encodeSavedModel savedModel
+
+                body =
+                    S3.jsonBody value
+            in
+            -- Public should probably be optional
+            S3.putPublicObject bucket pk.model body
+                |> sendS3Request account (\a -> Noop)
+
+
+s3PutChat : String -> ChatSettings -> Model -> Cmd Msg
+s3PutChat gamename settings model =
+    case model.s3Info of
+        Nothing ->
+            Cmd.none
+
+        Just { account, bucket } ->
+            let
+                value =
+                    ElmChat.settingsEncoder settings
+
+                body =
+                    S3.jsonBody value
+            in
+            S3.putPublicObject bucket (chatKey gamename) body
+                |> sendS3Request account (\a -> Noop)
+
+
+s3GetChat : String -> Model -> Cmd Msg
+s3GetChat gamename model =
+    case model.s3Info of
+        Nothing ->
+            Cmd.none
+
+        Just { account, bucket } ->
+            S3.getObject bucket (chatKey gamename)
+                |> sendS3Request account S3ReceiveChat
+
+
+s3PutGame : Game -> Model -> Cmd Msg
+s3PutGame game model =
+    case model.s3Info of
+        Nothing ->
+            Cmd.none
+
+        Just { account, bucket } ->
+            let
+                value =
+                    ED.encodeNamedGame game
+
+                body =
+                    S3.jsonBody value
+            in
+            -- Public should probably be optional
+            S3.putPublicObject bucket (gameKey game.gamename) body
+                |> sendS3Request account (\a -> Noop)
+
+
+s3GetGame : String -> Model -> Cmd Msg
+s3GetGame gamename model =
+    case model.s3Info of
+        Nothing ->
+            Cmd.none
+
+        Just { account, bucket } ->
+            S3.getObject bucket (gameKey gamename)
+                |> sendS3Request account S3ReceiveGame
+
+
+s3ListGameKeys : Model -> Cmd Msg
+s3ListGameKeys model =
+    case model.s3Info of
+        Nothing ->
+            Cmd.none
+
+        Just { account, bucket } ->
+            S3.listKeys bucket
+                |> sendS3Request account S3ReceiveGameKeys

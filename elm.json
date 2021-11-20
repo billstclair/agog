@@ -12,6 +12,7 @@
             "billstclair/elm-chat": "3.0.2",
             "billstclair/elm-localstorage": "7.3.0",
             "billstclair/elm-port-funnel": "1.2.0",
+            "billstclair/elm-s3": "2.0.1",
             "billstclair/elm-svg-button": "3.0.0",
             "billstclair/elm-websocket-client": "4.1.0",
             "billstclair/elm-websocket-framework": "15.0.0",
@@ -33,12 +34,22 @@
             "ryannhg/date-format": "1.0.0"
         },
         "indirect": {
+            "billstclair/elm-xml-eeue56": "2.0.0",
+            "billstclair/elm-xml-extra": "3.0.0",
             "elm/bytes": "1.0.8",
             "elm/file": "1.0.5",
             "elm/http": "2.0.0",
+            "elm/parser": "1.1.0",
             "elm/virtual-dom": "1.0.2",
+            "elm-community/json-extra": "4.3.0",
+            "ktonon/elm-crypto": "1.1.2",
+            "ktonon/elm-word": "2.1.2",
+            "miniBill/elm-codec": "1.2.0",
             "myrho/elm-round": "1.0.4",
-            "pzp1997/assoc-list": "1.0.0"
+            "pzp1997/assoc-list": "1.0.0",
+            "rtfeldman/elm-iso8601-date-strings": "1.1.4",
+            "the-sett/elm-aws-core": "8.1.0",
+            "the-sett/elm-refine": "1.4.0"
         }
     },
     "test-dependencies": {
