@@ -7,14 +7,20 @@ import Agog.Types as Types
         ( Board
         , Choice(..)
         , ChooseMoveOption(..)
+        , Color(..)
         , GameState
+        , HulkAfterJump(..)
         , Message(..)
+        , MovesOrJumps(..)
+        , OneMoveSequence(..)
         , Participant(..)
+        , PieceType(..)
         , Player(..)
         , PlayerNames
         , PrivateGameState
         , PublicGame
         , PublicType(..)
+        , RequestUndo(..)
         , RowCol
         , Score
         , UndoWhichJumps(..)
@@ -118,7 +124,7 @@ protocolData =
         { name = "Bill"
         , player = WhitePlayer
         , publicType = NotPublic
-        , gameName = "Game 1"
+        , gamename = "Game 1"
         , restoreState = Nothing
         , maybeGameid = Nothing
         }
@@ -126,7 +132,7 @@ protocolData =
         { name = "Joe"
         , player = BlackPlayer
         , publicType = EntirelyPublic
-        , gameName = "Game 2"
+        , gamename = "Game 2"
         , restoreState = Just gameState1
         , maybeGameid = Just "Joe1"
         }
@@ -134,12 +140,13 @@ protocolData =
         { name = "Joe"
         , player = WhitePlayer
         , publicType = PublicFor "Bill"
-        , gameName = "Game 3"
+        , gamename = "Game 3"
         , restoreState = Just gameState1
         , maybeGameid = Just "Joe2"
         }
     , NewRsp
         { gameid = "123"
+        , gamename = "Game 3"
         , playerid = "76"
         , player = BlackPlayer
         , name = "Joe"
@@ -149,6 +156,7 @@ protocolData =
         }
     , NewRsp
         { gameid = "123a"
+        , gamename = "Game 4"
         , playerid = "76b"
         , player = WhitePlayer
         , name = "Joel"
@@ -158,6 +166,7 @@ protocolData =
         }
     , NewRsp
         { gameid = "123a"
+        , gamename = "Game 5"
         , playerid = "76b"
         , player = WhitePlayer
         , name = "Joel"
@@ -169,13 +178,11 @@ protocolData =
         { gameid = "123"
         , name = "Irving"
         , isRestore = False
-        , inCrows = False
+        , inCrowd = False
         }
     , ReJoinReq
         { gameid = "123"
         , playerid = "76"
-        , isRestore = True
-        , inCrows = True
         }
     , JoinRsp
         { gameid = "123"
@@ -245,7 +252,7 @@ protocolData =
         }
     , PlayReq
         { playerid = "80"
-        , placement = ChooseDenyUndo
+        , placement = ChooseDenyUndo "Nope"
         }
     , PlayReq
         { playerid = "79"
@@ -316,7 +323,23 @@ protocolData =
     , PublicGamesRsp
         { games = [] }
     , PublicGamesRsp
-        { games = [ publicGame1, publicGame2 ] }
+        { games =
+            [ { publicGame = publicGame1
+              , players = PlayerNames "Bill" "Joe"
+              , watchers = 3
+              , moves = 4
+              , startTime = Time.millisToPosix 0
+              , endTime = Time.millisToPosix 200
+              }
+            , { publicGame = publicGame2
+              , players = PlayerNames "Bill" "Joe"
+              , watchers = 3
+              , moves = 4
+              , startTime = Time.millisToPosix 0
+              , endTime = Time.millisToPosix 200
+              }
+            ]
+        }
     , PublicGamesUpdateRsp
         { added =
             [ { publicGame = publicGame1
@@ -416,11 +439,11 @@ boardTest encodedBoard name =
 
 
 board1String =
-    "0-----|-0----|--0---|---0--|----0-|-----0"
+    "--gggggj|---ggggg|G----ggg|GG---ggg|GGG-G-gg|GGG----g|GGGG----|JGGGGG--"
 
 
 board2String =
-    "----00|---00-|--00--|-00---|00----|0----0"
+    "--gggggj|---ggggg|G---gggg|GG----gg|GGG--ggg|GGG-G--g|GGGGG---|JGGGGG--"
 
 
 decodeBoard : String -> Board
@@ -476,11 +499,11 @@ players2 =
 
 
 score1 =
-    Score 0 1 2 3
+    Score 0 1 2
 
 
 score2 =
-    Score 4 5 6 7
+    Score 4 5 6
 
 
 privateGameState1 =
@@ -510,39 +533,107 @@ privateGameState4 =
     }
 
 
+move1 =
+    { piece = { color = WhiteColor, pieceType = Golem }
+    , isUnique = True
+    , sequence = OneSlide { from = rc 0 0, to = rc 2 0, makeHulk = Nothing }
+    , winner = NoWinner
+    , time = Time.millisToPosix 0
+    }
+
+
+move2 =
+    { piece = { color = BlackColor, pieceType = Journeyman }
+    , isUnique = True
+    , sequence =
+        OneJumpSequence
+            [ { from = rc 0 0
+              , over = rc 0 1
+              , to = rc 0 2
+              , hulkAfterJump = NoHulkAfterJump
+              }
+            ]
+    , winner = NoWinner
+    , time = Time.millisToPosix 0
+    }
+
+
 gameState1 =
-    { board = board1
-    , moves = [ "a1", "b2", "c3" ]
+    { newBoard = board1
+    , initialBoard = Nothing
+    , moves =
+        [ { piece = { color = WhiteColor, pieceType = Golem }
+          , isUnique = True
+          , sequence =
+                OneSlide
+                    { from = rc 0 0
+                    , to = rc 0 1
+                    , makeHulk = Nothing
+                    }
+          , winner = NoWinner
+          , time = Time.millisToPosix 0
+          }
+        ]
     , players = players1
     , whoseTurn = WhitePlayer
+    , selected = Nothing
+    , jumperLocations = []
+    , legalMoves = NoMoves
+    , undoStates = []
+    , jumps = []
     , score = score1
     , winner = NoWinner
-    , path = []
+    , requestUndo = NoRequestUndo
+    , testMode = Nothing
+    , testModeInitialState = Nothing
     , private = privateGameState1
     }
 
 
 gameState2 =
-    { board = board2
-    , moves = [ "a1", "b2", "c3", "d4" ]
-    , players = players2
+    { newBoard = board1
+    , initialBoard = Just { board = board2, whoseTurn = WhitePlayer }
+    , moves =
+        [ { piece = { color = BlackColor, pieceType = Golem }
+          , isUnique = False
+          , sequence =
+                OneJumpSequence
+                    [ { from = rc 0 0
+                      , over = rc 0 1
+                      , to = rc 0 2
+                      , hulkAfterJump = CorruptAfterJump
+                      }
+                    , { from = rc 0 2
+                      , over = rc 1 2
+                      , to = rc 2 2
+                      , hulkAfterJump = NoHulkAfterJump
+                      }
+                    ]
+          , winner = WhiteWinner WinByCapture
+          , time = Time.millisToPosix 1
+          }
+        ]
+    , players = players1
     , whoseTurn = BlackPlayer
+    , selected = Nothing
+    , jumperLocations = []
+    , legalMoves = NoMoves
+    , undoStates = []
+    , jumps = []
     , score = score1
     , winner = WhiteWinner WinByCapture
-    , path = [ ( 1, 2 ), ( 2, 3 ) ]
+    , requestUndo = NoRequestUndo
+    , testMode = Nothing
+    , testModeInitialState = Nothing
     , private = privateGameState2
     }
 
 
 gameState3 =
-    { board = board1
-    , moves = [ "a1", "b2", "c3", "d4", "e5", "f6" ]
-    , players = players2
-    , whoseTurn = WhitePlayer
-    , score = score2
-    , winner = BlackWinner WinBySanctum
-    , path = [ ( 1, 2 ), ( 2, 3 ) ]
-    , private = privateGameState3
+    { gameState2
+        | selected = Just <| rc 0 0
+        , jumperLocations = [ rc 0 0, rc 1 1 ]
+        , legalMoves = Moves [ rc 2 2, rc 3 3 ]
     }
 
 

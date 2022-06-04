@@ -2,7 +2,7 @@
 --
 -- Main.elm
 -- AGOG top-level
--- Copyright (c) 2019-2021 Bill St. Clair <billstclair@gmail.com>
+-- Copyright (c) 2019-2022 Bill St. Clair <billstclair@gmail.com>
 -- Some rights reserved.
 -- Distributed under the MIT License
 -- See LICENSE
@@ -5293,7 +5293,7 @@ footerParagraph =
             ]
             [ text "Gib Goy Games" ]
         , br
-        , text <| chars.copyright ++ " 2019-2021 Bill St. Clair <"
+        , text <| chars.copyright ++ " 2019-2022 Bill St. Clair <"
         , a [ href "mailto:GibGoyGames@gmail.com" ]
             [ text "GibGoyGames@gmail.com" ]
         , text ">"
