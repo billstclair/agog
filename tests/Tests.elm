@@ -1,5 +1,26 @@
 module Tests exposing (all)
 
+import Agog.Board as Board
+import Agog.EncodeDecode as ED
+import Agog.Types as Types
+    exposing
+        ( Board
+        , Choice(..)
+        , ChooseMoveOption(..)
+        , GameState
+        , Message(..)
+        , Participant(..)
+        , Player(..)
+        , PlayerNames
+        , PrivateGameState
+        , PublicGame
+        , PublicType(..)
+        , RowCol
+        , Score
+        , UndoWhichJumps(..)
+        , WinReason(..)
+        , Winner(..)
+        )
 import Dict
 import Expect exposing (Expectation)
 import Json.Decode as JD exposing (Decoder)
@@ -8,23 +29,8 @@ import List
 import Maybe exposing (withDefault)
 import Set exposing (Set)
 import Test exposing (..)
-import Zephyrnot.Board as Board
-import Zephyrnot.EncodeDecode as ED
-import Zephyrnot.Types as Types
-    exposing
-        ( Board
-        , Choice(..)
-        , Decoration(..)
-        , GameState
-        , Message(..)
-        , Player(..)
-        , PlayerNames
-        , PrivateGameState
-        , PublicGame
-        , PublicType(..)
-        , Score
-        , Winner(..)
-        )
+import Time
+import WebSocketFramework.Types exposing (Statistics)
 
 
 log =
@@ -89,6 +95,11 @@ expectResult sb was =
                     Expect.equal sbv wasv
 
 
+rc : Int -> Int -> RowCol
+rc x y =
+    { row = x, col = y }
+
+
 protocolTest : Message -> String -> Test
 protocolTest message name =
     test ("protocolTest \"" ++ name ++ "\"")
@@ -105,69 +116,92 @@ protocolData : List Message
 protocolData =
     [ NewReq
         { name = "Bill"
-        , player = Zephyrus
+        , player = WhitePlayer
         , publicType = NotPublic
+        , gameName = "Game 1"
         , restoreState = Nothing
+        , maybeGameid = Nothing
         }
     , NewReq
         { name = "Joe"
-        , player = Notus
+        , player = BlackPlayer
         , publicType = EntirelyPublic
+        , gameName = "Game 2"
         , restoreState = Just gameState1
+        , maybeGameid = Just "Joe1"
         }
     , NewReq
         { name = "Joe"
-        , player = Notus
+        , player = WhitePlayer
         , publicType = PublicFor "Bill"
+        , gameName = "Game 3"
         , restoreState = Just gameState1
+        , maybeGameid = Just "Joe2"
         }
     , NewRsp
         { gameid = "123"
         , playerid = "76"
-        , player = Zephyrus
+        , player = BlackPlayer
         , name = "Joe"
         , publicType = NotPublic
         , gameState = gameState1
+        , wasRestored = False
         }
     , NewRsp
         { gameid = "123a"
         , playerid = "76b"
-        , player = Notus
+        , player = WhitePlayer
         , name = "Joel"
         , publicType = EntirelyPublic
         , gameState = gameState2
+        , wasRestored = True
         }
     , NewRsp
         { gameid = "123a"
         , playerid = "76b"
-        , player = Notus
+        , player = WhitePlayer
         , name = "Joel"
         , publicType = PublicFor "Bill"
         , gameState = gameState2
+        , wasRestored = False
         }
     , JoinReq
         { gameid = "123"
         , name = "Irving"
+        , isRestore = False
+        , inCrows = False
         }
     , ReJoinReq
         { gameid = "123"
         , playerid = "76"
+        , isRestore = True
+        , inCrows = True
         }
     , JoinRsp
         { gameid = "123"
         , playerid = Just "77"
-        , player = Notus
+        , participant = PlayingParticipant WhitePlayer
         , gameState = gameState2
+        , wasRestored = False
+        }
+    , JoinRsp
+        { gameid = "123"
+        , playerid = Just "77"
+        , participant = PlayingParticipant BlackPlayer
+        , gameState = gameState2
+        , wasRestored = False
         }
     , JoinRsp
         { gameid = "123"
         , playerid = Nothing
-        , player = Notus
+        , participant = CrowdParticipant "Irving"
         , gameState = gameState2
+        , wasRestored = True
         }
     , LeaveReq { playerid = "77" }
-    , LeaveRsp { gameid = "123", player = Zephyrus }
-    , LeaveRsp { gameid = "123", player = Notus }
+    , LeaveRsp { gameid = "123", participant = PlayingParticipant WhitePlayer }
+    , LeaveRsp { gameid = "123", participant = PlayingParticipant BlackPlayer }
+    , LeaveRsp { gameid = "123", participant = CrowdParticipant "Wilfred" }
     , UpdateReq { playerid = "77" }
     , UpdateRsp
         { gameid = "123"
@@ -175,70 +209,99 @@ protocolData =
         }
     , PlayReq
         { playerid = "77"
-        , placement = ChooseRow 2
+        , placement = ChoosePiece <| rc 0 0
+        }
+    , PlayReq
+        { playerid = "77"
+        , placement = ChoosePiece <| rc 1 2
         }
     , PlayReq
         { playerid = "78"
-        , placement = ChooseCol 3
+        , placement = ChooseMove (rc 2 3) NoOption
+        }
+    , PlayReq
+        { playerid = "78"
+        , placement = ChooseMove (rc 3 4) CorruptJumped
+        }
+    , PlayReq
+        { playerid = "78"
+        , placement = ChooseMove (rc 4 5) (MakeHulk <| rc 3 4)
         }
     , PlayReq
         { playerid = "79"
-        , placement = ChooseResign Zephyrus
+        , placement = ChooseUndoJump UndoOneJump
         }
     , PlayReq
         { playerid = "79"
-        , placement = ChooseResign Notus
+        , placement = ChooseUndoJump UndoAllJumps
+        }
+    , PlayReq
+        { playerid = "79"
+        , placement = ChooseRequestUndo "Please"
         }
     , PlayReq
         { playerid = "80"
-        , placement = ChooseNew Zephyrus
+        , placement = ChooseAcceptUndo
         }
     , PlayReq
         { playerid = "80"
-        , placement = ChooseNew Notus
+        , placement = ChooseDenyUndo
+        }
+    , PlayReq
+        { playerid = "79"
+        , placement = ChooseResign WhitePlayer
+        }
+    , PlayReq
+        { playerid = "79"
+        , placement = ChooseResign BlackPlayer
+        }
+    , PlayReq
+        { playerid = "80"
+        , placement = ChooseNew WhitePlayer
+        }
+    , PlayReq
+        { playerid = "80"
+        , placement = ChooseNew BlackPlayer
         }
     , PlayRsp
         { gameid = "77"
         , gameState = gameState1
-        , decoration = RowSelectedDecoration 2
         }
     , PlayRsp
         { gameid = "78"
         , gameState = gameState2
-        , decoration = ColSelectedDecoration 2
         }
     , PlayRsp
         { gameid = "78"
         , gameState = gameState4
-        , decoration = gameState4.private.decoration
         }
     , ResignRsp
         { gameid = "79"
-        , gameState = { gameState3 | winner = NotusWinner }
-        , player = Zephyrus
+        , gameState = { gameState3 | winner = WhiteWinner WinByCapture }
+        , player = WhitePlayer
         }
     , ResignRsp
         { gameid = "79"
-        , gameState = { gameState3 | winner = ZephyrusWinner }
-        , player = Notus
+        , gameState = { gameState3 | winner = BlackWinner WinBySanctum }
+        , player = BlackPlayer
         }
     , AnotherGameRsp
         { gameid = "80"
         , gameState = gameState1
-        , player = Zephyrus
+        , player = WhitePlayer
         }
     , AnotherGameRsp
         { gameid = "80"
         , gameState = gameState2
-        , player = Notus
+        , player = BlackPlayer
         }
     , GameOverRsp
         { gameid = "80"
-        , gameState = { gameState1 | winner = ZephyrusWinner }
+        , gameState = { gameState1 | winner = WhiteWinner WinByImmobilization }
         }
     , GameOverRsp
         { gameid = "80"
-        , gameState = { gameState2 | winner = NotusWinner }
+        , gameState = { gameState2 | winner = BlackWinner WinByResignation }
         }
     , PublicGamesReq
         { subscribe = False
@@ -255,12 +318,39 @@ protocolData =
     , PublicGamesRsp
         { games = [ publicGame1, publicGame2 ] }
     , PublicGamesUpdateRsp
-        { added = [ publicGame1, publicGame2 ]
+        { added =
+            [ { publicGame = publicGame1
+              , players = PlayerNames "Bill" "Joe"
+              , watchers = 1
+              , moves = 2
+              , startTime = Time.millisToPosix 0
+              , endTime = Time.millisToPosix 100
+              }
+            , { publicGame = publicGame2
+              , players = PlayerNames "Bob" "Ben"
+              , watchers = 2
+              , moves = 3
+              , startTime = Time.millisToPosix 100
+              , endTime = Time.millisToPosix 234
+              }
+            ]
         , removed = []
         }
     , PublicGamesUpdateRsp
         { added = []
         , removed = [ "foo", "bar" ]
+        }
+    , StatisticsReq { subscribe = True }
+    , StatisticsReq { subscribe = False }
+    , StatisticsRsp
+        { statistics = Nothing
+        , startTime = Nothing
+        , updateTime = Nothing
+        }
+    , StatisticsRsp
+        { statistics = Just <| Dict.fromList [ ( "foo", 1 ), ( "bar", 2 ) ]
+        , startTime = Just 0
+        , updateTime = Just 10
         }
     , ErrorRsp
         { request = "request"
@@ -319,7 +409,7 @@ boardTest encodedBoard name =
                             ""
 
                         Just b ->
-                            ED.boardToString b
+                            ED.newBoardToString b
             in
             expectString encodedBoard boardString
         )
@@ -394,30 +484,37 @@ score2 =
 
 
 privateGameState1 =
-    PrivateGameState
-        (RowSelectedDecoration 0)
-        Set.empty
+    Types.emptyPrivateGameState
 
 
 privateGameState2 =
-    PrivateGameState
-        (ColSelectedDecoration 2)
-        (Set.fromList [ ( "s1", "1" ), ( "s2", "2" ), ( "s3", "3" ) ])
+    { privateGameState1
+        | subscribers =
+            Set.fromList [ ( "s1", "1" ), ( "s2", "2" ), ( "s3", "3" ) ]
+    }
 
 
 privateGameState3 =
-    PrivateGameState NoDecoration Set.empty
+    { privateGameState2
+        | verbose = Just True
+        , statisticsSubscribers = Set.fromList [ "s1", "s2" ]
+    }
 
 
 privateGameState4 =
-    PrivateGameState (AlreadyFilledDecoration ( 0, 2 )) Set.empty
+    { privateGameState3
+        | verbose = Just False
+        , statisticsChanged = True
+        , startTime = Just 1
+        , updateTime = Just 2
+    }
 
 
 gameState1 =
     { board = board1
     , moves = [ "a1", "b2", "c3" ]
     , players = players1
-    , whoseTurn = Zephyrus
+    , whoseTurn = WhitePlayer
     , score = score1
     , winner = NoWinner
     , path = []
@@ -429,9 +526,9 @@ gameState2 =
     { board = board2
     , moves = [ "a1", "b2", "c3", "d4" ]
     , players = players2
-    , whoseTurn = Notus
+    , whoseTurn = BlackPlayer
     , score = score1
-    , winner = ZephyrusWinner
+    , winner = WhiteWinner WinByCapture
     , path = [ ( 1, 2 ), ( 2, 3 ) ]
     , private = privateGameState2
     }
@@ -441,9 +538,9 @@ gameState3 =
     { board = board1
     , moves = [ "a1", "b2", "c3", "d4", "e5", "f6" ]
     , players = players2
-    , whoseTurn = Notus
+    , whoseTurn = WhitePlayer
     , score = score2
-    , winner = NotusWinner
+    , winner = BlackWinner WinBySanctum
     , path = [ ( 1, 2 ), ( 2, 3 ) ]
     , private = privateGameState3
     }
@@ -465,7 +562,7 @@ publicGame1 : PublicGame
 publicGame1 =
     { gameid = "foo"
     , creator = "Bill"
-    , player = Zephyrus
+    , player = WhitePlayer
     , forName = Nothing
     }
 
@@ -474,6 +571,6 @@ publicGame2 : PublicGame
 publicGame2 =
     { gameid = "bar"
     , creator = "Chris"
-    , player = Notus
+    , player = BlackPlayer
     , forName = Just "Bill"
     }
