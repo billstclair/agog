@@ -22,3 +22,22 @@ bin/build
 
 Then aim your browser at https://localhost:8000/site/index.html
 
+## elm-test
+
+If you install `elm-test`, you can test the JSON encoding/decoding.
+
+Once:
+
+```
+cd .../agog
+npm install elm-test
+```
+
+Test the JSON encoding/decoding:
+
+```
+cd .../agog
+elm-test
+```
+
+
