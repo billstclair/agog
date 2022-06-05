@@ -610,7 +610,7 @@ gameState2 =
                       }
                     ]
           , winner = WhiteWinner WinByCapture
-          , time = Time.millisToPosix 1
+          , time = Time.millisToPosix 100 --must be a multiple of 100
           }
         ]
     , players = players1
