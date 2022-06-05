@@ -56,3 +56,14 @@ unless you use PORT as described below to change the port, or are running it on 
 If you want to run your server on a port other than 8081, you can set the `PORT` environment variable:
 
 * `PORT=8800 npm run start`
+
+## [Grokking](https://en.wikipedia.org/wiki/Grok) the code
+
+Agog is based on [billstclair/elm-websocket-framework](https://package.elm-lang.org/packages/billstclair/elm-websocket-framework/latest/) and [billstclair/elm-websocket-framework-server](https://package.elm-lang.org/packages/billstclair/elm-websocket-framework-server/latest/). You'll need to understand at least the API for those before you can grok Agog's client/server communication.
+
+Client and server communicate in JSON over a WebSocket connection. You can see the JSON by checking the "Show protocol" check box below the board.
+
+`bin/build-server` creates the files `server/server.js` from [`src/Agog/Server/Server.elm`](https://github.com/billstclair/agog/blob/main/src/Agog/Server/Server.elm) and `server/client.js` from [`src/Agog/Server/Client.elm`](https://github.com/billstclair/agog/blob/main/src/Agog/Server/Client.elm). `server.js` is where most of the server code lives. You can see it on the Agog server at [http://agog.ninja:8084/server.js](http://agog.ninja:8084/server.js). `npm run` looks at [`server/package.json`](https://github.com/billstclair/agog/blob/main/server/package.json) to discover that [`server/index.js`](https://github.com/billstclair/agog/blob/main/server/index.js) is the main code for the server. `index.js` loads the WebSocket server code in [`server/WebSocketServer.js`](https://github.com/billstclair/agog/blob/main/server/WebSocketServer.js) and [`server/lib/WebSocketServer.js`](https://github.com/billstclair/agog/blob/main/server/lib/WebSocketServer.js), starts the elm code at `Elm.Agog.Server.Server.init` in `server/server.js`, then starts listening for HTTP (and WebSocket) connections.
+
+[`src/Agog/Server/Server.elm`](https://github.com/billstclair/agog/blob/main/src/Agog/Server/Server.elm) is a headless Elm app via `WebSocketFramework.Server.program`, which is a simple wrapper of `Platform.worker` in the [`Platform`](https://package.elm-lang.org/packages/elm/core/latest/Platform) module in `elm/core`.
+
