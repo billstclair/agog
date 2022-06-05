@@ -51,7 +51,7 @@ During development, when you're running both the Agog webapp and the server on y
 
     ws://localhost:8081
     
-unless you use PORT as described below to change the port, or are running it on a remove server.
+unless you use PORT as described below to change the port, or are running it on a remote server.
 
 If you want to run your server on a port other than 8081, you can set the `PORT` environment variable:
 
